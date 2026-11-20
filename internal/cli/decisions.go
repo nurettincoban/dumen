@@ -362,7 +362,9 @@ func cmdRef(a *app, args []string) error {
 			now := time.Now().UTC()
 			for _, r := range refs {
 				flag := ""
-				if t, err := model.ParseTime(r.CheckedAt); err == nil && now.Sub(t) > time.Duration(cfg.Settings.RefStaleDays)*24*time.Hour {
+				if r.Status == model.RefUnverified {
+					flag = "  UNVERIFIED: added by an agent, not shown to agents until `dumen ref check " + r.ID + "`"
+				} else if t, err := model.ParseTime(r.CheckedAt); err == nil && now.Sub(t) > time.Duration(cfg.Settings.RefStaleDays)*24*time.Hour {
 					flag = fmt.Sprintf("  UNCHECKED for %d days", int(now.Sub(t).Hours()/24))
 				}
 				fmt.Fprintf(a.out, "%s  %-8s %s  %s%s\n", r.ID, r.Kind, clip(r.Title, 50), r.URL, flag)

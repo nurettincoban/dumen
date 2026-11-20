@@ -3,6 +3,7 @@ package op
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"strings"
@@ -28,7 +29,8 @@ type Outcome struct {
 	Status   string
 	RecordID string
 	Notes    []string
-	Err      error // set when Rejected
+	Err      error  // set when Rejected
+	Cause    string // set when Queued: why the remote could not be reached
 }
 
 // Report summarises one flush.
@@ -38,7 +40,11 @@ type Report struct {
 	Contended bool  // every push attempt lost the race; operations stay queued
 	Err       error // the error behind Offline
 	Head      string
+	Refused   string // what the git host said when it turned the push down for good
 }
+
+// ErrNewerSchema means the store was written by a newer dumen than this one.
+var ErrNewerSchema = errors.New("this store uses a newer dumen format")
 
 // Engine applies operations to a store.
 type Engine struct {
@@ -83,10 +89,41 @@ func (e *Engine) Submit(ctx context.Context, actor model.Actor, o Op) (Outcome, 
 	}
 	rep, err := e.Flush(ctx)
 	if err != nil {
-		return Outcome{OpID: id, Kind: o.Kind(), Status: Queued}, err
+		// The flush failed for a reason that is not the network (an unreachable remote
+		// is reported as Offline with a nil error). The caller is about to be told the
+		// write failed, so it must not stay queued and be published by a later sync.
+		// The one exception is an entry whose push may already have reached the remote.
+		if pending, lerr := outbox.List(e.Store.OutboxDir()); lerr == nil {
+			for _, en := range pending {
+				if en.ID != id {
+					continue
+				}
+				if en.MaybePushed {
+					return Outcome{OpID: id, Kind: o.Kind(), Status: Queued},
+						fmt.Errorf("%w (the write may already have reached the remote; it stays queued and the next `dumen sync` settles it)", err)
+				}
+				en.Remove()
+			}
+		}
+		return Outcome{OpID: id, Kind: o.Kind(), Status: Rejected, Err: err}, fmt.Errorf("nothing was recorded: %w", err)
+	}
+	if rep.Refused != "" {
+		// Same rule as above: the caller is told it failed, so it does not stay queued.
+		if pending, lerr := outbox.List(e.Store.OutboxDir()); lerr == nil {
+			for _, en := range pending {
+				if en.ID == id {
+					en.Remove()
+				}
+			}
+		}
+		err := fmt.Errorf("nothing was recorded: the git host refused the push: %s", rep.Refused)
+		return Outcome{OpID: id, Kind: o.Kind(), Status: Rejected, Err: err}, err
 	}
 	for _, out := range rep.Outcomes {
 		if out.OpID == id {
+			if out.Status == Queued && rep.Err != nil {
+				out.Cause = rep.Err.Error()
+			}
 			if out.Status == Rejected {
 				// The caller is told right now, so there is nothing to keep for later.
 				// Only operations rejected during a background replay stay in the failed
@@ -160,6 +197,12 @@ func (e *Engine) Flush(ctx context.Context) (Report, error) {
 		rep.Head = head
 		if e.AfterSync != nil {
 			e.AfterSync(e.Store.Root(), head)
+		}
+		// Never write into a store whose format is newer than this build understands.
+		if cfg, cerr := store.ReadConfig(e.Store.Root()); cerr == nil && cfg.Version > model.SchemaVersion {
+			queued()
+			return rep, fmt.Errorf("%w (version %d, this dumen understands up to %d): upgrade dumen to write; reading still works",
+				ErrNewerSchema, cfg.Version, model.SchemaVersion)
 		}
 
 		// A previous push with an unknown outcome may have landed: do not apply those twice.
@@ -273,6 +316,27 @@ func (e *Engine) Flush(ctx context.Context) (Report, error) {
 				}
 			}
 			continue
+		case gitx.PushRefused:
+			// The host said no and will say no again. Nothing was written: undo the local
+			// commit, keep the operations queued and report the host's own words.
+			for _, p := range good {
+				p.entry.MaybePushed = false
+				if err := p.entry.Save(); err != nil {
+					return rep, err
+				}
+			}
+			if _, rerr := e.Store.ResetToFetched(ctx); rerr != nil {
+				return rep, rerr
+			}
+			var re *gitx.RefusedError
+			if errors.As(perr, &re) {
+				rep.Refused = re.Message
+			} else {
+				rep.Refused = perr.Error()
+			}
+			rep.Err = perr
+			queued()
+			return rep, nil
 		default:
 			rep.Offline, rep.Err = true, perr
 			queued()

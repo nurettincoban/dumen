@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -65,7 +66,9 @@ func (f *fixture) run(event string, in map[string]any) *Output {
 	if _, ok := in["session_id"]; !ok {
 		in["session_id"] = "sess-1"
 	}
-	in["cwd"] = f.proj.Root
+	if _, ok := in["cwd"]; !ok {
+		in["cwd"] = f.proj.Root
+	}
 	data, _ := json.Marshal(in)
 	var buf bytes.Buffer
 	Run(event, bytes.NewReader(data), &buf, Env{
@@ -417,5 +420,111 @@ func TestToolCallRemindsOnceAboutAcknowledgement(t *testing.T) {
 	read["session_id"] = "sess-2"
 	if o := f.run(PreToolUse, read); o != nil {
 		t.Fatalf("acknowledged: no reminder, got %+v", o.HookSpecificOutput)
+	}
+}
+
+func (f *fixture) editAt(cwd, file string) *Output {
+	return f.run(PreToolUse, map[string]any{"cwd": cwd, "tool_name": "Edit", "permission_mode": "default",
+		"tool_input": map[string]any{"file_path": file}})
+}
+
+// Gauntlet K2. A deny directive applies to the file an edit lands on, whatever path
+// leads to it.
+func TestDenyFollowsSymlinks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating symlinks needs a privilege on Windows")
+	}
+	f := newFixture(t)
+	f.directive(model.DirectiveDeny, model.Scope{Paths: []string{"src/auth/**"}}, "Auth is frozen")
+	if _, err := f.proj.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	root := f.proj.Root
+	if err := os.MkdirAll(filepath.Join(root, "src", "auth"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A symlink inside the repository that points at the frozen directory.
+	if err := os.Symlink(filepath.Join("src", "auth"), filepath.Join(root, "lib")); err != nil {
+		t.Fatal(err)
+	}
+	if o := f.edit("lib/login.go"); decision(o) != "deny" {
+		t.Errorf("edit through an in-repo symlink must be denied, got %+v", o)
+	}
+	// The repository reached through a symlinked parent directory.
+	link := filepath.Join(t.TempDir(), "lablink")
+	if err := os.Symlink(root, link); err != nil {
+		t.Fatal(err)
+	}
+	if o := f.editAt(link, filepath.Join(link, "src", "auth", "login.go")); decision(o) != "deny" {
+		t.Errorf("edit through a symlinked repository path must be denied, got %+v", o)
+	}
+	if o := f.editAt(root, filepath.Join(link, "src", "auth", "new", "file.go")); decision(o) != "deny" {
+		t.Errorf("a new file under a symlinked path must be denied, got %+v", o)
+	}
+	// The project file itself is not the agent's to edit.
+	if o := f.edit(".dumen"); decision(o) != "deny" {
+		t.Errorf("editing .dumen must be denied, got %+v", o)
+	}
+}
+
+// Gauntlet K3. In a project of several repositories the rules of the repository that
+// holds the file apply, wherever the session was opened.
+func TestDenyAppliesToTheRepositoryOfTheFile(t *testing.T) {
+	f := newFixture(t)
+	_, spec, _, err := project.ReadFile(filepath.Join(f.proj.Root, project.File))
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent := t.TempDir()
+	gateway, billing := filepath.Join(parent, "gateway"), filepath.Join(parent, "billing")
+	for dir, repo := range map[string]string{gateway: "gateway", billing: "billing"} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := project.WriteFile(dir, "proj", spec, repo); err != nil {
+			t.Fatal(err)
+		}
+	}
+	id := f.directive(model.DirectiveDeny, model.Scope{Paths: []string{"billing:src/auth/**"}}, "Billing auth is frozen")
+	if _, err := f.proj.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	frozen := filepath.Join(billing, "src", "auth", "a.go")
+
+	// A session in the neighbouring repository.
+	if o := f.editAt(gateway, frozen); decision(o) != "deny" {
+		t.Errorf("a session in gateway must not edit billing's frozen path, got %+v", o)
+	}
+	if o := f.editAt(gateway, filepath.Join("..", "billing", "src", "auth", "a.go")); decision(o) != "deny" {
+		t.Errorf("a relative path into billing must be denied, got %+v", o)
+	}
+	if o := f.editAt(gateway, filepath.Join(gateway, "src", "auth", "a.go")); decision(o) == "deny" {
+		t.Errorf("gateway's own src/auth is not frozen, got %+v", o)
+	}
+	// A session opened in the directory that holds both repositories.
+	o := f.run(SessionStart, map[string]any{"cwd": parent, "source": "startup", "session_id": "umbrella"})
+	if !strings.Contains(context_(o), id) {
+		t.Errorf("a session above the repositories must receive the directives, got %+v", o)
+	}
+	if o := f.run(PreToolUse, map[string]any{"cwd": parent, "session_id": "umbrella", "tool_name": "Write", "permission_mode": "default",
+		"tool_input": map[string]any{"file_path": frozen}}); decision(o) != "deny" {
+		t.Errorf("a session above the repositories must be denied, got %+v", o)
+	}
+	// A session that is in no dumen project at all.
+	if o := f.editAt(t.TempDir(), frozen); decision(o) != "deny" {
+		t.Errorf("a session outside every project must be denied, got %+v", o)
+	}
+	if o := f.editAt(t.TempDir(), filepath.Join(gateway, "main.go")); o != nil {
+		t.Errorf("an unfrozen file from outside must produce no output, got %+v", o)
+	}
+}
+
+func TestShellCannotStartDumenServerOrHook(t *testing.T) {
+	f := newFixture(t)
+	for _, cmd := range []string{`echo '{}' | dumen mcp`, `exec dumen mcp < /tmp/call.json`, `dumen hook pre-tool-use < in.json`} {
+		o := f.run(PreToolUse, map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": cmd}})
+		if decision(o) != "deny" {
+			t.Errorf("%q must be denied, got %+v", cmd, o)
+		}
 	}
 }

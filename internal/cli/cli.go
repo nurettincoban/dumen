@@ -156,6 +156,9 @@ func (a *app) submit(p *project.Project, o op.Op) (op.Outcome, error) {
 	}
 	if out.Status == op.Queued {
 		fmt.Fprintln(a.err, "note: the remote could not be reached. Nothing is in force yet: the operation is queued and will be pushed by the next `dumen sync`.")
+		if out.Cause != "" {
+			fmt.Fprintln(a.err, "      git said:", firstLine(lastLine(out.Cause)))
+		}
 		if out.RecordID == "" {
 			out.RecordID = "(queued)" // the final id is only known once it is applied
 		}
@@ -363,7 +366,7 @@ func cmdStatus(a *app, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	c, err := p.Refresh(ctx)
-	online := err == nil
+	online, refreshErr := err == nil, err
 	if err != nil {
 		if c, err = readCache(p); err != nil {
 			return fmt.Errorf("no local cache and the remote is unreachable")
@@ -375,15 +378,26 @@ func cmdStatus(a *app, args []string) error {
 		fmt.Fprintf(a.out, "repo      %s\n", p.Repo)
 	}
 	fmt.Fprintf(a.out, "you       %s (%s, role: %s)\n", me.Email, me.Kind, orDash(c.Config.Role(me.Email)))
-	if online {
+	var gitErr *gitx.Error
+	switch {
+	case online:
 		fmt.Fprintf(a.out, "sync      up to date (%s)\n", short(c.Head))
-	} else {
+	case errors.As(refreshErr, &gitErr):
 		fmt.Fprintf(a.out, "sync      OFFLINE, last sync %s ago\n", c.Age(now).Round(time.Second))
+		fmt.Fprintf(a.out, "          %s\n", firstLine(gitErr.Error()))
+	default:
+		fmt.Fprintf(a.out, "sync      ERROR, last good sync %s ago: %v\n", c.Age(now).Round(time.Second), refreshErr)
 	}
 	fmt.Fprintf(a.out, "active    %d directives, %d approved decisions, %d drafts, %d proposed directives\n",
 		len(c.ActiveDirectives(c.Config.Role(me.Email), p.Repo, now)), len(c.Decisions), c.Drafts, c.Proposed)
 	queued, failed := countJSON(p.Store.OutboxDir()), countJSON(p.Store.FailedDir())
 	fmt.Fprintf(a.out, "outbox    %d queued, %d rejected\n", queued, failed)
+	if bad := store.Unreadable(p.Store.Root()); len(bad) > 0 {
+		fmt.Fprintf(a.out, "records   %d unreadable and ignored; fix or delete them on the %s branch:\n", len(bad), p.Store.Branch)
+		for _, b := range bad {
+			fmt.Fprintf(a.out, "  %s\n", clip(b, 160))
+		}
+	}
 	if rejected, _ := outbox.List(p.Store.FailedDir()); len(rejected) > 0 {
 		for _, r := range rejected {
 			fmt.Fprintf(a.out, "  rejected %s (%s): %s\n", r.Kind, r.Created, r.Error)
@@ -447,8 +461,13 @@ func cmdSync(a *app, args []string) error {
 		}
 	}
 	state := "up to date"
-	if rep.Offline {
+	if rep.Refused != "" {
+		state = "the git host refused the push (" + rep.Refused + "); fix that on the host, then run `dumen sync` again"
+	} else if rep.Offline {
 		state = "remote unreachable"
+		if rep.Err != nil {
+			state += " (" + firstLine(lastLine(rep.Err.Error())) + ")"
+		}
 	} else if rep.Contended {
 		state = "remote busy, try again"
 	}

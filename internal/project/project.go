@@ -117,6 +117,43 @@ func Find(dir string) (*Project, error) {
 	return p, nil
 }
 
+// FindBelow is for a session opened in a directory that holds several service
+// repositories side by side, none of which is the directory itself. It looks one level
+// down for .dumen files and returns a project rooted at dir with no repository name, so
+// that the session receives the records of every repository of that project. When the
+// subdirectories belong to different projects, the first one by name is used.
+func FindBelow(dir string) (*Project, error) {
+	dir, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, ErrNoProject
+	}
+	const maxEntries = 500 // a hook must stay fast in a huge directory
+	for i, e := range entries {
+		if i >= maxEntries {
+			break
+		}
+		if !e.IsDir() && e.Type()&os.ModeSymlink == 0 {
+			continue
+		}
+		name, spec, _, err := ReadFile(filepath.Join(dir, e.Name(), File))
+		if err != nil {
+			continue
+		}
+		p := &Project{Root: dir, Name: name, Spec: spec}
+		s, err := store.Open(name)
+		if err != nil {
+			return p, err
+		}
+		p.Store = s
+		return p, nil
+	}
+	return nil, ErrNoProject
+}
+
 // Engine returns the write engine for this project, wired to keep the cache fresh.
 func (p *Project) Engine() *op.Engine {
 	return &op.Engine{

@@ -19,7 +19,7 @@ const (
 // crockford is the Crockford base32 alphabet (no I, L, O, U).
 const crockford = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
-var idRe = regexp.MustCompile(`^[DYRC]-[0-9A-HJKMNP-TV-Z]{4}$`)
+var idRe = regexp.MustCompile(`^[DYRC]-[0-9A-HJKMNP-TV-Z]{4,8}$`)
 
 // NewID returns prefix + "-" + 4 random Crockford base32 characters.
 // IDs are never sequential; collisions are resolved when the operation is applied.

@@ -40,7 +40,7 @@ func TestDenyFor(t *testing.T) {
 	cfg := model.DefaultConfig("p")
 	cfg.Areas = map[string]model.Area{"billing": {Paths: []string{"src/billing"}}}
 	mk := func(id, kind string, sc model.Scope, status string, exp time.Time) model.Directive {
-		return model.Directive{ID: id, Kind: kind, Scope: sc, Status: status, PublishedBy: "pm@x.io",
+		return model.Directive{ID: id, Kind: kind, Scope: sc, Status: status, PublishedBy: "pm@example.com",
 			Starts: model.FormatTime(now.Add(-time.Hour)), Expires: model.FormatTime(exp), Text: id}
 	}
 	ds := []model.Directive{
@@ -104,7 +104,7 @@ func TestRepoQualifiedPaths(t *testing.T) {
 	cfg := model.DefaultConfig("p")
 	cfg.Areas = map[string]model.Area{"payments": {Paths: []string{"billing-svc:src/pay", "gateway:src/pay"}}}
 	mk := func(sc model.Scope) model.Directive {
-		return model.Directive{ID: "Y-0001", Kind: model.DirectiveDeny, Scope: sc, Status: model.DirectiveActive, PublishedBy: "pm@x.io",
+		return model.Directive{ID: "Y-0001", Kind: model.DirectiveDeny, Scope: sc, Status: model.DirectiveActive, PublishedBy: "pm@example.com",
 			Starts: model.FormatTime(now.Add(-time.Hour)), Expires: model.FormatTime(now.Add(time.Hour)), Text: "t"}
 	}
 	freeze := mk(model.Scope{Paths: []string{"billing-svc:src/auth/**"}})

@@ -17,7 +17,7 @@ func TestNewID(t *testing.T) {
 	if len(seen) < 1900 {
 		t.Fatalf("ids are not random enough: %d unique of 2000", len(seen))
 	}
-	if ValidID("D-ILOU", "") || ValidID("D-12345", "") || ValidID("X-1234", "") || ValidID("D-1234", PrefixRef) {
+	if ValidID("D-ILOU", "") || ValidID("D-123", "") || ValidID("X-1234", "") || ValidID("D-1234", PrefixRef) {
 		t.Fatal("ValidID accepted a bad id")
 	}
 }
@@ -31,7 +31,7 @@ func TestSlug(t *testing.T) {
 func TestDirectiveValidateAndActive(t *testing.T) {
 	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
 	d := Directive{ID: "Y-7K2M", Kind: DirectiveDeny, Scope: Scope{Paths: []string{"src/auth/**"}},
-		PublishedBy: "pm@x.io", Starts: FormatTime(now), Expires: FormatTime(now.Add(time.Hour)),
+		PublishedBy: "pm@example.com", Starts: FormatTime(now), Expires: FormatTime(now.Add(time.Hour)),
 		Status: DirectiveActive, Text: "do not touch auth"}
 	if err := d.Validate(); err != nil {
 		t.Fatal(err)
@@ -51,12 +51,21 @@ func TestDirectiveValidateAndActive(t *testing.T) {
 }
 
 func TestEventValidate(t *testing.T) {
-	e := Event{TS: "2026-11-20T12:00:00Z", Session: "abc-123", Person: "a@x.io", Kind: EventStarted}
+	e := Event{TS: "2026-11-20T12:00:00Z", Session: "abc-123", Person: "a@example.com", Kind: EventStarted}
 	if err := e.Validate(); err != nil {
 		t.Fatal(err)
 	}
 	e.Session = "../etc"
 	if e.Validate() == nil {
 		t.Fatal("unsafe session accepted")
+	}
+}
+
+// Gauntlet T4: ids of 4 to 8 characters are accepted, so a later dumen can lengthen them.
+func TestValidIDLength(t *testing.T) {
+	for id, want := range map[string]bool{"D-4HTR": true, "D-4HTR7K2M": true, "D-4HT": false, "D-4HTR7K2M9": false, "D-4htr": false, "X-4HTR": false} {
+		if got := ValidID(id, ""); got != want {
+			t.Errorf("ValidID(%q) = %v, want %v", id, got, want)
+		}
 	}
 }

@@ -5,8 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+
+	"github.com/nurettincoban/comm-pro/internal/gitx"
+	"github.com/nurettincoban/comm-pro/internal/outbox"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -338,5 +342,147 @@ func TestPublishProposal(t *testing.T) {
 	}
 	if list := run(t, "directives"); !strings.Contains(list, id) || !strings.Contains(list, "active") {
 		t.Fatalf("published proposal not active: %q", list)
+	}
+}
+
+// Gauntlet K5 and K6. One record that cannot be parsed (edited by hand, or written by a
+// newer dumen) must not stop the team: reads skip it, writes go on, status names it.
+// And a write that is reported as failed is never published later.
+func TestOneBadRecordDoesNotStopTheTeam(t *testing.T) {
+	_, p := repo(t)
+	good := run(t, "direct", "--deny", "--paths", "src/auth/**", "Auth is frozen")
+	ctx := context.Background()
+	unlock, err := p.Store.Lock(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Store.Sync(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{
+		"decisions/D-ZZZZ-bad.md":  "---\nid: [unclosed\n---\nbody\n",
+		"directives/Y-ZZZZ-bad.md": "no front matter at all\n",
+		"refs/R-ZZZZ.yml":          "id: {{{\n",
+	} {
+		path := filepath.Join(p.Store.Root(), filepath.FromSlash(name))
+		os.MkdirAll(filepath.Dir(path), 0o755)
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := p.Store.Commit(ctx, "a colleague edits records by hand", "colleague@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := p.Store.Push(ctx); err != nil || res != gitx.PushOK {
+		t.Fatalf("push: %v %v", res, err)
+	}
+	unlock()
+
+	// Writes still work, and the directive that was there is still enforced.
+	out := run(t, "direct", "--all", "can we still publish?")
+	if !strings.Contains(out, "Published Y-") {
+		t.Fatalf("publishing with a bad record in the store: %q", out)
+	}
+	list := run(t, "directives")
+	if !strings.Contains(list, good[len("Published "):len("Published ")+6]) || !strings.Contains(list, "can we still publish?") {
+		t.Fatalf("directives: %q", list)
+	}
+	st := run(t, "status")
+	if strings.Contains(st, "OFFLINE") || !strings.Contains(st, "3 unreadable") || !strings.Contains(st, "decisions/D-ZZZZ-bad.md") {
+		t.Fatalf("status must name the bad records and not claim to be offline: %q", st)
+	}
+	if !strings.Contains(st, "0 queued") {
+		t.Fatalf("nothing may be left queued: %q", st)
+	}
+	run(t, "decisions")
+	run(t, "ref", "list")
+}
+
+// Gauntlet K6. When a write fails for a reason other than the network, it is gone: the
+// command says so and a later sync publishes nothing.
+func TestFailedWriteIsNotPublishedLater(t *testing.T) {
+	_, p := repo(t)
+	// Make every flush fail in a way that is not a network error.
+	cfg := filepath.Join(p.Store.Root(), "dumen.yml")
+	ctx := context.Background()
+	unlock, _ := p.Store.Lock(ctx)
+	p.Store.Sync(ctx)
+	os.WriteFile(cfg, []byte("roles: [this is not a map\n"), 0o644)
+	p.Store.Commit(ctx, "break dumen.yml", "colleague@example.com")
+	if res, err := p.Store.Push(ctx); err != nil || res != gitx.PushOK {
+		t.Fatalf("push: %v %v", res, err)
+	}
+	unlock()
+
+	msg, code := runErr("direct", "--all", "published by accident later?")
+	if code == 0 {
+		t.Fatalf("the write must fail while dumen.yml is broken: %q", msg)
+	}
+	if n := outbox.Count(p.Store.OutboxDir()); n != 0 {
+		t.Fatalf("a write reported as failed is still queued (%d): %q", n, msg)
+	}
+}
+
+// Gauntlet T4. A store written by a newer dumen is read but never written.
+func TestNewerSchemaIsReadOnly(t *testing.T) {
+	_, p := repo(t)
+	run(t, "direct", "--all", "written before the upgrade")
+	ctx := context.Background()
+	unlock, _ := p.Store.Lock(ctx)
+	p.Store.Sync(ctx)
+	cfg, err := store.ReadConfig(p.Store.Root())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Version = model.SchemaVersion + 1
+	if err := store.WriteConfig(p.Store.Root(), cfg); err != nil {
+		t.Fatal(err)
+	}
+	p.Store.Commit(ctx, "a newer dumen upgrades the store", "colleague@example.com")
+	if res, err := p.Store.Push(ctx); err != nil || res != gitx.PushOK {
+		t.Fatalf("push: %v %v", res, err)
+	}
+	unlock()
+
+	msg, code := runErr("direct", "--all", "written by an old client")
+	if code == 0 || !strings.Contains(msg, "newer dumen format") || !strings.Contains(msg, "upgrade dumen") {
+		t.Fatalf("an old client must refuse to write: %d %q", code, msg)
+	}
+	if n := outbox.Count(p.Store.OutboxDir()); n != 0 {
+		t.Fatalf("the refused write is still queued (%d)", n)
+	}
+	if list := run(t, "directives"); !strings.Contains(list, "written before the upgrade") || strings.Contains(list, "old client") {
+		t.Fatalf("reading must still work: %q", list)
+	}
+}
+
+// Gauntlet O1 and T8. When the git host turns a push down (protected branch, missing
+// permission, unsigned commits), the user sees the host's own words, not "unreachable".
+func TestHostRefusalIsShownAsIs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell hook on the remote")
+	}
+	_, p := repo(t)
+	hook := filepath.Join(p.Store.Remote, "hooks", "pre-receive")
+	os.MkdirAll(filepath.Dir(hook), 0o755)
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\necho 'GH006: Protected branch update failed. Commits must have verified signatures.' >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	msg, code := runErr("direct", "--all", "this cannot be pushed")
+	if code == 0 || !strings.Contains(msg, "the git host refused the push") || !strings.Contains(msg, "verified signatures") {
+		t.Fatalf("want the host's message, got %d %q", code, msg)
+	}
+	if strings.Contains(msg, "could not be reached") {
+		t.Fatalf("a refusal is not an unreachable remote: %q", msg)
+	}
+	if n := outbox.Count(p.Store.OutboxDir()); n != 0 {
+		t.Fatalf("the refused write is still queued (%d)", n)
+	}
+	os.Remove(hook)
+	if out := run(t, "direct", "--all", "now it works"); !strings.Contains(out, "Published Y-") {
+		t.Fatalf("after the host allows it: %q", out)
+	}
+	if list := run(t, "directives"); strings.Contains(list, "cannot be pushed") {
+		t.Fatalf("the refused directive was published later: %q", list)
 	}
 }

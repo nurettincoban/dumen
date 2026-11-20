@@ -220,6 +220,9 @@ func readDecisionFile(root, rel string) (model.Decision, error) {
 	if err != nil {
 		return d, fmt.Errorf("%s: %v", rel, err)
 	}
+	if !model.ValidID(d.ID, model.PrefixDecision) {
+		return d, fmt.Errorf("%s: missing or invalid id", rel)
+	}
 	d.Body = body
 	return d, nil
 }
@@ -258,7 +261,7 @@ func ListDecisions(root string) ([]model.Decision, error) {
 	for _, f := range files {
 		d, err := readDecisionFile(root, f)
 		if err != nil {
-			return nil, err
+			continue // one bad file must not stop the team; Unreadable reports it
 		}
 		out = append(out, d)
 	}
@@ -290,6 +293,9 @@ func readDirectiveFile(root, rel string) (model.Directive, error) {
 	body, err := parseFrontMatter(data, &d)
 	if err != nil {
 		return d, fmt.Errorf("%s: %v", rel, err)
+	}
+	if !model.ValidID(d.ID, model.PrefixDirective) {
+		return d, fmt.Errorf("%s: missing or invalid id", rel)
 	}
 	d.Text = body
 	return d, nil
@@ -328,7 +334,7 @@ func ListDirectives(root string) ([]model.Directive, error) {
 	for _, f := range files {
 		d, err := readDirectiveFile(root, f)
 		if err != nil {
-			return nil, err
+			continue // see Unreadable
 		}
 		out = append(out, d)
 	}
@@ -373,18 +379,56 @@ func ListRefs(root string) ([]model.Ref, error) {
 	}
 	out := make([]model.Ref, 0, len(files))
 	for _, f := range files {
-		var r model.Ref
-		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(f)))
+		r, err := readRefFile(root, f)
 		if err != nil {
-			return nil, err
-		}
-		if err := yaml.Unmarshal(data, &r); err != nil {
-			return nil, fmt.Errorf("%s: %v", f, err)
+			continue // see Unreadable
 		}
 		out = append(out, r)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil
+}
+
+func readRefFile(root, rel string) (model.Ref, error) {
+	var r model.Ref
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+	if err != nil {
+		return r, err
+	}
+	if err := yaml.Unmarshal(data, &r); err != nil {
+		return r, fmt.Errorf("%s: %v", rel, err)
+	}
+	if !model.ValidID(r.ID, model.PrefixRef) {
+		return r, fmt.Errorf("%s: missing or invalid id", rel)
+	}
+	return r, nil
+}
+
+// Unreadable lists the record files that cannot be parsed, each with the reason. The
+// List functions skip such files so that one hand-edited or newer-format record never
+// stops reads and writes for the whole team; this is how they are reported instead.
+func Unreadable(root string) []string {
+	var bad []string
+	check := func(dir, ext string, read func(rel string) error) {
+		files, err := listFiles(root, dir, ext)
+		if err != nil {
+			return
+		}
+		for _, f := range files {
+			if err := read(f); err != nil {
+				msg := err.Error()
+				if !strings.HasPrefix(msg, f) {
+					msg = f + ": " + msg
+				}
+				bad = append(bad, strings.Join(strings.Fields(msg), " "))
+			}
+		}
+	}
+	check(DecisionsDir, ".md", func(rel string) error { _, err := readDecisionFile(root, rel); return err })
+	check(DirectivesDir, ".md", func(rel string) error { _, err := readDirectiveFile(root, rel); return err })
+	check(RefsDir, ".yml", func(rel string) error { _, err := readRefFile(root, rel); return err })
+	sort.Strings(bad)
+	return bad
 }
 
 // ---- activity ----

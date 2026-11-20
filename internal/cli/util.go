@@ -57,3 +57,16 @@ func relTo(root, wd, path string) (string, error) {
 	}
 	return filepath.ToSlash(rel), nil
 }
+
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i]
+	}
+	return clip(strings.TrimSpace(s), 200)
+}
+
+// lastLine returns the last non-empty line: git puts the real reason at the end.
+func lastLine(s string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	return strings.TrimSpace(lines[len(lines)-1])
+}

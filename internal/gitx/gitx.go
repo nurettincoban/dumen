@@ -72,7 +72,43 @@ const (
 	PushOK       PushResult = iota
 	PushRejected            // the remote moved or refused the ref update: fetch and re-apply
 	PushFailed              // network, auth or another error: the outcome is unknown
+	PushRefused             // the host turned the push down for good (protected branch, missing permission, a server-side rule): retrying will not help
 )
+
+// RefusedError carries what the git host said when it refused a push.
+type RefusedError struct{ Message string }
+
+func (e *RefusedError) Error() string { return "the git host refused the push: " + e.Message }
+
+// raceMarkers are the ways a push that merely lost a race shows up.
+var raceMarkers = []string{"non-fast-forward", "fetch first", "cannot lock ref", "failed to update ref",
+	"failed to lock", "is at ", "reference already exists", "stale info"}
+
+// hostMessage extracts the reason from a "[remote rejected]" line and the remote's own output.
+func hostMessage(text string) string {
+	var parts []string
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "remote:"):
+			if m := strings.TrimSpace(strings.TrimPrefix(line, "remote:")); m != "" {
+				parts = append(parts, m)
+			}
+		case strings.Contains(line, "[remote rejected]"):
+			if i := strings.Index(line, "[remote rejected]"); i >= 0 {
+				parts = append(parts, strings.Trim(strings.TrimSpace(line[i+len("[remote rejected]"):]), "()"))
+			}
+		}
+	}
+	msg := strings.Join(parts, "; ")
+	if len(msg) > 400 {
+		msg = msg[:400] + "…"
+	}
+	if msg == "" {
+		msg = "no reason given"
+	}
+	return msg
+}
 
 // Push pushes HEAD to refs/heads/<branch> on origin without force, so it only
 // ever succeeds as a fast-forward (or as the creation of the branch).
@@ -86,13 +122,20 @@ func (g Git) Push(ctx context.Context, branch string) (PushResult, error) {
 	if errors.As(err, &ge) {
 		text += "\n" + ge.Stderr
 	}
-	// Porcelain marks a refused ref with "!"; concurrent pushes to the same ref can
-	// also surface as a lock failure on the remote. Both mean: nothing was written.
-	for _, marker := range []string{"[rejected]", "[remote rejected]", "non-fast-forward", "fetch first",
-		"cannot lock ref", "failed to update ref", "failed to lock", "is at ", "reference already exists"} {
+	// Porcelain marks a refused ref with "!". A push that lost a race (someone else pushed
+	// first, or the remote's ref lock was taken) wrote nothing and is worth retrying.
+	for _, marker := range raceMarkers {
 		if strings.Contains(text, marker) {
 			return PushRejected, err
 		}
+	}
+	// Anything else the remote itself rejected is a decision of the host: a protected
+	// branch, a missing permission, a rule such as "commits must be signed".
+	if strings.Contains(text, "[remote rejected]") {
+		return PushRefused, &RefusedError{Message: hostMessage(text)}
+	}
+	if strings.Contains(text, "[rejected]") {
+		return PushRejected, err
 	}
 	return PushFailed, err
 }

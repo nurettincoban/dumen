@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"sort"
 	"strings"
 	"testing"
@@ -160,7 +161,7 @@ func TestAgentCannotApproveOrPublishWithoutHumanConfirmation(t *testing.T) {
 		}
 	}
 	// A ticket for one call does not cover a different call.
-	w.hook(hook.PreToolUse, map[string]any{"tool_name": "mcp__dumen__approve", "tool_input": map[string]any{"id": "D-0000"}})
+	w.hook(hook.PreToolUse, map[string]any{"tool_name": "mcp__dumen__approve", "permission_mode": "default", "tool_input": map[string]any{"id": "D-0000"}})
 	if _, isErr := w.call("approve", map[string]any{"id": id}); !isErr {
 		t.Fatal("a ticket must be bound to the exact arguments")
 	}
@@ -270,13 +271,109 @@ func TestRefsAndPathLookup(t *testing.T) {
 	if text := w.ok("search_decisions", map[string]any{"query": "checkout", "status": "draft"}); !strings.Contains(text, "Checkout follows the design") {
 		t.Fatalf("draft search: %s", text)
 	}
-	if text := w.ok("decisions_for_path", map[string]any{"path": "src/ui/checkout/Cart.tsx"}); !strings.Contains(text, ref) || !strings.Contains(text, "https://claude.ai/design/abc") {
-		t.Fatalf("decisions_for_path: %s", text)
+	// Gauntlet K4: a link an agent added reaches no agent until a person has checked it.
+	path := map[string]any{"path": "src/ui/checkout/Cart.tsx"}
+	if text := w.ok("decisions_for_path", path); strings.Contains(text, ref) || strings.Contains(text, "claude.ai/design") {
+		t.Fatalf("an unverified ref was shown to an agent: %s", text)
+	}
+	if out := w.hook(hook.SessionStart, map[string]any{"source": "startup"}); strings.Contains(out, "Checkout flow") || !strings.Contains(out, "awaiting a human check") {
+		t.Fatalf("an unverified ref must not be injected, only counted: %s", out)
+	}
+	ctx := context.Background()
+	if _, err := w.proj.Engine().Submit(ctx, model.Actor{Email: testutil.Lead.Email, Kind: model.KindAgent}, &op.CheckRef{ID: ref}); !errors.Is(err, op.ErrForbidden) {
+		t.Fatalf("an agent must not confirm a ref, got %v", err)
+	}
+	if _, err := w.proj.Engine().Submit(ctx, testutil.Lead, &op.CheckRef{ID: ref}); err != nil {
+		t.Fatal(err)
+	}
+	if text := w.ok("decisions_for_path", path); !strings.Contains(text, ref) || !strings.Contains(text, "https://claude.ai/design/abc") {
+		t.Fatalf("decisions_for_path after the human check: %s", text)
 	}
 	if text := w.ok("propose_directive", map[string]any{"text": "Use the new logger", "role": "backend"}); !strings.Contains(text, "not in force") {
 		t.Fatalf("propose: %s", text)
 	}
 	if text := w.ok("directives", map[string]any{}); !strings.Contains(text, "waiting for a publisher: 1") || strings.Contains(text, "new logger") {
 		t.Fatalf("a proposal must not appear as an active directive: %s", text)
+	}
+}
+
+// connect starts another dumen MCP server for the same project, as an agent could from a
+// shell, and returns a client for it.
+func (w *world) connect(impl *Server) *mcp.ClientSession {
+	w.t.Helper()
+	w.t.Cleanup(impl.Wait)
+	ct, st := mcp.NewInMemoryTransports()
+	ctx := context.Background()
+	if _, err := New(impl).Connect(ctx, st, nil); err != nil {
+		w.t.Fatal(err)
+	}
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "rogue", Version: "0"}, nil).Connect(ctx, ct, nil)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	w.t.Cleanup(func() { cs.Close() })
+	return cs
+}
+
+// Gauntlet K1. The hook writes the ticket when it answers "ask", before the person
+// decides. After a declined prompt, an agent must not be able to spend that ticket by
+// piping the same call into a `dumen mcp` it starts itself.
+func TestDeclinedConfirmationCannotBeSpentByAnotherServer(t *testing.T) {
+	w := setup(t)
+	text := w.ok("draft_decision", map[string]any{"title": "Agents approve their own drafts", "body": "b"})
+	id := text[strings.Index(text, "D-") : strings.Index(text, "D-")+6]
+	args := map[string]any{"id": id}
+	ask := func() {
+		t.Helper()
+		out := w.hook(hook.PreToolUse, map[string]any{"tool_name": "mcp__dumen__approve", "permission_mode": "default", "tool_input": args})
+		if !strings.Contains(out, `"permissionDecision":"ask"`) {
+			t.Fatalf("hook did not ask: %s", out)
+		}
+	}
+	refused := func(cs *mcp.ClientSession, who string) {
+		t.Helper()
+		res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "approve", Arguments: args})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !res.IsError {
+			t.Fatalf("%s spent a ticket the person never confirmed", who)
+		}
+	}
+	// The person declines: Claude Code never calls the tool, the ticket stays behind.
+	ask()
+	// A server started from a shell under some other process.
+	refused(w.connect(&Server{Dir: w.proj.Root, ParentPID: parentPID + 1, PID: 700001, Version: "test"}), "a server with another parent")
+	ask()
+	// A server started with `exec`, so that it has the same parent as the real one.
+	refused(w.connect(&Server{Dir: w.proj.Root, ParentPID: parentPID, PID: 700002, Version: "test"}), "a second server with the same parent")
+
+	if got := w.ok("get_decision", args); !strings.Contains(got, "status: draft") {
+		t.Fatalf("the draft was approved without a person: %s", got)
+	}
+	// The real server still works when the person does confirm.
+	if text, isErr := w.confirmed("approve", args); isErr {
+		t.Fatalf("confirmed approve failed: %s", text)
+	}
+}
+
+// Only modes where a person answers the prompt may get "ask".
+func TestConfirmationOnlyInModesWithAPerson(t *testing.T) {
+	w := setup(t)
+	args := map[string]any{"id": "D-0000"}
+	for _, mode := range []string{"auto", "dontAsk", "bypassPermissions", "", "someFutureMode"} {
+		out := w.hook(hook.PreToolUse, map[string]any{"tool_name": "mcp__dumen__approve", "permission_mode": mode, "tool_input": args})
+		if !strings.Contains(out, `"permissionDecision":"deny"`) {
+			t.Errorf("mode %q: want deny, got %s", mode, out)
+		}
+		if _, isErr := w.call("approve", args); !isErr {
+			t.Errorf("mode %q left a usable ticket", mode)
+		}
+	}
+	for _, mode := range []string{"default", "acceptEdits", "plan"} {
+		out := w.hook(hook.PreToolUse, map[string]any{"tool_name": "mcp__dumen__approve", "permission_mode": mode, "tool_input": args})
+		if !strings.Contains(out, `"permissionDecision":"ask"`) {
+			t.Errorf("mode %q: want ask, got %s", mode, out)
+		}
 	}
 }

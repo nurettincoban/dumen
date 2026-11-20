@@ -377,6 +377,12 @@ func validSession(s string) bool {
 var RefKinds = []string{"design", "artifact", "mr", "doc"}
 
 // Ref is a link to a source of truth. dumen stores the link and a one-line label, never content.
+// SchemaVersion is the newest dumen.yml `version` this build understands. A store with a
+// higher version was written by a newer dumen: this build still reads it, skipping what
+// it cannot parse, but refuses to write, because rewriting a record would silently drop
+// the fields it does not know.
+const SchemaVersion = 1
+
 type Ref struct {
 	ID        string   `yaml:"id"`
 	URL       string   `yaml:"url"`
@@ -387,7 +393,14 @@ type Ref struct {
 	Paths     []string `yaml:"paths,omitempty"`
 	Governs   string   `yaml:"governs,omitempty"` // one line
 	CheckedAt string   `yaml:"checked_at"`
+	CheckedBy string   `yaml:"checked_by,omitempty"`
+	// Status is RefUnverified for a link an agent added that no person has looked at yet.
+	// Such a link is stored and listed but never injected into agent context.
+	Status string `yaml:"status,omitempty"`
 }
+
+// RefUnverified marks a ref added by an agent and not yet checked by a person.
+const RefUnverified = "unverified"
 
 // Validate checks field-level rules.
 func (r Ref) Validate() error {

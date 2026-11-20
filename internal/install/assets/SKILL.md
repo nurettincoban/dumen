@@ -71,7 +71,9 @@ You are usually working in a dumen workspace with no code in it.
   Design or a Claude Artifact, first `add_ref` with the link, a one-line title and a
   one-line `governs`, then draft a **pointer decision**: a title, the ref in `sources`,
   and a body that says what the link decides and for which paths, without restating its
-  content. Your human approves it with `approve` when they ask you to.
+  content. Your human approves it with `approve` when they ask you to. A link you add
+  is unverified: other agents see it only after your human runs `dumen ref check <id>`
+  in their terminal, so tell them the id.
 - **Summarising activity**: when asked what happened, what is done, who is stuck, or who
   has not received a directive, call `activity` (for example `since: today`). Report
   counts, finished sessions with their last note, stuck sessions with what they are

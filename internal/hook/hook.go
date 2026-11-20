@@ -10,6 +10,7 @@ package hook
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -127,6 +128,14 @@ func handle(event string, stdin io.Reader, env Env) *Output {
 		return nil
 	}
 	p, err := project.Find(dir)
+	if errors.Is(err, project.ErrNoProject) {
+		// A session opened in the directory that holds the service repositories.
+		p, err = project.FindBelow(dir)
+	}
+	if errors.Is(err, project.ErrNoProject) && event == PreToolUse {
+		// A session somewhere else that is about to edit a file inside a dumen project.
+		return guardForeignEdit(r)
+	}
 	if err != nil {
 		if p != nil && event == SessionStart { // project file present, store not joined on this machine
 			return &Output{SystemMessage: "dumen: this repository uses dumen but this machine has not joined it yet. Run `dumen join` in the repository."}
@@ -327,6 +336,9 @@ func (r *runCtx) sessionStart() *Output {
 		}
 	}
 	fmt.Fprintf(&b, "\nDrafts awaiting review: %d\n", r.c.Drafts)
+	if r.c.UnverifiedRefs > 0 {
+		fmt.Fprintf(&b, "Links added by agents, awaiting a human check (`dumen ref check`): %d\n", r.c.UnverifiedRefs)
+	}
 	role := r.role
 	if role == "" {
 		role = "unassigned"
@@ -399,7 +411,7 @@ func guardedMCP(name string) (action string, ok bool) {
 }
 
 var (
-	humanCmd = regexp.MustCompile(`(?i)(^|[\s;&|(` + "`" + `$/\\'"=])dumen(\.exe)?['"]?\s+(approve|reject|supersede|direct|withdraw|private|role\s+set|role\s+rm)(\s|$|[;&|)'"])`)
+	humanCmd = regexp.MustCompile(`(?i)(^|[\s;&|(` + "`" + `$/\\'"=])dumen(\.exe)?['"]?\s+(approve|reject|supersede|direct|withdraw|private|role\s+set|role\s+rm|ref\s+check|mcp|hook)(\s|$|[;&|)'"])`)
 	storeRef = regexp.MustCompile(`(?i)(~|\$HOME|\$\{HOME\}|%USERPROFILE%|\$env:USERPROFILE|\$\{env:USERPROFILE\})[/\\]+\.dumen\b|DUMEN_HOME`)
 )
 
@@ -433,29 +445,43 @@ func (r *runCtx) preToolUse() *Output {
 			file = filepath.Join(r.in.Cwd, file)
 		}
 		file = filepath.Clean(file)
-		if base != "" && within(base, file) {
+		// Rules are matched on the file the edit really lands on, so a symlink inside the
+		// repository, or a repository reached through a symlinked directory, changes nothing.
+		real := realPath(file)
+		if base != "" && (within(base, file) || within(realPath(base), real)) {
 			return deny("dumen: the dumen store is managed by the dumen tools and is not edited directly. Use the dumen MCP tools, or ask your human.")
 		}
-		rel, ok := relTo(r.proj.Root, file)
+		if filepath.Base(real) == project.File {
+			return deny("dumen: the .dumen project file decides which team records apply here and is not edited by agents. Ask your human.")
+		}
+		// The rules that apply are those of the repository the file is in, which is not
+		// always the one the session was opened in.
+		tp, tc := r.target(real)
+		if tp == nil {
+			break // not inside any dumen project: no path rules apply
+		}
+		rel, ok := relTo(realPath(tp.Root), real)
 		if !ok {
-			break // outside the repository: no path rules apply
+			break
 		}
 		// In a project that spans several repositories, paths are matched as "<repo>:<path>".
-		q := policy.Qualify(r.proj.Repo, rel)
-		if d, blocked := r.c.DenyFor(q, r.now); blocked {
+		q := policy.Qualify(tp.Repo, rel)
+		if d, blocked := tc.DenyFor(q, r.now); blocked {
 			until := d.Expires
 			if len(until) >= 10 {
 				until = until[:10]
 			}
-			r.log(model.EventBlocked, "edit blocked: "+rel, d.ID)
-			return deny(fmt.Sprintf("Blocked by team directive %s (%q, active until %s). This path is frozen for every agent. Do not work around it with another tool. Ask your human.",
-				d.ID, render.Label(d.Text, render.MaxLabel), until))
+			r.log(model.EventBlocked, "edit blocked: "+q, d.ID)
+			return deny(denyReason(d, until))
 		}
-		if !session.Has(r.sess.Reminded, rel) {
-			r.sess.Reminded = append(r.sess.Reminded, rel)
+		if tc != r.c {
+			break // another project's file: its deny rules apply, its context is not ours to inject
+		}
+		if rem := q; !session.Has(r.sess.Reminded, rem) {
+			r.sess.Reminded = append(r.sess.Reminded, rem)
 			decs, refs := r.c.DecisionsFor(q), r.c.RefsFor(q)
 			var ctxDirs []cache.Directive
-			for _, d := range r.c.ActiveDirectives(r.role, r.proj.Repo, r.now) {
+			for _, d := range r.c.ActiveDirectives(r.role, tp.Repo, r.now) {
 				full := d.Directive
 				if full.Kind == model.DirectiveContext && policy.CoversPath(r.c.Config, full, q) {
 					ctxDirs = append(ctxDirs, d)
@@ -486,7 +512,7 @@ func (r *runCtx) preToolUse() *Output {
 	case "Bash", "PowerShell":
 		cmd := ti.Command
 		if humanCmd.MatchString(cmd) {
-			return deny("dumen: approving, rejecting, superseding, publishing, withdrawing, changing roles and marking a session private are human actions. Ask your human to run this in their own terminal.")
+			return deny("dumen: approving, rejecting, superseding, publishing, withdrawing, changing roles, confirming links and marking a session private are human actions, and `dumen mcp` and `dumen hook` are started by Claude Code only. Ask your human to run this in their own terminal.")
 		}
 		if storeRef.MatchString(cmd) || (base != "" && mentionsPath(cmd, base)) {
 			return deny("dumen: the dumen store is managed by the dumen tools and is not read or changed from the shell. Use the dumen MCP tools, or ask your human.")
@@ -498,12 +524,21 @@ func (r *runCtx) preToolUse() *Output {
 				target = " (" + render.Label(ti.ID, 12) + ")"
 			}
 			reason := fmt.Sprintf("dumen: %s%s is a human action. Confirm only if you, the human, want this.", action, target)
-			if r.in.PermissionMode == "bypassPermissions" {
-				return deny(fmt.Sprintf("dumen: %s%s is a human action and this session skips permission prompts, so it cannot be confirmed here. Ask your human to run it in their own terminal.", action, target))
+			session.RevokeTicket(r.proj.Store.SessionsDir(), r.in.ToolName, r.in.ToolInput)
+			// Ask only in the modes where a person is known to answer the prompt. Every
+			// other mode (auto, dontAsk, bypassPermissions, anything added later) may
+			// settle an "ask" without a person, so there the call is refused.
+			switch r.in.PermissionMode {
+			case "default", "acceptEdits", "plan":
+			default:
+				return deny(fmt.Sprintf("dumen: %s%s is a human action and this session's permission mode (%s) does not put the prompt in front of a person, so it cannot be confirmed here. Ask your human to run it in their own terminal.", action, target, render.Label(r.in.PermissionMode, 30)))
+			}
+			// The MCP server only acts on a call that carries this proof of having been
+			// asked, and only the server Claude Code started for this session can spend it.
+			if err := session.GrantTicket(r.proj.Store.SessionsDir(), r.in.ToolName, r.in.ToolInput, r.env.ParentPID, r.sess.Session); err != nil {
+				return deny(fmt.Sprintf("dumen: %s%s is a human action and this hook cannot tell which Claude Code process it runs under. Ask your human to run it in their own terminal.", action, target))
 			}
 			spec.PermissionDecision, spec.PermissionDecisionReason = "ask", reason
-			// The MCP server only acts on a call that carries this proof of having been asked.
-			session.GrantTicket(r.proj.Store.SessionsDir(), r.in.ToolName, r.in.ToolInput)
 		}
 	}
 
@@ -533,6 +568,101 @@ func (r *runCtx) preToolUse() *Output {
 	spec.AdditionalContext = strings.Join(parts, "\n")
 	r.sess.Save()
 	return &Output{HookSpecificOutput: spec}
+}
+
+func denyReason(d cache.Directive, until string) string {
+	return fmt.Sprintf("Blocked by team directive %s (%q, active until %s). This path is frozen for every agent. Do not work around it with another tool. Ask your human.",
+		d.ID, render.Label(d.Text, render.MaxLabel), until)
+}
+
+// target returns the dumen project that owns the file (already resolved with realPath)
+// and the records to judge it by: this session's own cache when the file belongs to the
+// same project, that project's cache otherwise. It returns nil when the file is in no
+// dumen project this machine has joined.
+func (r *runCtx) target(real string) (*project.Project, *cache.Cache) {
+	tp, err := project.Locate(filepath.Dir(real))
+	if err != nil {
+		// A session opened above the repositories: files directly in that directory.
+		if r.proj != nil && within(realPath(r.proj.Root), real) {
+			return r.proj, r.c
+		}
+		return nil, nil
+	}
+	if r.proj != nil && tp.Name == r.proj.Name {
+		tp.Store = r.proj.Store
+		return tp, r.c
+	}
+	s, err := store.Open(tp.Name)
+	if err != nil {
+		return nil, nil
+	}
+	c, err := cache.Read(s.CachePath())
+	if err != nil {
+		return nil, nil
+	}
+	tp.Store = s
+	return tp, c
+}
+
+// guardForeignEdit applies deny directives when a session that is not in a dumen project
+// edits a file that is in one. It injects nothing and logs nothing.
+func guardForeignEdit(r *runCtx) *Output {
+	switch r.in.ToolName {
+	case "Edit", "Write", "MultiEdit", "NotebookEdit":
+	default:
+		return nil
+	}
+	var ti struct {
+		FilePath     string `json:"file_path"`
+		NotebookPath string `json:"notebook_path"`
+	}
+	json.Unmarshal(r.in.ToolInput, &ti)
+	file := ti.FilePath
+	if file == "" {
+		file = ti.NotebookPath
+	}
+	if file == "" {
+		return nil
+	}
+	if !filepath.IsAbs(file) {
+		file = filepath.Join(r.in.Cwd, file)
+	}
+	real := realPath(filepath.Clean(file))
+	tp, tc := r.target(real)
+	if tp == nil {
+		return nil
+	}
+	rel, ok := relTo(realPath(tp.Root), real)
+	if !ok {
+		return nil
+	}
+	d, blocked := tc.DenyFor(policy.Qualify(tp.Repo, rel), r.now)
+	if !blocked {
+		return nil
+	}
+	until := d.Expires
+	if len(until) >= 10 {
+		until = until[:10]
+	}
+	return &Output{HookSpecificOutput: &Specific{HookEventName: "PreToolUse", PermissionDecision: "deny", PermissionDecisionReason: denyReason(d, until)}}
+}
+
+// realPath resolves symbolic links in p. For a file that does not exist yet it resolves
+// the deepest directory that does and keeps the rest.
+func realPath(p string) string {
+	p = filepath.Clean(p)
+	cur, rest := p, ""
+	for {
+		if resolved, err := filepath.EvalSymlinks(cur); err == nil {
+			return filepath.Join(resolved, rest)
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return p
+		}
+		rest = filepath.Join(filepath.Base(cur), rest)
+		cur = parent
+	}
 }
 
 func fold(p string) string {

@@ -334,3 +334,18 @@ These were decided during the build, each at the owner's request or forced by a 
    `dumen role` and `dumen direct --publish <id>` were added because the setup and the proposal
    flow could not be completed without them. An operation rejected while its caller is waiting is
    no longer kept in `outbox-failed/`; only operations rejected during a background replay are.
+10. **Changes from the first review gauntlet.** (a) A confirmation ticket names the Claude
+    Code process and the session, and only the dumen MCP server that registered first for
+    that process, the one Claude Code started, can spend it. The hook answers "ask" only in
+    the `default`, `acceptEdits` and `plan` permission modes and denies in all others.
+    `dumen mcp` and `dumen hook` are blocked in the shell guard. (b) Path rules are matched
+    on the symlink-resolved file, against the repository that file is in; a session opened
+    above the repositories gets the records of the project found one level down; `.dumen`
+    is not editable by agents. (c) A link added by an agent is `unverified` and is not
+    injected until a person runs `dumen ref check`, which is now a human-only action.
+    (d) Unparseable record files are skipped and listed by `dumen status` instead of failing
+    every read and write. (e) A write whose caller is told it failed is removed from the
+    outbox. (f) `dumen.yml` `version` is checked: a store with a newer version is read-only
+    for this build; record ids may be 4 to 8 characters. (g) A push the host refuses for
+    good is reported with the host's message and is not retried. dumen is documented as a
+    guard rail, not a security boundary.

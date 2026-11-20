@@ -43,9 +43,11 @@ type Cache struct {
 	Config     model.Config `json:"config"`
 	Directives []Directive  `json:"directives"` // status active; the time window is checked on read
 	Decisions  []Decision   `json:"decisions"`  // approved and not superseded, newest first
-	Refs       []model.Ref  `json:"refs"`
-	Drafts     int          `json:"drafts"`
-	Proposed   int          `json:"proposed"` // proposed directives waiting for a publisher
+	Refs       []model.Ref  `json:"refs"`       // links a person added or checked
+
+	UnverifiedRefs int `json:"unverified_refs,omitempty"` // links agents added, waiting for a person
+	Drafts         int `json:"drafts"`
+	Proposed       int `json:"proposed"` // proposed directives waiting for a publisher
 }
 
 const version = 1
@@ -94,8 +96,16 @@ func Build(root, head string, now time.Time) (*Cache, error) {
 		}
 		return c.Decisions[i].ID < c.Decisions[j].ID
 	})
-	if c.Refs, err = store.ListRefs(root); err != nil {
+	refs, err := store.ListRefs(root)
+	if err != nil {
 		return nil, err
+	}
+	for _, r := range refs {
+		if r.Status == model.RefUnverified {
+			c.UnverifiedRefs++ // never injected: no person has seen its text yet
+			continue
+		}
+		c.Refs = append(c.Refs, r)
 	}
 	return c, nil
 }

@@ -22,35 +22,40 @@ ever speaks plain git to it, so the host makes no difference. If `git push` work
 
 ```
 $ dumen direct --deny --paths 'src/auth/**' --for 3d "Auth is frozen until the audit ends"
-Published Y-MXE3 [deny] paths src/auth/**, until 2026-11-23 22:29
+Published Y-G300 [deny] paths src/auth/**, until 2026-11-23 23:32
 ```
 
-Thirty seconds later, in a teammate's running Claude Code session:
+Within about thirty seconds, a teammate's running Claude Code session that tries to edit
+`src/auth/login.go` is stopped, and the agent is told why:
 
 ```
-Edit(src/auth/login.go)
-  Blocked by team directive Y-MXE3 ("Auth is frozen until the audit ends", active until
-  2026-11-23). This path is frozen for every agent. Do not work around it with another tool.
-  Ask your human.
+Blocked by team directive Y-G300 ("Auth is frozen until the audit ends", active until
+2026-11-23). This path is frozen for every agent. Do not work around it with another tool.
+Ask your human.
 ```
 
 And on your side:
 
 ```
 $ dumen activity
-started 6  finished 3  blocked 1  asking_human 1  progress 14  directive_ack 5 ...
+Since 2026-11-20 00:00
+started 2  finished 0  blocked 1  asking_human 0  progress 1  directive_ack 0  draft_written 0  decision_read 0  private 0
 
-Sessions (6)
-  ayse@example.com    3f9a1c2e   blocked   09:12-09:40  blocked by Y-MXE3 on src/auth/login.go
-  ...
+Sessions (2)
+  ayse@example.com                   3f9a1c2e   blocked       23:32-23:32  edit blocked: src/auth/login.go
+  mehmet@example.com                 8c41d07b   active        23:32-23:33  I added pagination to the orders endpoint and its tests pass.
+
+Stuck (1)
+  ayse@example.com         3f9a1c2e   blocked       edit blocked: src/auth/login.go
+
 Not yet acknowledged
-  Y-MXE3 Auth is frozen until the audit ends
-    mehmet@example.com
+  Y-G300 Auth is frozen until the audit ends
+    ayse@example.com, mehmet@example.com
 ```
 
-> **Status: early.** The MVP is feature complete and tested, including end-to-end tests against the
-> real `claude` CLI. It has not been used by many teams yet. Read [Honest limits](#honest-limits)
-> before you rely on it.
+> **Status: early, not released yet.** The MVP is feature complete and tested on Linux, including
+> end-to-end tests against the real `claude` CLI. It has not been run on macOS or Windows and has
+> not been used by many teams. Read [Honest limits](#honest-limits) before you rely on it.
 
 ## Contents
 
@@ -88,9 +93,10 @@ Not yet acknowledged
 - **No daemon.** Claude Code starts `dumen mcp` as an MCP server for each session. While the
   session lives, that process checks the remote every 30 seconds with `git ls-remote` and fetches
   only when something changed.
-- **Hooks never touch the network.** They read a local cache, which keeps them fast (p95 about
-  4 ms, budget 50 ms) and means a slow remote can never slow an agent down. A hook that fails for
-  any reason lets the tool call through.
+- **Hooks read a local cache.** That keeps them fast (p95 about 4 ms, budget 50 ms). The one
+  exception: when the cache is missing or older than 90 seconds, a hook tries a single fetch that
+  is cut off after 2 seconds, at most once every 30 seconds. A hook that fails for any reason lets the
+  tool call through.
 - **Your code stays on your machine.** dumen never copies code. It records paths, one-line labels
   and links. Local state lives in `~/.dumen/<project>/`, never inside your working tree.
 
@@ -111,13 +117,28 @@ by [goreleaser](.goreleaser.yaml) and will be published with the first tagged re
 
 ### 2. Create the store (one person, once)
 
+The store is where the records live. We recommend a small, private repository of its own: create
+an empty one on your git host, then point your code repository at it.
+
 ```sh
 cd your-repo
-dumen init              # creates the orphan branch "dumen" on origin, with you as lead
+dumen init --store git@git.example.com:team/dumen-store.git#dumen
 git add .dumen && git commit -m "Add dumen" && git push
 ```
 
-`.dumen` is a three-line file that tells teammates where the store is. It holds no secrets.
+To try dumen quickly you can leave `--store` out. The records then go to an orphan branch named
+`dumen` in the code repository itself:
+
+```sh
+dumen init              # creates the orphan branch "dumen" on origin, with you as lead
+```
+
+Two reasons to prefer a separate repository. Every activity event is a small commit, so a busy
+team adds thousands of commits a day that every `git fetch` of the code repository would carry.
+And the store holds your teammates' email addresses and one-line summaries of what their agents
+did: **never keep the store in a public repository.**
+
+`.dumen` is a small text file that tells teammates where the store is. It holds no secrets.
 
 Add your teammates by their git `user.email`:
 
@@ -139,8 +160,8 @@ Everybody else, and every agent, may read, draft and propose.
 /plugin install dumen@dumen
 ```
 
-The plugin brings the hooks, the MCP server and the skill. It does nothing in repositories that
-have no `.dumen` file. The first time an agent uses a dumen tool, Claude Code asks for permission;
+The plugin brings the hooks, the MCP server and the skill. It stays silent in directories that
+have nothing to do with a dumen project. The first time an agent uses a dumen tool, Claude Code asks for permission;
 choose "always allow" for the reading and acknowledging tools. Never pre-approve `approve`,
 `supersede` or `publish_directive`: those are your confirmation step.
 
@@ -220,8 +241,12 @@ dumen ref add https://claude.ai/artifact/abc123 --kind artifact --title "Payment
   --governs "request and response shapes of the payments API" --paths 'src/payments/**'
 
 dumen ref list
-dumen ref check R-N3WS      # "I looked, the link is still right"
+dumen ref check R-7GE1      # "I looked, the link is right"
 ```
+
+An agent can add a link too, but a link added by an agent is marked unverified and is not shown
+to any agent until a person confirms it with `dumen ref check`. Text written by one agent never
+reaches the others without a person in between.
 
 Other kinds are `mr` (a merge or pull request) and `doc` (any other document). An agent that
 edits a file under `--paths` is shown the link and its label. dumen stores the link and a one-line
@@ -248,7 +273,8 @@ dumen init --store git@git.example.com:team/dumen-store.git#dumen --repo orders
 git add .dumen && git commit -m "Add dumen" && git push
 ```
 
-Paths in directives, decisions and refs can then name a repository:
+The repository name defaults to the name of the `origin` remote. Paths in directives, decisions
+and refs can then name a repository:
 
 | Pattern | Matches |
 | --- | --- |
@@ -261,7 +287,10 @@ dumen direct --deny --paths 'orders:migrations/**' "Schema is frozen until the r
 dumen activity --repo orders
 ```
 
-One `dumen activity` shows the sessions of every service.
+One `dumen activity` shows the sessions of every service. The rules that apply to an edit are
+those of the repository the file is in, so a session opened in `gateway` cannot edit a frozen
+path in `../orders`, and a session opened in the directory that holds all the repositories gets
+the directives of all of them.
 
 ## What an agent sees and can do
 
@@ -276,12 +305,23 @@ small. A directive published while a session is running reaches the agent on its
 | acknowledge a directive | publish or withdraw a directive |
 | draft a decision | change roles |
 | propose a directive | mark a session private |
-| add a ref, log progress or a blocker | edit the store directly |
+| add a link (unverified until a person checks it) | confirm a link |
+| log progress or a blocker | edit the store or the `.dumen` file directly |
 
-The human-only actions are refused in three places: the CLI (it knows when it runs inside Claude
-Code), the MCP server, and a hook that blocks shell commands such as `dumen approve`. When an
-agent asks to approve or publish through MCP, Claude Code shows you a permission prompt, and the
-action goes through only if you accept it.
+How the human-only actions are kept human:
+
+- When an agent calls `approve`, `supersede` or `publish_directive`, a hook sends the call to
+  Claude Code's permission prompt. The action happens only if you accept it there. The dumen
+  server acts on such a call only if it came through that hook, and only the server that Claude
+  Code itself started for the session can do so; a second `dumen mcp` started from a shell
+  cannot.
+- The prompt is used only in the permission modes where a person answers it (`default`,
+  `acceptEdits`, `plan`). In every other mode the call is refused, and you run the command in
+  your own terminal.
+- A hook blocks shell commands such as `dumen approve` inside a session, and the CLI refuses
+  human actions when it sees that it runs inside Claude Code. These two are a second layer, not a
+  wall: an agent that deliberately clears its environment can get past them. See
+  [Security model](#security-model).
 
 ## Privacy
 
@@ -298,23 +338,28 @@ and nothing else. Directives still apply to private sessions.
 Activity events hold a kind, a one-line summary, file paths, the repository name and the commit
 the session started from. They never hold prompts or tool output. The summary is the first
 paragraph of the agent's last message with code blocks and long code spans removed, cut to one
-line. Every write is scanned for
-common secret formats (cloud keys, GitLab and GitHub tokens, private keys and others) and is
-rejected when one matches.
+line. Every write is scanned for common secret formats (cloud keys, git host tokens, private keys
+and others) and is rejected when one matches.
 
 ## Security model
 
 Please read this part before you trust dumen with anything.
 
-**dumen guards against agents, not against colleagues.** Anyone who can `git push` to the store
+**dumen is a guard rail, not a security boundary. It guards against agents, not against
+colleagues.** Anyone who can `git push` to the store
 branch can write any record, including one that says somebody else approved it. dumen cannot
 prevent that, because there is no server to check identities. It is the same trust you already
 place in people who can push to your repository.
 
+The same is true, to a lesser degree, of a determined agent. It runs on your machine with your
+credentials, so nothing local can tell it from you with certainty. dumen makes the wrong thing
+hard to do by accident and visible when it happens; it does not make it impossible.
+
 What you do get:
 
-- Roles are enforced in the CLI, the MCP server and the hooks, so an agent cannot promote its own
-  ideas into team decisions or publish instructions to other agents.
+- Roles are checked in the CLI, the MCP server and the hooks, so an agent that plays by the
+  rules, or that is merely confused or misled by something it read, cannot promote its own ideas
+  into team decisions or publish instructions to other agents.
 - Text from the store is injected into agent context as data with a clear header, as ids and
   sanitized one-line labels, never as free-form instructions.
 - Every record is a git commit. `git log` on the `dumen` branch is the audit trail.
@@ -334,11 +379,30 @@ What we recommend:
 
 - **30-second sync window.** A new directive reaches running sessions within about 30 seconds, not
   instantly. An agent can start an edit in that window.
-- **`deny` covers file tools, not the shell.** The hook blocks Claude Code's file-editing tools
-  under a denied path. An agent that runs `sed -i`, a build script or a code generator through
-  Bash can still change those files. The directive text tells the agent not to, and agents nearly
-  always comply, but it is not a sandbox. Use branch protection and code review for hard
-  guarantees.
+- **`deny` covers Claude Code's file tools, not everything.** The hook blocks `Edit`, `Write`,
+  `MultiEdit` and `NotebookEdit` under a denied path, following symlinks. An agent that runs
+  `sed -i`, a build script or a code generator through Bash, or that writes through another MCP
+  server's file tool, can still change those files. The directive text tells the agent not to,
+  and agents nearly always comply, but it is not a sandbox. Use branch protection and code review
+  for hard guarantees.
+- **Not run on macOS or Windows yet.** It compiles for both, and nothing more has been checked.
+  Expect rough edges there, for example a credential manager window opening during a background
+  sync on Windows.
+- **Activity is one commit per event.** The store grows by roughly 1 KB per event, and its local
+  clone under `~/.dumen` is never compacted automatically. Run `git gc` there now and then, and
+  keep the store in its own repository.
+- **A crashed dumen can leave a lock behind.** If a `dumen` process is killed in the middle of a
+  write, other dumen commands on that machine wait up to two minutes. If `dumen status` then
+  keeps reporting an error that mentions `index.lock`, delete
+  `~/.dumen/<project>/store/.git/index.lock`.
+- **Subagents share their parent's session.** A directive that arrives mid-session is shown once
+  per session. If a subagent's tool call happens to receive it, the main agent only sees it at
+  its next prompt.
+- **Large teams of records.** The block injected at session start has no size cap yet. With many
+  directives, decisions and links it can pass the size at which Claude Code shows the agent only
+  a preview. Keep directives few (the default limit is 10) and time-boxed.
+- **Two unrelated repositories with the same project name** in their `.dumen` files are treated
+  as one project on your machine. Choose distinct project names.
 - **Advisory security.** See [Security model](#security-model). A colleague with push access can
   forge records.
 - **Hooks fail open.** If the binary is missing, the cache is unreadable or anything else goes
@@ -351,7 +415,9 @@ What we recommend:
 - **Non-technical teammates.** Today everyone needs git access to the store. A friendlier path for
   product managers without a git account is not built yet. The generated `DECISIONS.md` and
   `ACTIVITY.md` can be read in the web UI of your git host.
-- **Continuous integration** for this repository is not set up yet. Tests run locally.
+- **Old and new versions.** A store upgraded by a newer dumen becomes read-only for older ones
+  until they upgrade; they say so and write nothing.
+- **Continuous integration** for this repository is not set up yet. Tests run locally, on Linux.
 
 ## claude.ai on the web
 
@@ -373,9 +439,10 @@ branch. Nothing is enforced in web sessions, and you should not write to the sto
 | `dumen init [--store URL#branch] [--repo NAME]` | create the store, write `.dumen` |
 | `dumen join [URL]` | connect this machine to the store |
 | `dumen status` | sync state, your role, queued operations |
-| `dumen sync` | push queued operations and refresh the cache now |
+| `dumen sync [--forget]` | push queued operations and refresh the cache now; `--forget` clears the list of rejected ones |
 | `dumen role set\|rm\|list` | manage who is on the team |
-| `dumen direct`, `directives`, `withdraw` | publish, list and withdraw directives |
+| `dumen direct ...`, `direct --propose ...`, `direct --publish ID` | publish a directive, propose one, put a proposal in force |
+| `dumen directives [--all]`, `withdraw ID` | list and withdraw directives |
 | `dumen decide`, `decisions`, `show`, `approve`, `reject`, `supersede` | work with decisions |
 | `dumen ref add\|check\|list` | links to sources of truth |
 | `dumen activity`, `watch` | what agents did, and a live tail |
@@ -383,11 +450,18 @@ branch. Nothing is enforced in web sessions, and you should not write to the sto
 | `dumen gc` | archive stale drafts, compact activity older than 30 days |
 | `dumen install` | write hooks, MCP registration and skill into a repository |
 | `dumen mcp`, `dumen hook <event>` | entry points for Claude Code, not for people |
+| `dumen version`, `dumen help` | the version, the command list |
 
 Every command accepts `--help`.
 
 Environment variables: `DUMEN_HOME` moves local state away from `~/.dumen`. `DUMEN_POLL_INTERVAL`
-changes the 30-second sync interval (for example `10s`).
+changes the 30-second sync interval (for example `10s`). `DUMEN_WORKSPACES` is where
+`dumen join <url>` creates a workspace (default `~/dumen`).
+
+When something goes wrong, start with `dumen status`: it tells you whether the remote is
+reachable and what git said if not, which records are unreadable, and what is still queued. Then
+run `dumen sync`: if your git host refuses the push (a protected branch, a missing permission, a
+rule that commits must be signed), it prints the host's own message.
 
 ## Development
 
@@ -416,7 +490,7 @@ plugin/              the Claude Code plugin
 test/                concurrency, latency and end-to-end suites
 ```
 
-Contributions are welcome. Please keep three rules in mind: hooks must not touch the network, a
+Contributions are welcome. Please keep three rules in mind: hooks stay fast and fail open, a
 write must never merge text, and nothing may copy code or secrets into the store. Open an issue
 before a large change so we can agree on the direction first.
 

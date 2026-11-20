@@ -140,7 +140,7 @@ func Decisions(root string) ([]byte, error) {
 		for _, r := range refs {
 			fmt.Fprintf(&b, "| %s | %s | %s | <%s> | %s | %s | %s |\n", r.ID, r.Kind, cell(r.Title, MaxLabel),
 				strings.NewReplacer(">", "%3E", "<", "%3C", " ", "%20", "|", "%7C").Replace(Label(r.URL, 500)),
-				cell(r.Governs, MaxLabel), cell(r.Area, 40), day(r.CheckedAt))
+				cell(r.Governs, MaxLabel), cell(r.Area, 40), checked(r))
 		}
 	}
 	return []byte(b.String()), nil
@@ -218,4 +218,11 @@ func Regenerate(root string) error {
 		return err
 	}
 	return os.WriteFile(filepath.Join(root, store.ActivityMD), a, 0o644)
+}
+
+func checked(r model.Ref) string {
+	if r.Status == model.RefUnverified {
+		return "not yet, added by an agent"
+	}
+	return day(r.CheckedAt)
 }

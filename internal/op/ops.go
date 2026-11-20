@@ -475,6 +475,13 @@ func (o *AddRef) Apply(tx *Tx) error {
 	if r.Owner == "" {
 		r.Owner = tx.Actor.Email
 	}
+	// Text written by an agent must not reach other agents before a person has seen it.
+	r.Status, r.CheckedBy = "", ""
+	if tx.Actor.Kind != model.KindHuman {
+		r.Status = model.RefUnverified
+	} else {
+		r.CheckedBy = tx.Actor.Email
+	}
 	r.ID = freshID(tx, r.ID, model.PrefixRef)
 	o.Ref.ID = r.ID
 	if err := r.Validate(); err != nil {
@@ -504,7 +511,12 @@ func (o *CheckRef) Apply(tx *Tx) error {
 	if err != nil {
 		return err
 	}
+	if err := requireHuman(tx, "confirm a link"); err != nil {
+		return err
+	}
 	r.CheckedAt = model.FormatTime(tx.Now)
+	r.CheckedBy = tx.Actor.Email
+	r.Status = ""
 	tx.RecordID = r.ID
 	_, err = store.WriteRef(tx.Root, r)
 	return err
