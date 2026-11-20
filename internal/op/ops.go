@@ -79,6 +79,7 @@ func init() {
 	register(func() Op { return &AddRef{} })
 	register(func() Op { return &CheckRef{} })
 	register(func() Op { return &UpdateConfig{} })
+	register(func() Op { return &SetRole{} })
 	register(func() Op { return &CompactActivity{} })
 }
 
@@ -538,6 +539,57 @@ func (o *UpdateConfig) Apply(tx *Tx) error {
 	}
 	tx.cfg = nil
 	return store.WriteConfig(tx.Root, next)
+}
+
+// SetRole gives one person a role in dumen.yml, or removes them when Role is empty.
+// Unlike UpdateConfig it changes a single entry, so two leads adding people at the
+// same time never overwrite each other. Publishers only.
+type SetRole struct {
+	Email string `json:"email"`
+	Role  string `json:"role,omitempty"`
+}
+
+func (o *SetRole) Kind() string { return "config.role" }
+
+func (o *SetRole) Check() error {
+	o.Email = strings.ToLower(strings.TrimSpace(o.Email))
+	o.Role = strings.ToLower(strings.TrimSpace(o.Role))
+	if !strings.Contains(o.Email, "@") || strings.ContainsAny(o.Email, " \t\n") {
+		return fmt.Errorf("%q is not an email address (use the person's git user.email)", o.Email)
+	}
+	if o.Role != "" && model.Slug(o.Role) != o.Role {
+		return fmt.Errorf("role %q must be a short lowercase word such as dev, lead or pm", o.Role)
+	}
+	return nil
+}
+
+func (o *SetRole) Apply(tx *Tx) error {
+	cfg, err := tx.Config()
+	if err != nil {
+		return err
+	}
+	if err := requireHuman(tx, "change roles"); err != nil {
+		return err
+	}
+	if !cfg.CanPublish(tx.Actor.Email) {
+		return fmt.Errorf("%w: %s may not change roles", ErrForbidden, tx.Actor.Email)
+	}
+	roles := make(map[string]string, len(cfg.Roles)+1) // a copy: tx.Config shares its map
+	for e, r := range cfg.Roles {
+		roles[e] = r
+	}
+	cfg.Roles = roles
+	if o.Role == "" {
+		delete(cfg.Roles, o.Email)
+	} else {
+		cfg.Roles[o.Email] = o.Role
+	}
+	if !cfg.CanPublish(tx.Actor.Email) {
+		return fmt.Errorf("this would remove your own publisher role; ask another publisher to do that")
+	}
+	tx.cfg = nil
+	tx.RecordID = o.Email
+	return store.WriteConfig(tx.Root, cfg)
 }
 
 // ---- maintenance ----

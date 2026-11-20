@@ -399,7 +399,7 @@ func guardedMCP(name string) (action string, ok bool) {
 }
 
 var (
-	humanCmd = regexp.MustCompile(`(?i)(^|[\s;&|(` + "`" + `$/\\'"=])dumen(\.exe)?['"]?\s+(approve|reject|supersede|direct|withdraw|private)(\s|$|[;&|)'"])`)
+	humanCmd = regexp.MustCompile(`(?i)(^|[\s;&|(` + "`" + `$/\\'"=])dumen(\.exe)?['"]?\s+(approve|reject|supersede|direct|withdraw|private|role\s+set|role\s+rm)(\s|$|[;&|)'"])`)
 	storeRef = regexp.MustCompile(`(?i)(~|\$HOME|\$\{HOME\}|%USERPROFILE%|\$env:USERPROFILE|\$\{env:USERPROFILE\})[/\\]+\.dumen\b|DUMEN_HOME`)
 )
 
@@ -486,7 +486,7 @@ func (r *runCtx) preToolUse() *Output {
 	case "Bash", "PowerShell":
 		cmd := ti.Command
 		if humanCmd.MatchString(cmd) {
-			return deny("dumen: approving, rejecting, superseding, publishing, withdrawing and marking a session private are human actions. Ask your human to run this in their own terminal.")
+			return deny("dumen: approving, rejecting, superseding, publishing, withdrawing, changing roles and marking a session private are human actions. Ask your human to run this in their own terminal.")
 		}
 		if storeRef.MatchString(cmd) || (base != "" && mentionsPath(cmd, base)) {
 			return deny("dumen: the dumen store is managed by the dumen tools and is not read or changed from the shell. Use the dumen MCP tools, or ask your human.")

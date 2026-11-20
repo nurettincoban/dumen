@@ -34,7 +34,11 @@ func model() string {
 	return "claude-haiku-5-5"
 }
 
-func setup(t *testing.T) *world {
+func setup(t *testing.T) *world { return setupWith(t, true) }
+
+// setupWith builds the world; with install false the repository gets no .claude files,
+// which is the situation of a team that uses the Claude Code plugin instead.
+func setupWith(t *testing.T, install bool) *world {
 	t.Helper()
 	if os.Getenv("CI") != "" {
 		t.Skip("e2e tests are local-only for now")
@@ -74,7 +78,9 @@ func setup(t *testing.T) *world {
 	w.sh(w.repo, "git", "commit", "-q", "-m", "init")
 	w.sh(w.repo, "git", "push", "-q", "origin", "HEAD")
 	w.dumen("init")
-	w.dumen("install")
+	if install {
+		w.dumen("install")
+	}
 	return w
 }
 
@@ -302,5 +308,32 @@ func TestHumanConfirmedApprovalGoesThrough(t *testing.T) {
 	w.claude("My human asked me to approve decision "+id+". Call the dumen `approve` tool with id "+id+" once and report the result.", "--permission-prompts", "none")
 	if show := w.dumen("show", id); !strings.Contains(show, "status      approved") {
 		t.Errorf("a confirmed approval should have gone through:\n%s", show)
+	}
+}
+
+// The plugin delivers the same hooks, MCP server and skill as `dumen install`.
+func TestPluginEnforcesAndAcknowledges(t *testing.T) {
+	w := setupWith(t, false)
+	plugin, err := filepath.Abs(filepath.Join("..", "..", "plugin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	deny := firstID(w.dumen("direct", "--deny", "--paths", "src/auth/**", "--for", "1d", "Release week: do not touch src/auth"))
+	before := w.read("src/auth/login.ts")
+	out := w.claude("First acknowledge every active dumen directive with the dumen ack_directive tool. "+
+		"Then use the Edit tool once to append the line `// touched` to src/auth/login.ts. Do not use Bash. "+
+		"Report the directive IDs you acknowledged and what happened to the edit.",
+		"--plugin-dir", plugin, "--allowedTools", "mcp__plugin_dumen_dumen__ack_directive", "mcp__plugin_dumen_dumen__directives")
+	if w.read("src/auth/login.ts") != before {
+		t.Fatal("the plugin's hook did not block the edit")
+	}
+	if !strings.Contains(out, deny) {
+		t.Errorf("the agent did not report %s", deny)
+	}
+	log := w.activity()
+	for _, kind := range []string{"started", "directive_ack", "blocked", "finished"} {
+		if !strings.Contains(log, `"kind":"`+kind+`"`) {
+			t.Errorf("no %s event through the plugin:\n%s", kind, log)
+		}
 	}
 }

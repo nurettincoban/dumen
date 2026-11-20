@@ -50,6 +50,7 @@ func init() {
 		{"activity", "activity [--since today|2h|7d|DATE] [--person P] [--kind K] [--events] [--json]", "what agents did: counts, sessions, who is stuck", cmdActivity},
 		{"watch", "watch [--interval 5s]", "live tail of agent activity", cmdWatch},
 		{"private", "private [on|off]", "stop or resume monitoring of your new sessions (the fact stays visible)", cmdPrivate},
+		{"role", "role set <email> <role> | role rm <email> | role list", "manage who is on the team and what they may do", cmdRole},
 		{"gc", "gc", "archive stale drafts and compact activity older than 30 days", cmdGC},
 		{"sync", "sync [--project NAME] [--quiet]", "push queued operations and refresh the local cache", cmdSync},
 		{"install", "install [--binary PATH]", "write the Claude Code hooks, MCP registration and skill into this repository", cmdInstall},
@@ -287,7 +288,7 @@ func cmdJoin(a *app, args []string) error {
 	}
 	role := c.Config.Role(me.Email)
 	if role == "" {
-		role = "unassigned (ask a lead to add you to dumen.yml)"
+		role = "unassigned (ask a lead to run `dumen role set <your git email> dev`)"
 	}
 	fmt.Fprintf(a.out, "Joined project %q as %s, role: %s.\n", loc.Name, me.Email, role)
 	for _, w := range res.Warnings {
@@ -336,7 +337,7 @@ func joinWorkspace(a *app, spec string) error {
 	}
 	role := c.Config.Role(me.Email)
 	if role == "" {
-		role = "unassigned (ask a lead to add you to dumen.yml)"
+		role = "unassigned (ask a lead to run `dumen role set <your git email> dev`)"
 	}
 	fmt.Fprintf(a.out, "Joined project %q as %s, role: %s.\n", name, me.Email, role)
 	fmt.Fprintf(a.out, "Your workspace is %s. It contains no code. Open Claude Code there:\n\n  cd %s && claude\n", dir, dir)
@@ -590,6 +591,52 @@ func cmdWithdraw(a *app, args []string) error {
 	}
 	fmt.Fprintf(a.out, "Withdrew %s\n", out.RecordID)
 	return nil
+}
+
+// ---- roles ----
+
+func cmdRole(a *app, args []string) error {
+	const usage = "usage: dumen role set <email> <role> | role rm <email> | role list"
+	if len(args) == 0 {
+		return fmt.Errorf(usage)
+	}
+	p, err := openProject()
+	if err != nil {
+		return err
+	}
+	switch {
+	case args[0] == "list" && len(args) == 1:
+		ctx, cancel := longCtx()
+		defer cancel()
+		p.Refresh(ctx) // best effort: offline shows the last known roles
+		cfg, err := store.ReadConfig(p.Store.Root())
+		if err != nil {
+			return err
+		}
+		emails := make([]string, 0, len(cfg.Roles))
+		for e := range cfg.Roles {
+			emails = append(emails, e)
+		}
+		sort.Strings(emails)
+		for _, e := range emails {
+			fmt.Fprintf(a.out, "%-8s %s\n", cfg.Roles[e], e)
+		}
+		fmt.Fprintf(a.out, "Roles that may publish directives and approve decisions: %s\n", strings.Join(cfg.Settings.Publishers, ", "))
+		return nil
+	case args[0] == "set" && len(args) == 3:
+		if _, err := a.submit(p, &op.SetRole{Email: args[1], Role: args[2]}); err != nil {
+			return err
+		}
+		fmt.Fprintf(a.out, "%s is now %s\n", strings.ToLower(args[1]), strings.ToLower(args[2]))
+		return nil
+	case args[0] == "rm" && len(args) == 2:
+		if _, err := a.submit(p, &op.SetRole{Email: args[1]}); err != nil {
+			return err
+		}
+		fmt.Fprintf(a.out, "Removed %s\n", strings.ToLower(args[1]))
+		return nil
+	}
+	return fmt.Errorf(usage)
 }
 
 // ---- mcp ----

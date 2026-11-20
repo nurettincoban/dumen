@@ -302,3 +302,26 @@ func TestGCCompactsOldActivity(t *testing.T) {
 		t.Error("archived draft must keep reserving its id")
 	}
 }
+
+func TestRoleSetListRemove(t *testing.T) {
+	repo(t)
+	if out := run(t, "role", "set", "Ayse@Example.com", "dev"); !strings.Contains(out, "ayse@example.com is now dev") {
+		t.Fatalf("role set: %q", out)
+	}
+	if out := run(t, "role", "list"); !strings.Contains(out, "dev      ayse@example.com") || !strings.Contains(out, "lead") {
+		t.Fatalf("role list: %q", out)
+	}
+	if msg, code := runErr("role", "set", "not-an-email", "dev"); code == 0 || !strings.Contains(msg, "not an email") {
+		t.Fatalf("bad email must fail: %d %q", code, msg)
+	}
+	// Agents cannot change roles.
+	t.Setenv("CLAUDECODE", "1")
+	if msg, code := runErr("role", "set", "mallory@example.com", "lead"); code == 0 || !strings.Contains(msg, "forbidden") {
+		t.Fatalf("agent role set must fail: %d %q", code, msg)
+	}
+	t.Setenv("CLAUDECODE", "")
+	run(t, "role", "rm", "ayse@example.com")
+	if out := run(t, "role", "list"); strings.Contains(out, "ayse@example.com") {
+		t.Fatalf("removed person still listed: %q", out)
+	}
+}
