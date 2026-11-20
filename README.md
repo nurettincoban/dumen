@@ -17,7 +17,8 @@ the same problem. dumen (Turkish for *rudder*) gives the team three things:
 
 There is no server, no account and no token. dumen is one static Go binary that shells out to your
 system `git` and keeps its records on an orphan branch (`dumen`) of a repository your team can
-already push to. If `git push` works, dumen works.
+already push to: GitHub, GitLab, Gitea, Bitbucket or a bare repository on a server. dumen only
+ever speaks plain git to it, so the host makes no difference. If `git push` works, dumen works.
 
 ```
 $ dumen direct --deny --paths 'src/auth/**' --for 3d "Auth is frozen until the audit ends"
@@ -79,7 +80,7 @@ Not yet acknowledged
 - **Storage** is an orphan branch named `dumen`. It shares no history with your code and holds
   only small YAML, Markdown and JSON Lines files: `dumen.yml` (roles, areas), `decisions/`,
   `directives/`, `activity/`, `refs/`, plus generated `DECISIONS.md` and `ACTIVITY.md` that
-  anyone can read in the GitLab or GitHub web UI.
+  anyone can read in the web UI of your git host.
 - **Writes never merge text.** Every write is fetch, apply, commit, fast-forward-only push. If
   somebody else pushed first, dumen fetches again and re-applies the operation on the new head, up
   to five times. If you are offline, the operation waits in a local outbox and is replayed by the
@@ -243,7 +244,7 @@ repository you like (a small dedicated one works well), and point every service 
 
 ```sh
 # in each service repository
-dumen init --store git@gitlab.example.com:team/dumen-store.git#dumen --repo orders
+dumen init --store git@git.example.com:team/dumen-store.git#dumen --repo orders
 git add .dumen && git commit -m "Add dumen" && git push
 ```
 
@@ -320,10 +321,14 @@ What you do get:
 
 What we recommend:
 
-- Protect the `dumen` branch on GitLab or GitHub: allow pushes from team members, forbid force
+- Protect the `dumen` branch on your git host: allow pushes from team members, forbid force
   pushes and deletion.
-- Do not put a CI configuration on the store branch. `dumen init` refuses to use a branch that has
-  a `.gitlab-ci.yml`.
+  On GitHub that is a branch protection rule or ruleset for `dumen`; on GitLab it is
+  Settings > Repository > Protected branches. Do not require pull requests or status checks on
+  it: dumen pushes directly.
+- Do not put a CI configuration on the store branch. `dumen init` and `dumen join` refuse a
+  branch that holds one (`.gitlab-ci.yml`, `.github/workflows`, `bitbucket-pipelines.yml`,
+  `Jenkinsfile` and the like), so that dumen writes never start pipelines.
 
 ## Honest limits
 
@@ -351,10 +356,15 @@ What we recommend:
 ## claude.ai on the web
 
 dumen builds nothing for claude.ai, but because the store is plain files on a branch, a web
-session can read it through GitLab's own MCP server. Add a custom connector in claude.ai with the
-URL `https://<your-gitlab-host>/api/v4/mcp` and sign in with OAuth. Claude can then read
-`DECISIONS.md`, `ACTIVITY.md` and the individual records on the `dumen` branch. Nothing is
-enforced in web sessions, and you should not write to the store from there.
+session can read it through your git host's own connector:
+
+- **GitLab:** add a custom connector in claude.ai with the URL
+  `https://<your-gitlab-host>/api/v4/mcp` and sign in with OAuth.
+- **GitHub:** connect the GitHub connector in claude.ai and give it access to the repository
+  that holds the store.
+
+Claude can then read `DECISIONS.md`, `ACTIVITY.md` and the individual records on the `dumen`
+branch. Nothing is enforced in web sessions, and you should not write to the store from there.
 
 ## Command reference
 

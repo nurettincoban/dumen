@@ -179,22 +179,52 @@ func Setup(ctx context.Context, remote, branch, project string, create bool, fou
 	if _, err := s.Sync(ctx); err != nil {
 		return nil, res, err
 	}
-	if _, err := os.Stat(filepath.Join(s.Root(), ".gitlab-ci.yml")); err == nil {
-		return nil, res, fmt.Errorf("branch %q contains .gitlab-ci.yml; dumen will not use a branch that can trigger pipelines", branch)
+	if ci := ciConfig(s.Root()); ci != "" {
+		return nil, res, fmt.Errorf("branch %q contains %s; dumen will not use a branch that can trigger pipelines", branch, ci)
 	}
 	if _, err := os.Stat(filepath.Join(s.Root(), ConfigFile)); err != nil {
 		return nil, res, fmt.Errorf("branch %q exists but has no %s; it does not look like a dumen store", branch, ConfigFile)
 	}
-	if strings.Contains(strings.ToLower(remote), "gitlab") {
-		res.Warnings = append(res.Warnings,
-			"If this GitLab project sets a custom or external CI/CD configuration path (Settings > CI/CD > General pipelines), "+
-				"pushes to the dumen branch can start pipelines. Exclude the branch there, and protect it (no force-push, no delete).")
+	if res.Created {
+		warn := "Protect the " + branch + " branch on your git host: let team members push, forbid force pushes and deletion."
+		if strings.Contains(strings.ToLower(remote), "gitlab") {
+			warn += " If this GitLab project sets a custom or external CI/CD configuration path (Settings > CI/CD > General pipelines), " +
+				"pushes to the branch can start pipelines; exclude the branch there."
+		}
+		res.Warnings = append(res.Warnings, warn)
 	}
 	data, _ := json.MarshalIndent(s.Local, "", "  ")
 	if err := os.WriteFile(filepath.Join(s.Home, "local.json"), append(data, '\n'), 0o644); err != nil {
 		return nil, res, err
 	}
 	return s, res, nil
+}
+
+// ciFiles are the pipeline definitions of the common git hosts and CI services. A store
+// branch must hold none of them, or every dumen write could start a pipeline.
+var ciFiles = []string{
+	".gitlab-ci.yml",          // GitLab
+	".github/workflows",       // GitHub Actions
+	".forgejo/workflows",      // Forgejo, Codeberg
+	".gitea/workflows",        // Gitea
+	"bitbucket-pipelines.yml", // Bitbucket
+	"azure-pipelines.yml",     // Azure DevOps
+	".circleci",               // CircleCI
+	".woodpecker.yml",         // Woodpecker
+	".woodpecker",             //
+	".drone.yml",              // Drone
+	".buildkite",              // Buildkite
+	"Jenkinsfile",             // Jenkins
+}
+
+// ciConfig returns the first pipeline definition found in root, or "".
+func ciConfig(root string) string {
+	for _, f := range ciFiles {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(f))); err == nil {
+			return f
+		}
+	}
+	return ""
 }
 
 func founderConfig(project string, founder model.Actor) model.Config {
