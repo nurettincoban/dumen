@@ -1,0 +1,5 @@
+/dumen
+/dumen.exe
+/dist/
+*.test
+*.out
