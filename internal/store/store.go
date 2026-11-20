@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nurettincoban/comm-pro/internal/gitx"
-	"github.com/nurettincoban/comm-pro/internal/model"
+	"github.com/nurettincoban/dumen/internal/gitx"
+	"github.com/nurettincoban/dumen/internal/model"
 )
 
 // DefaultBranch is the branch dumen records live on.

@@ -21,7 +21,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X github.com/nurettincoban/comm-pro/internal/cli.Version={{ .Version }}
+      - -s -w -X github.com/nurettincoban/dumen/internal/cli.Version={{ .Version }}
 
 archives:
   - id: dumen
@@ -54,7 +54,7 @@ homebrew_casks:
       owner: nurettincoban
       name: homebrew-tap
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
-    homepage: https://github.com/nurettincoban/comm-pro
+    homepage: https://github.com/nurettincoban/dumen
     description: Steer and monitor your team's Claude Code agents through your git remote
 
 # Scoop: scoop bucket add dumen https://github.com/nurettincoban/scoop-bucket && scoop install dumen
@@ -65,7 +65,7 @@ scoops:
       owner: nurettincoban
       name: scoop-bucket
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
-    homepage: https://github.com/nurettincoban/comm-pro
+    homepage: https://github.com/nurettincoban/dumen
     description: Steer and monitor your team's Claude Code agents through your git remote
     license: Apache-2.0
 

@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nurettincoban/comm-pro/internal/model"
-	"github.com/nurettincoban/comm-pro/internal/policy"
-	"github.com/nurettincoban/comm-pro/internal/secrets"
-	"github.com/nurettincoban/comm-pro/internal/store"
+	"github.com/nurettincoban/dumen/internal/model"
+	"github.com/nurettincoban/dumen/internal/policy"
+	"github.com/nurettincoban/dumen/internal/secrets"
+	"github.com/nurettincoban/dumen/internal/store"
 )
 
 // Tx is what an operation sees while it is applied to a fresh checkout.

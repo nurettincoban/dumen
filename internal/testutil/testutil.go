@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nurettincoban/comm-pro/internal/model"
-	"github.com/nurettincoban/comm-pro/internal/store"
+	"github.com/nurettincoban/dumen/internal/model"
+	"github.com/nurettincoban/dumen/internal/store"
 )
 
 // Lead is the actor that creates test stores; it holds the "lead" role.

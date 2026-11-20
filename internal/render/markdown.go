@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nurettincoban/comm-pro/internal/activity"
-	"github.com/nurettincoban/comm-pro/internal/model"
-	"github.com/nurettincoban/comm-pro/internal/policy"
-	"github.com/nurettincoban/comm-pro/internal/store"
+	"github.com/nurettincoban/dumen/internal/activity"
+	"github.com/nurettincoban/dumen/internal/model"
+	"github.com/nurettincoban/dumen/internal/policy"
+	"github.com/nurettincoban/dumen/internal/store"
 )
 
 // ActivityDays is how many of the most recent days ACTIVITY.md covers.

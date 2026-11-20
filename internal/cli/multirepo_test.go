@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nurettincoban/comm-pro/internal/hook"
-	"github.com/nurettincoban/comm-pro/internal/project"
-	"github.com/nurettincoban/comm-pro/internal/testutil"
+	"github.com/nurettincoban/dumen/internal/hook"
+	"github.com/nurettincoban/dumen/internal/project"
+	"github.com/nurettincoban/dumen/internal/testutil"
 )
 
 // Two service repositories share one store repository. A freeze on one service must not

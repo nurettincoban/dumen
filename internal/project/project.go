@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nurettincoban/comm-pro/internal/cache"
-	"github.com/nurettincoban/comm-pro/internal/op"
-	"github.com/nurettincoban/comm-pro/internal/render"
-	"github.com/nurettincoban/comm-pro/internal/store"
+	"github.com/nurettincoban/dumen/internal/cache"
+	"github.com/nurettincoban/dumen/internal/op"
+	"github.com/nurettincoban/dumen/internal/render"
+	"github.com/nurettincoban/dumen/internal/store"
 )
 
 // File is the project file committed at the root of the main repository (and written

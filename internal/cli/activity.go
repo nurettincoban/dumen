@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nurettincoban/comm-pro/internal/activity"
-	"github.com/nurettincoban/comm-pro/internal/model"
-	"github.com/nurettincoban/comm-pro/internal/op"
-	"github.com/nurettincoban/comm-pro/internal/project"
-	"github.com/nurettincoban/comm-pro/internal/store"
+	"github.com/nurettincoban/dumen/internal/activity"
+	"github.com/nurettincoban/dumen/internal/model"
+	"github.com/nurettincoban/dumen/internal/op"
+	"github.com/nurettincoban/dumen/internal/project"
+	"github.com/nurettincoban/dumen/internal/store"
 )
 
 // queryLocked refreshes (best effort) and reads events while holding the store lock, so a

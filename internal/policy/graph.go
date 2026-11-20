@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/nurettincoban/comm-pro/internal/model"
+	"github.com/nurettincoban/dumen/internal/model"
 )
 
 // SupersedeCycle returns an error if the supersedes links among the decisions form a cycle.

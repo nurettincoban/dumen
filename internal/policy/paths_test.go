@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nurettincoban/comm-pro/internal/model"
+	"github.com/nurettincoban/dumen/internal/model"
 )
 
 func TestMatchPath(t *testing.T) {

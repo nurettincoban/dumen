@@ -15,16 +15,16 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/nurettincoban/comm-pro/internal/activity"
-	"github.com/nurettincoban/comm-pro/internal/cache"
-	"github.com/nurettincoban/comm-pro/internal/model"
-	"github.com/nurettincoban/comm-pro/internal/op"
-	"github.com/nurettincoban/comm-pro/internal/outbox"
-	"github.com/nurettincoban/comm-pro/internal/policy"
-	"github.com/nurettincoban/comm-pro/internal/project"
-	"github.com/nurettincoban/comm-pro/internal/render"
-	"github.com/nurettincoban/comm-pro/internal/session"
-	"github.com/nurettincoban/comm-pro/internal/store"
+	"github.com/nurettincoban/dumen/internal/activity"
+	"github.com/nurettincoban/dumen/internal/cache"
+	"github.com/nurettincoban/dumen/internal/model"
+	"github.com/nurettincoban/dumen/internal/op"
+	"github.com/nurettincoban/dumen/internal/outbox"
+	"github.com/nurettincoban/dumen/internal/policy"
+	"github.com/nurettincoban/dumen/internal/project"
+	"github.com/nurettincoban/dumen/internal/render"
+	"github.com/nurettincoban/dumen/internal/session"
+	"github.com/nurettincoban/dumen/internal/store"
 )
 
 const (

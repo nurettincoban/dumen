@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nurettincoban/comm-pro/internal/cache"
-	"github.com/nurettincoban/comm-pro/internal/project"
+	"github.com/nurettincoban/dumen/internal/cache"
+	"github.com/nurettincoban/dumen/internal/project"
 )
 
 func readCache(p *project.Project) (*cache.Cache, error) { return cache.Read(p.Store.CachePath()) }

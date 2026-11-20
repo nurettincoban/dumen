@@ -109,7 +109,7 @@ You need `git` and Claude Code. dumen uses your existing SSH keys or credential 
 ### 1. Install the binary (everyone)
 
 ```sh
-go install github.com/nurettincoban/comm-pro/cmd/dumen@latest
+go install github.com/nurettincoban/dumen/cmd/dumen@latest
 ```
 
 Prebuilt binaries for macOS, Linux and Windows, a Homebrew cask and a Scoop manifest are produced
@@ -156,7 +156,7 @@ Everybody else, and every agent, may read, draft and propose.
 **Option A, the plugin (recommended).** Each developer runs this once inside Claude Code:
 
 ```
-/plugin marketplace add nurettincoban/comm-pro
+/plugin marketplace add nurettincoban/dumen
 /plugin install dumen@dumen
 ```
 
@@ -466,7 +466,7 @@ rule that commits must be signed), it prints the host's own message.
 ## Development
 
 ```sh
-git clone https://github.com/nurettincoban/comm-pro && cd comm-pro
+git clone https://github.com/nurettincoban/dumen && cd dumen
 go build ./cmd/dumen
 go test ./...                       # unit, concurrency (6 writers, 1,000 operations), latency
 go test ./... -short                # the same, faster

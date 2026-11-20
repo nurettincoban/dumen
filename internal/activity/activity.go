@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nurettincoban/comm-pro/internal/model"
-	"github.com/nurettincoban/comm-pro/internal/store"
+	"github.com/nurettincoban/dumen/internal/model"
+	"github.com/nurettincoban/dumen/internal/store"
 )
 
 // Filter selects events. Zero values mean "any".

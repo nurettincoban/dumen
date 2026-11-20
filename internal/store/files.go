@@ -15,7 +15,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/nurettincoban/comm-pro/internal/model"
+	"github.com/nurettincoban/dumen/internal/model"
 )
 
 // Names of files and directories on the dumen branch.

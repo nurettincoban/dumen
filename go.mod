@@ -1,4 +1,4 @@
-module github.com/nurettincoban/comm-pro
+module github.com/nurettincoban/dumen
 
 go 1.25.0
 

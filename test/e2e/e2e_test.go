@@ -53,7 +53,7 @@ func setupWith(t *testing.T, install bool) *world {
 	if runtime.GOOS == "windows" {
 		w.bin += ".exe"
 	}
-	if out, err := exec.Command("go", "build", "-o", w.bin, "github.com/nurettincoban/comm-pro/cmd/dumen").CombinedOutput(); err != nil {
+	if out, err := exec.Command("go", "build", "-o", w.bin, "github.com/nurettincoban/dumen/cmd/dumen").CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
 	// The human's environment: no CLAUDECODE marker, dumen on PATH, its own dumen home.

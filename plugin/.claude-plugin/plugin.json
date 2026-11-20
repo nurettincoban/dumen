@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "description": "Team directives, shared decisions and an activity log for every Claude Code agent on the team, synced through your own git remote. Needs the dumen binary on PATH.",
   "author": { "name": "Nurettin Coban" },
-  "homepage": "https://github.com/nurettincoban/comm-pro",
-  "repository": "https://github.com/nurettincoban/comm-pro",
+  "homepage": "https://github.com/nurettincoban/dumen",
+  "repository": "https://github.com/nurettincoban/dumen",
   "license": "Apache-2.0",
   "keywords": ["team", "directives", "decisions", "monitoring", "git"]
 }

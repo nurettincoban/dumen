@@ -8,7 +8,7 @@ cited inline as [hooks: Section]. Local Claude Code version checked against: 2.1
 
 ## 1. Go package layout
 
-Module path: `github.com/nurettincoban/comm-pro` (see open question 4). Go 1.24. One binary, `dumen`.
+Module path: `github.com/nurettincoban/dumen` (see open question 4). Go 1.24. One binary, `dumen`.
 
 ```
 cmd/dumen/main.go          entry point; dispatches to internal/cli
@@ -284,7 +284,7 @@ writes a local file and spawns.
    prompt. I recommend one extra PreToolUse entry with matcher `*` that only delivers new directives
    (about 10 ms per tool call). Yes or no?
 3. Dependencies: `yaml.v3` plus the official MCP Go SDK, no CLI framework. OK?
-4. Module path: `github.com/nurettincoban/comm-pro`, or will the repo be renamed to `dumen`?
+4. Module path: `github.com/nurettincoban/dumen`, or will the repo be renamed to `dumen`?
 5. The repo is empty. My working branch would become the default branch on first push. May I push an
    initial commit (LICENSE and a stub README) to `main` first, and then open pull requests against it?
 6. The e2e tests run real `claude -p` in GitHub Actions, which needs an `ANTHROPIC_API_KEY` repository

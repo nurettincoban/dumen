@@ -8,9 +8,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/nurettincoban/comm-pro/internal/model"
-	"github.com/nurettincoban/comm-pro/internal/policy"
-	"github.com/nurettincoban/comm-pro/internal/store"
+	"github.com/nurettincoban/dumen/internal/model"
+	"github.com/nurettincoban/dumen/internal/policy"
+	"github.com/nurettincoban/dumen/internal/store"
 )
 
 // StaleAfter is how old the last successful remote check may be before a hook tries one

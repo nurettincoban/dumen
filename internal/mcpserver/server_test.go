@@ -12,12 +12,12 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/nurettincoban/comm-pro/internal/hook"
-	"github.com/nurettincoban/comm-pro/internal/model"
-	"github.com/nurettincoban/comm-pro/internal/op"
-	"github.com/nurettincoban/comm-pro/internal/project"
-	"github.com/nurettincoban/comm-pro/internal/store"
-	"github.com/nurettincoban/comm-pro/internal/testutil"
+	"github.com/nurettincoban/dumen/internal/hook"
+	"github.com/nurettincoban/dumen/internal/model"
+	"github.com/nurettincoban/dumen/internal/op"
+	"github.com/nurettincoban/dumen/internal/project"
+	"github.com/nurettincoban/dumen/internal/store"
+	"github.com/nurettincoban/dumen/internal/testutil"
 )
 
 type world struct {

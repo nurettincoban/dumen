@@ -5,7 +5,7 @@ package main
 import (
 	"os"
 
-	"github.com/nurettincoban/comm-pro/internal/cli"
+	"github.com/nurettincoban/dumen/internal/cli"
 )
 
 func main() {

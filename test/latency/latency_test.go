@@ -15,10 +15,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nurettincoban/comm-pro/internal/model"
-	"github.com/nurettincoban/comm-pro/internal/op"
-	"github.com/nurettincoban/comm-pro/internal/project"
-	"github.com/nurettincoban/comm-pro/internal/testutil"
+	"github.com/nurettincoban/dumen/internal/model"
+	"github.com/nurettincoban/dumen/internal/op"
+	"github.com/nurettincoban/dumen/internal/project"
+	"github.com/nurettincoban/dumen/internal/testutil"
 )
 
 const (
@@ -74,7 +74,7 @@ func TestHookLatencyP95(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		bin += ".exe"
 	}
-	if out, err := exec.Command("go", "build", "-o", bin, "github.com/nurettincoban/comm-pro/cmd/dumen").CombinedOutput(); err != nil {
+	if out, err := exec.Command("go", "build", "-o", bin, "github.com/nurettincoban/dumen/cmd/dumen").CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
 	env := append(os.Environ(), "DUMEN_HOME="+home, "CLAUDE_PROJECT_DIR="+root)

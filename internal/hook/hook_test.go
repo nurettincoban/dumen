@@ -12,13 +12,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nurettincoban/comm-pro/internal/model"
-	"github.com/nurettincoban/comm-pro/internal/op"
-	"github.com/nurettincoban/comm-pro/internal/outbox"
-	"github.com/nurettincoban/comm-pro/internal/project"
-	"github.com/nurettincoban/comm-pro/internal/session"
-	"github.com/nurettincoban/comm-pro/internal/store"
-	"github.com/nurettincoban/comm-pro/internal/testutil"
+	"github.com/nurettincoban/dumen/internal/model"
+	"github.com/nurettincoban/dumen/internal/op"
+	"github.com/nurettincoban/dumen/internal/outbox"
+	"github.com/nurettincoban/dumen/internal/project"
+	"github.com/nurettincoban/dumen/internal/session"
+	"github.com/nurettincoban/dumen/internal/store"
+	"github.com/nurettincoban/dumen/internal/testutil"
 )
 
 type fixture struct {
