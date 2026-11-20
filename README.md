@@ -2,9 +2,11 @@
 
 **Steer and monitor every Claude Code agent on your team, through the git remote you already have.**
 
+*The name comes from "dümen", the Turkish word for rudder.*
+
 Each developer on a team now runs several Claude Code agents. Those agents do not know what the
 team decided yesterday, that `src/auth` is frozen for the audit, or that another agent is stuck on
-the same problem. dumen (Turkish for *rudder*) gives the team three things:
+the same problem. dumen gives the team three things:
 
 - **Directives.** "Do not touch `src/auth/**` until Friday." Published by a lead, delivered to
   running sessions within about 30 seconds, acknowledged by each agent, and, for `deny`
