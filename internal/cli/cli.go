@@ -155,7 +155,10 @@ func (a *app) submit(p *project.Project, o op.Op) (op.Outcome, error) {
 		fmt.Fprintln(a.err, "note:", n)
 	}
 	if out.Status == op.Queued {
-		fmt.Fprintln(a.err, "note: the remote could not be reached; the operation is queued and will be pushed by the next `dumen sync`.")
+		fmt.Fprintln(a.err, "note: the remote could not be reached. Nothing is in force yet: the operation is queued and will be pushed by the next `dumen sync`.")
+		if out.RecordID == "" {
+			out.RecordID = "(queued)" // the final id is only known once it is applied
+		}
 	}
 	return out, nil
 }
