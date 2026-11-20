@@ -94,7 +94,7 @@ func TestInitDirectWithdraw(t *testing.T) {
 	if list := run(t, "directives"); strings.Contains(list, yid) {
 		t.Fatalf("withdrawn directive still listed: %q", list)
 	}
-	if st := run(t, "status"); !strings.Contains(st, "role: lead") || !strings.Contains(st, "0 queued, 2 rejected") {
+	if st := run(t, "status"); !strings.Contains(st, "role: lead") || !strings.Contains(st, "0 queued, 0 rejected") {
 		t.Fatalf("status: %q", st)
 	}
 }
@@ -188,9 +188,9 @@ func TestActivitySinceTodayScenario(t *testing.T) {
 	if len(stuck) != 2 || stuck["sess-b"] != activity.StateBlocked || stuck["sess-d"] != activity.StateAsking {
 		t.Fatalf("stuck sessions: %v", stuck)
 	}
-	// Who has not received the release directive: everyone on the roster except ayse.
+	// Who has not received the release directive: everyone except ayse (acked) and the lead who published it.
 	if len(got.Unacknowledged) != 1 || got.Unacknowledged[0].Directive != release ||
-		strings.Join(got.Unacknowledged[0].Missing, ",") != "can@example.com,deniz@example.com,lead@example.com" {
+		strings.Join(got.Unacknowledged[0].Missing, ",") != "can@example.com,deniz@example.com" {
 		t.Fatalf("unacknowledged: %+v", got.Unacknowledged)
 	}
 	// Filters.
@@ -323,5 +323,20 @@ func TestRoleSetListRemove(t *testing.T) {
 	run(t, "role", "rm", "ayse@example.com")
 	if out := run(t, "role", "list"); strings.Contains(out, "ayse@example.com") {
 		t.Fatalf("removed person still listed: %q", out)
+	}
+}
+
+func TestPublishProposal(t *testing.T) {
+	repo(t)
+	out := run(t, "direct", "--propose", "--paths", "src/api/**", "Keep the API stable")
+	id := out[len("Proposed ") : len("Proposed ")+6]
+	if list := run(t, "directives"); strings.Contains(list, id) {
+		t.Fatalf("a proposal must not be listed as active: %q", list)
+	}
+	if out := run(t, "direct", "--publish", strings.ToLower(id)); !strings.Contains(out, "Published "+id) {
+		t.Fatalf("publish: %q", out)
+	}
+	if list := run(t, "directives"); !strings.Contains(list, id) || !strings.Contains(list, "active") {
+		t.Fatalf("published proposal not active: %q", list)
 	}
 }

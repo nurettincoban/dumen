@@ -88,6 +88,16 @@ func (e *Engine) Submit(ctx context.Context, actor model.Actor, o Op) (Outcome, 
 	for _, out := range rep.Outcomes {
 		if out.OpID == id {
 			if out.Status == Rejected {
+				// The caller is told right now, so there is nothing to keep for later.
+				// Only operations rejected during a background replay stay in the failed
+				// directory, where `dumen status` reports them.
+				if failed, lerr := outbox.List(e.Store.FailedDir()); lerr == nil {
+					for _, f := range failed {
+						if f.ID == id {
+							f.Remove()
+						}
+					}
+				}
 				return out, out.Err
 			}
 			return out, nil

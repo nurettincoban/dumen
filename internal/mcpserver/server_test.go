@@ -40,7 +40,9 @@ func setup(t *testing.T) *world {
 	if _, err := w.proj.Refresh(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	srv := New(&Server{Dir: root, ParentPID: parentPID, Version: "test"})
+	impl := &Server{Dir: root, ParentPID: parentPID, Version: "test"}
+	t.Cleanup(impl.Wait) // registered first, so it runs last: no flush may outlive the temp dirs
+	srv := New(impl)
 	ct, st := mcp.NewInMemoryTransports()
 	ctx := context.Background()
 	if _, err := srv.Connect(ctx, st, nil); err != nil {

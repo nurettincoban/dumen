@@ -16,6 +16,7 @@ type State struct {
 	Started      string   `json:"started,omitempty"`
 	Delivered    []string `json:"delivered,omitempty"`     // directive ids shown to the agent
 	Acked        []string `json:"acked,omitempty"`         // directive ids the agent acknowledged
+	Nudged       []string `json:"nudged,omitempty"`        // directive ids the stop hook already asked about
 	Reminded     []string `json:"reminded,omitempty"`      // paths already annotated with linked records
 	Applied      []string `json:"applied,omitempty"`       // decision ids surfaced for edited paths
 	LastProgress string   `json:"last_progress,omitempty"` // time of the last progress event

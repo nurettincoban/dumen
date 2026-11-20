@@ -197,6 +197,9 @@ func Unacked(cfg model.Config, d model.Directive, sum Summary) []string {
 		if d.Scope.Role != "" && cfg.Roles[email] != d.Scope.Role {
 			continue
 		}
+		if email == strings.ToLower(d.PublishedBy) {
+			continue // the publisher knows about their own directive
+		}
 		if !acked[email] {
 			out = append(out, email)
 		}

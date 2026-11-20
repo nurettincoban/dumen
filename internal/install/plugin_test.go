@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -86,5 +87,27 @@ func TestWriteSettingsKeepsOtherHooks(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".claude", "skills", "dumen", "SKILL.md")); err != nil {
 		t.Error("skill not written")
+	}
+}
+
+func TestWriteSettingsPreApprovesAgentToolsOnly(t *testing.T) {
+	dir := t.TempDir()
+	for i := 0; i < 2; i++ { // twice: it must be idempotent
+		if _, err := WriteSettings(dir, "dumen"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(dir, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if strings.Count(text, `"mcp__dumen__ack_directive"`) != 1 {
+		t.Fatalf("ack_directive must be pre-approved exactly once:\n%s", text)
+	}
+	for _, human := range []string{"approve", "supersede", "publish_directive"} {
+		if strings.Contains(text, `"mcp__dumen__`+human+`"`) {
+			t.Fatalf("%s must never be pre-approved", human)
+		}
 	}
 }

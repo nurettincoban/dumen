@@ -44,3 +44,60 @@ func Label(s string, max int) string {
 	}
 	return b.String()
 }
+
+// Summary turns an assistant message into a one-line activity summary. The activity log
+// must never carry code, so fenced code blocks are dropped whole, only the first
+// paragraph of prose is kept, and Markdown emphasis and heading marks are removed.
+func Summary(s string, max int) string {
+	var prose []string
+	inFence := false
+	for _, line := range strings.Split(s, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			inFence = !inFence
+			continue
+		}
+		if inFence || strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "\t") {
+			continue // fenced or indented code
+		}
+		if trimmed == "" {
+			if len(prose) > 0 {
+				break // end of the first paragraph
+			}
+			continue
+		}
+		trimmed = strings.TrimLeft(trimmed, "#>")
+		trimmed = strings.TrimSpace(strings.NewReplacer("**", "", "__", "").Replace(trimmed))
+		if trimmed != "" {
+			prose = append(prose, trimmed)
+		}
+	}
+	return Label(shortenCode(strings.Join(prose, " ")), max)
+}
+
+// shortenCode keeps short inline code spans (names, paths, commands) and replaces long
+// ones, which are more likely to be source code, with an ellipsis.
+func shortenCode(s string) string {
+	const longest = 40
+	var b strings.Builder
+	for {
+		open := strings.IndexByte(s, '`')
+		if open < 0 {
+			break
+		}
+		end := strings.IndexByte(s[open+1:], '`')
+		if end < 0 {
+			break
+		}
+		span := s[open+1 : open+1+end]
+		b.WriteString(s[:open])
+		if len(span) > longest {
+			b.WriteString("`…`")
+		} else {
+			b.WriteString("`" + span + "`")
+		}
+		s = s[open+end+2:]
+	}
+	b.WriteString(s)
+	return b.String()
+}

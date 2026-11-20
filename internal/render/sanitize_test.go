@@ -20,3 +20,20 @@ func TestLabel(t *testing.T) {
 		t.Fatal("label has control characters")
 	}
 }
+
+func TestSummaryCarriesNoCode(t *testing.T) {
+	msg := "## Done\n\nI added **`getOrder`** to `src/api/orders.ts`,\nbut not `logout`.\n\n```ts\nexport const secretSauce = 42;\n```\n\nMore detail here."
+	got := Summary(msg, 200)
+	if got != "Done" {
+		t.Fatalf("heading paragraph: %q", got)
+	}
+	msg = "I added `getOrder` to `src/api/orders.ts`,\nbut not `logout`:\n```ts\nexport const secretSauce = 42;\n```\n    indented := code()\n\nSecond paragraph."
+	got = Summary(msg, 200)
+	if got != "I added `getOrder` to `src/api/orders.ts`, but not `logout`:" {
+		t.Fatalf("summary: %q", got)
+	}
+	long := "Changed `const handler = async (req, res) => { return res.json(await db.query(sql)) }` today."
+	if got = Summary(long, 200); got != "Changed `…` today." {
+		t.Fatalf("long inline code: %q", got)
+	}
+}

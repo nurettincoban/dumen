@@ -139,7 +139,9 @@ Everybody else, and every agent, may read, draft and propose.
 ```
 
 The plugin brings the hooks, the MCP server and the skill. It does nothing in repositories that
-have no `.dumen` file.
+have no `.dumen` file. The first time an agent uses a dumen tool, Claude Code asks for permission;
+choose "always allow" for the reading and acknowledging tools. Never pre-approve `approve`,
+`supersede` or `publish_directive`: those are your confirmation step.
 
 **Option B, files in the repository.** One person runs this and commits the result. Nobody has to
 install a plugin, but every developer still needs the binary on `PATH`.
@@ -148,6 +150,10 @@ install a plugin, but every developer still needs the binary on `PATH`.
 dumen install           # writes .claude/settings.json, .mcp.json, .claude/skills/dumen/
 git add .claude .mcp.json && git commit -m "Wire dumen into Claude Code" && git push
 ```
+
+`dumen install` also pre-approves the dumen tools an agent may always use (reading, acknowledging,
+drafting), so sessions are not interrupted by permission prompts. The three human actions are
+never pre-approved.
 
 Use one option or the other. With both, every hook runs twice and the activity log gets duplicate
 events.
@@ -178,7 +184,10 @@ dumen withdraw Y-MXE3
 A directive is either `context` (agents are told) or `--deny` (agents are told, and edits under
 the scope are blocked). It is scoped to everyone, a role, an area or path patterns, and it always
 expires (seven days unless you say otherwise). Anyone, including an agent, can *propose* a
-directive with `--propose`; a publisher turns it into a real one.
+directive with `--propose`; a publisher puts it in force with `dumen direct --publish <id>`.
+
+Each agent acknowledges a directive once per session. An agent that has not done so is reminded
+once, on its next tool call. `dumen activity` lists who has not acknowledged yet.
 
 ### Decisions
 
@@ -274,7 +283,9 @@ The fact that a session is private is itself recorded, so the team sees "a priva
 and nothing else. Directives still apply to private sessions.
 
 Activity events hold a kind, a one-line summary, file paths, the repository name and the commit
-the session started from. They never hold code, prompts or tool output. Every write is scanned for
+the session started from. They never hold prompts or tool output. The summary is the first
+paragraph of the agent's last message with code blocks and long code spans removed, cut to one
+line. Every write is scanned for
 common secret formats (cloud keys, GitLab and GitHub tokens, private keys and others) and is
 rejected when one matches.
 

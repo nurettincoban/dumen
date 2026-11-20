@@ -60,8 +60,19 @@ func TestSubmitAndRoles(t *testing.T) {
 	if _, err = b.Submit(ctx, dev, dir); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("dev publish: want forbidden, got %v", err)
 	}
-	if n := outbox.Count(b.Store.FailedDir()); n != 3 {
-		t.Fatalf("want 3 failed entries, got %d", n)
+	// Submit reports a rejection to its caller, so nothing is kept for later.
+	if n := outbox.Count(b.Store.FailedDir()) + outbox.Count(b.Store.OutboxDir()); n != 0 {
+		t.Fatalf("a rejected Submit left %d entries behind", n)
+	}
+	// An operation refused during a background replay has no caller to tell: it is kept.
+	if _, err = b.Enqueue(dev, dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = b.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := outbox.Count(b.Store.FailedDir()); n != 1 {
+		t.Fatalf("want 1 failed entry after a replay, got %d", n)
 	}
 	// Anyone may propose.
 	dir.Propose = true

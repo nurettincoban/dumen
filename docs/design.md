@@ -325,3 +325,12 @@ These were decided during the build, each at the owner's request or forced by a 
    end-to-end tests (`go test -tags e2e ./test/e2e`), run locally.
 8. **Developer sync first.** The PM and designer side (`dumen join <url>` workspace, PM
    section of the skill) exists but is not the current focus.
+9. **Findings from dogfooding (days 7-8).** The PreToolUse hook reminds a session once to
+   acknowledge directives it was shown and has not acknowledged, because agents busy with a
+   task often skipped the call. (Blocking Stop was tried and dropped: it replaces the final
+   answer of a `claude -p` run with the acknowledgement turn.) Activity summaries are the first prose paragraph of the last assistant message with
+   fenced code and long inline code removed, so that no code reaches the store. `dumen install`
+   pre-approves the ten agent tools in `permissions.allow` and never the three human actions.
+   `dumen role` and `dumen direct --publish <id>` were added because the setup and the proposal
+   flow could not be completed without them. An operation rejected while its caller is waiting is
+   no longer kept in `outbox-failed/`; only operations rejected during a background replay are.

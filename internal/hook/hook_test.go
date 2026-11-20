@@ -15,6 +15,7 @@ import (
 	"github.com/nurettincoban/comm-pro/internal/op"
 	"github.com/nurettincoban/comm-pro/internal/outbox"
 	"github.com/nurettincoban/comm-pro/internal/project"
+	"github.com/nurettincoban/comm-pro/internal/session"
 	"github.com/nurettincoban/comm-pro/internal/store"
 	"github.com/nurettincoban/comm-pro/internal/testutil"
 )
@@ -164,8 +165,13 @@ func TestDenyDirectiveBlocksEdit(t *testing.T) {
 	if decision(nb) != "deny" {
 		t.Error("NotebookEdit under a deny directive must be denied")
 	}
+	// An unrelated edit gets no permission decision (never "allow"); the first one only
+	// carries the one-time reminder to acknowledge.
+	if o := f.edit("src/api/orders.ts"); decision(o) != "" || !strings.Contains(context_(o), "Reminder") {
+		t.Errorf("an unrelated edit must carry no decision, got %+v", o)
+	}
 	if o := f.edit("src/api/orders.ts"); o != nil {
-		t.Errorf("an unrelated edit must produce no output (never \"allow\"), got %+v", o)
+		t.Errorf("a second unrelated edit must produce no output, got %+v", o)
 	}
 	// The block was logged.
 	rep, err := f.eng.Flush(context.Background())
@@ -206,8 +212,10 @@ func TestMidSessionDelivery(t *testing.T) {
 	// A directive that arrives while the agent is working is delivered on its next tool call.
 	b := f.directive(model.DirectiveContext, model.Scope{All: true}, "Use the new logger")
 	o = f.run(PreToolUse, map[string]any{"tool_name": "Read", "tool_input": map[string]any{"file_path": "/x"}})
-	if o == nil || decision(o) != "" || !strings.Contains(context_(o), b) || strings.Contains(context_(o), a) {
-		t.Fatalf("mid-session delivery on tool call: %+v", o)
+	// The earlier, still unacknowledged directive is only mentioned in the one-line reminder.
+	if o == nil || decision(o) != "" || !strings.Contains(context_(o), b+" ") || strings.Count(context_(o), a) != 1 ||
+		!strings.Contains(context_(o), "not acknowledged "+a) {
+		t.Fatalf("mid-session delivery on tool call: %+v", context_(o))
 	}
 	// Another session still gets both.
 	o = f.run(SessionStart, map[string]any{"source": "startup", "session_id": "sess-2"})
@@ -372,5 +380,42 @@ func TestPrivateSessionIsVisibleButNotLogged(t *testing.T) {
 	evs, _ := store.ReadEvents(f.proj.Store.Root(), model.FormatTime(f.now)[:10])
 	if len(evs) != 1 || evs[0].Kind != model.EventPrivate || strings.Contains(evs[0].Text, "secret") {
 		t.Fatalf("want exactly one private marker event, got %+v", evs)
+	}
+}
+
+// A session that was shown a directive and has not acknowledged it is reminded once, on a
+// tool call, and never again. The session is never held back.
+func TestToolCallRemindsOnceAboutAcknowledgement(t *testing.T) {
+	f := newFixture(t)
+	id := f.directive(model.DirectiveContext, model.Scope{All: true}, "Prefer small pull requests")
+	if _, err := f.proj.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	read := map[string]any{"tool_name": "Read", "tool_input": map[string]any{"file_path": filepath.Join(f.proj.Root, "a.go")}}
+	f.run(SessionStart, map[string]any{"source": "startup"})
+	o := f.run(PreToolUse, read)
+	if o == nil || o.HookSpecificOutput.PermissionDecision != "" ||
+		!strings.Contains(o.HookSpecificOutput.AdditionalContext, id) || !strings.Contains(o.HookSpecificOutput.AdditionalContext, "ack_directive") {
+		t.Fatalf("the first tool call must remind about %s without a permission decision, got %+v", id, o)
+	}
+	if o := f.run(PreToolUse, read); o != nil {
+		t.Fatalf("the reminder must come once, got %+v", o.HookSpecificOutput)
+	}
+	if o := f.run(Stop, map[string]any{"last_assistant_message": "done"}); o != nil {
+		t.Fatalf("Stop must never hold a session back, got %+v", o)
+	}
+
+	// No reminder on the acknowledging call itself, nor after it.
+	f.run(SessionStart, map[string]any{"source": "startup", "session_id": "sess-2"})
+	ack := map[string]any{"session_id": "sess-2", "tool_name": "mcp__dumen__ack_directive", "tool_input": map[string]any{"id": id}}
+	if o := f.run(PreToolUse, ack); o != nil {
+		t.Fatalf("the acknowledging call must not be reminded, got %+v", o.HookSpecificOutput)
+	}
+	st := session.Load(f.proj.Store.SessionsDir(), "sess-2")
+	st.Acked = append(st.Acked, id)
+	st.Save()
+	read["session_id"] = "sess-2"
+	if o := f.run(PreToolUse, read); o != nil {
+		t.Fatalf("acknowledged: no reminder, got %+v", o.HookSpecificOutput)
 	}
 }

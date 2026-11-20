@@ -508,8 +508,18 @@ func (r *runCtx) preToolUse() *Output {
 	}
 
 	var parts []string
+	// Before new directives are marked delivered below, so that a directive is first
+	// shown and only reminded about on a later tool call.
+	var nudge []string
+	if !strings.HasSuffix(r.in.ToolName, "__ack_directive") {
+		nudge = r.unackedOnce()
+	}
 	if ds := r.undelivered(); len(ds) > 0 {
 		parts = append(parts, newDirectivesBlock(ds))
+	}
+	if len(nudge) > 0 {
+		extra = append(extra, "Reminder: you have not acknowledged "+strings.Join(nudge, ", ")+
+			" yet. Call the dumen ack_directive tool once per id now, then carry on with your task.")
 	}
 	if len(extra) > 0 {
 		if len(parts) == 0 {
@@ -561,7 +571,7 @@ func mentionsPath(cmd, dir string) bool {
 // ---- Stop and SessionEnd ----
 
 func (r *runCtx) stop() {
-	summary := render.Label(r.in.LastAssistantMessage, model.MaxEventText-1)
+	summary := render.Summary(r.in.LastAssistantMessage, model.MaxEventText-1)
 	if secrets.Scan(summary) != nil {
 		summary = ""
 	}
@@ -575,6 +585,28 @@ func (r *runCtx) stop() {
 	if due {
 		r.log(model.EventProgress, summary)
 	}
+}
+
+// unackedOnce returns the directives this session was shown, that are still in force and
+// that the agent has not acknowledged. Each id is returned at most once per session:
+// agents busy with a task often skip the acknowledgement, and one reminder on a tool call
+// fixes that without ever holding a session back.
+func (r *runCtx) unackedOnce() []string {
+	if r.sess.Private {
+		return nil
+	}
+	active := map[string]bool{}
+	for _, d := range r.c.ActiveDirectives(r.role, r.proj.Repo, r.now) {
+		active[d.ID] = true
+	}
+	var out []string
+	for _, id := range r.sess.Delivered {
+		if active[id] && !session.Has(r.sess.Acked, id) && !session.Has(r.sess.Nudged, id) {
+			out = append(out, id)
+			r.sess.Nudged = append(r.sess.Nudged, id)
+		}
+	}
+	return out
 }
 
 func (r *runCtx) sessionEnd() {

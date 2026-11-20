@@ -20,6 +20,7 @@ import (
 	"github.com/nurettincoban/comm-pro/internal/mcpserver"
 	"github.com/nurettincoban/comm-pro/internal/model"
 	"github.com/nurettincoban/comm-pro/internal/op"
+	"github.com/nurettincoban/comm-pro/internal/outbox"
 	"github.com/nurettincoban/comm-pro/internal/project"
 	"github.com/nurettincoban/comm-pro/internal/store"
 )
@@ -44,7 +45,7 @@ func init() {
 		{"init", "init [--store <remote-url>#<branch>]", "create the dumen store for this repository", cmdInit},
 		{"join", "join [<remote-url>[#branch]]", "connect this machine to a dumen store; with a URL, create a no-code workspace (PM, designer)", cmdJoin},
 		{"status", "status", "show sync state, role and queued operations", cmdStatus},
-		{"direct", `direct [--deny] (--all | --role R | --area A | --paths P1,P2) [--for 7d | --until DATE] "text"`, "publish a directive", cmdDirect},
+		{"direct", `direct [--deny] (--all | --role R | --area A | --paths P1,P2) [--for 7d | --until DATE] "text" | direct --publish <id>`, "publish a directive", cmdDirect},
 		{"directives", "directives [--all]", "list directives", cmdDirectives},
 		{"withdraw", "withdraw <id>", "withdraw a directive", cmdWithdraw},
 		{"activity", "activity [--since today|2h|7d|DATE] [--person P] [--kind K] [--events] [--json]", "what agents did: counts, sessions, who is stuck", cmdActivity},
@@ -380,6 +381,12 @@ func cmdStatus(a *app, args []string) error {
 		len(c.ActiveDirectives(c.Config.Role(me.Email), p.Repo, now)), len(c.Decisions), c.Drafts, c.Proposed)
 	queued, failed := countJSON(p.Store.OutboxDir()), countJSON(p.Store.FailedDir())
 	fmt.Fprintf(a.out, "outbox    %d queued, %d rejected\n", queued, failed)
+	if rejected, _ := outbox.List(p.Store.FailedDir()); len(rejected) > 0 {
+		for _, r := range rejected {
+			fmt.Fprintf(a.out, "  rejected %s (%s): %s\n", r.Kind, r.Created, r.Error)
+		}
+		fmt.Fprintln(a.out, "  These were queued while offline and refused when replayed. `dumen sync --forget` clears the list.")
+	}
 	return nil
 }
 
@@ -387,6 +394,7 @@ func cmdSync(a *app, args []string) error {
 	fs := a.flags("sync")
 	name := fs.String("project", "", "project name (default: from the .dumen file)")
 	quiet := fs.Bool("quiet", false, "print nothing")
+	forget := fs.Bool("forget", false, "also clear the list of rejected operations")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -401,6 +409,12 @@ func cmdSync(a *app, args []string) error {
 		var err error
 		if p, err = openProject(); err != nil {
 			return err
+		}
+	}
+	if *forget {
+		rejected, _ := outbox.List(p.Store.FailedDir())
+		for _, r := range rejected {
+			r.Remove()
 		}
 	}
 	ctx, cancel := longCtx()
@@ -478,8 +492,24 @@ func cmdDirect(a *app, args []string) error {
 	span := fs.String("for", "7d", "how long it stays active (7d, 12h)")
 	until := fs.String("until", "", "expiry date instead of --for")
 	propose := fs.Bool("propose", false, "propose instead of publish (any role)")
+	publish := fs.String("publish", "", "publish an existing proposal by id, as it is")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *publish != "" {
+		if fs.NArg() > 0 {
+			return fmt.Errorf("--publish takes a proposal as it is; to change the text, publish a new directive and withdraw the proposal")
+		}
+		p, err := openProject()
+		if err != nil {
+			return err
+		}
+		out, err := a.submit(p, &op.SetDirectiveStatus{ID: strings.ToUpper(*publish), Status: model.DirectiveActive})
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(a.out, "Published %s\n", out.RecordID)
+		return nil
 	}
 	text := strings.TrimSpace(strings.Join(fs.Args(), " "))
 	if text == "" {

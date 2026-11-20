@@ -10,6 +10,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -38,7 +39,12 @@ type Server struct {
 	Version   string
 	Anchor    func(root string) string // sha of the code repository's main line
 	Now       func() time.Time
+
+	background sync.WaitGroup // flushes started by tool calls
 }
+
+// Wait blocks until the background flushes started by tool calls have ended.
+func (s *Server) Wait() { s.background.Wait() }
 
 func (s *Server) now() time.Time {
 	if s.Now != nil {
@@ -125,7 +131,9 @@ func (s *Server) logEvent(p *project.Project, sess *session.State, kind, text st
 
 // flushSoon pushes queued events without making the tool call wait for the network.
 func (s *Server) flushSoon(p *project.Project) {
+	s.background.Add(1)
 	go func() {
+		defer s.background.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		p.Engine().Flush(ctx)
@@ -306,7 +314,7 @@ func (s *Server) ProposeDirective(ctx context.Context, in directiveIn) (string, 
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("Proposed %s. It is not in force. A PM or lead publishes it with `dumen direct` or the publish_directive tool.%s", out.RecordID, note), nil
+	return fmt.Sprintf("Proposed %s. It is not in force. A PM or lead publishes it with `dumen direct --publish %s` or the publish_directive tool.%s", out.RecordID, out.RecordID, note), nil
 }
 
 // human is the actor for a call the person confirmed in the permission prompt.

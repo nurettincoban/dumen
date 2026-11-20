@@ -57,6 +57,13 @@ func isDumen(g any) bool {
 	return false
 }
 
+// AgentTools are the MCP tools an agent may call without asking its human.
+var AgentTools = []string{
+	"directives", "ack_directive", "propose_directive",
+	"search_decisions", "get_decision", "decisions_for_path", "draft_decision",
+	"add_ref", "log_event", "activity",
+}
+
 // WriteSettings adds dumen's hooks to <dir>/.claude/settings.json, keeping everything
 // else in the file. Running it again replaces dumen's own entries and nothing else.
 func WriteSettings(dir, binary string) (string, error) {
@@ -86,6 +93,29 @@ func WriteSettings(dir, binary string) (string, error) {
 		hooks[event] = kept
 	}
 	settings["hooks"] = hooks
+
+	// Pre-approve the tools an agent may always use, so that acknowledging a directive
+	// never stops a session on a permission prompt. approve, supersede and
+	// publish_directive are deliberately absent: those always ask the human.
+	perms, _ := settings["permissions"].(map[string]any)
+	if perms == nil {
+		perms = map[string]any{}
+	}
+	allow, _ := perms["allow"].([]any)
+	have := map[string]bool{}
+	for _, a := range allow {
+		if str, ok := a.(string); ok {
+			have[str] = true
+		}
+	}
+	for _, tool := range AgentTools {
+		if name := "mcp__dumen__" + tool; !have[name] {
+			allow = append(allow, name)
+		}
+	}
+	perms["allow"] = allow
+	settings["permissions"] = perms
+
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return path, err
