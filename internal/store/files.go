@@ -420,7 +420,8 @@ func AppendEvent(root string, e model.Event) (string, error) {
 	return rel, f.Close()
 }
 
-// ListDays returns the activity days present, sorted ascending.
+// ListDays returns the activity days present, sorted ascending. A day is either a
+// directory of per-session files or, after compaction, a single YYYY-MM-DD.jsonl file.
 func ListDays(root string) ([]string, error) {
 	entries, err := os.ReadDir(filepath.Join(root, ActivityDir))
 	if err != nil {
@@ -429,43 +430,64 @@ func ListDays(root string) ([]string, error) {
 		}
 		return nil, err
 	}
-	var days []string
+	seen := map[string]bool{}
 	for _, e := range entries {
-		if e.IsDir() {
-			days = append(days, e.Name())
+		name := e.Name()
+		if !e.IsDir() {
+			if !strings.HasSuffix(name, ".jsonl") {
+				continue
+			}
+			name = strings.TrimSuffix(name, ".jsonl")
 		}
+		if len(name) == 10 {
+			seen[name] = true
+		}
+	}
+	days := make([]string, 0, len(seen))
+	for d := range seen {
+		days = append(days, d)
 	}
 	sort.Strings(days)
 	return days, nil
 }
 
+func readEventFile(path string, out []model.Event) ([]model.Event, error) {
+	fh, err := os.Open(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return out, nil
+		}
+		return out, err
+	}
+	defer fh.Close()
+	sc := bufio.NewScanner(fh)
+	sc.Buffer(make([]byte, 64*1024), 1024*1024)
+	for sc.Scan() {
+		line := bytes.TrimSpace(sc.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		var e model.Event
+		if err := json.Unmarshal(line, &e); err != nil {
+			continue // a damaged line must not hide the rest of the log
+		}
+		out = append(out, e)
+	}
+	return out, sc.Err()
+}
+
 // ReadEvents returns the events of one day, ordered by (ts, session, position in file).
 func ReadEvents(root, day string) ([]model.Event, error) {
+	out, err := readEventFile(filepath.Join(root, ActivityDir, day+".jsonl"), nil)
+	if err != nil {
+		return nil, err
+	}
 	files, err := listFiles(root, ActivityDir+"/"+day, ".jsonl")
 	if err != nil {
 		return nil, err
 	}
-	var out []model.Event
 	for _, f := range files {
-		fh, err := os.Open(filepath.Join(root, filepath.FromSlash(f)))
-		if err != nil {
-			return nil, err
-		}
-		sc := bufio.NewScanner(fh)
-		sc.Buffer(make([]byte, 64*1024), 1024*1024)
-		for sc.Scan() {
-			line := bytes.TrimSpace(sc.Bytes())
-			if len(line) == 0 {
-				continue
-			}
-			var e model.Event
-			if err := json.Unmarshal(line, &e); err != nil {
-				continue // a damaged line must not hide the rest of the log
-			}
-			out = append(out, e)
-		}
-		fh.Close()
-		if err := sc.Err(); err != nil {
+		if out, err = readEventFile(filepath.Join(root, filepath.FromSlash(f)), out); err != nil {
 			return nil, err
 		}
 	}
@@ -476,4 +498,30 @@ func ReadEvents(root, day string) ([]model.Event, error) {
 		return out[i].Session < out[j].Session
 	})
 	return out, nil
+}
+
+// CompactDay merges a day's per-session files into activity/<day>.jsonl and removes the
+// directory. It reports whether anything changed.
+func CompactDay(root, day string) (bool, error) {
+	dir := filepath.Join(root, ActivityDir, day)
+	if _, err := os.Stat(dir); err != nil {
+		return false, nil
+	}
+	evs, err := ReadEvents(root, day)
+	if err != nil {
+		return false, err
+	}
+	var buf bytes.Buffer
+	for _, e := range evs {
+		line, err := json.Marshal(e)
+		if err != nil {
+			return false, err
+		}
+		buf.Write(line)
+		buf.WriteByte('\n')
+	}
+	if err := writeFile(filepath.Join(root, ActivityDir, day+".jsonl"), buf.Bytes()); err != nil {
+		return false, err
+	}
+	return true, os.RemoveAll(dir)
 }

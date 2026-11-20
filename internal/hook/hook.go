@@ -332,9 +332,16 @@ func (r *runCtx) sessionStart() *Output {
 	}
 	fmt.Fprintf(&b, "Your role: %s\ndumen session: %s", render.Label(role, 30), r.sess.Session)
 
+	_, err := os.Stat(r.proj.PrivateMarker())
+	r.sess.Private = err == nil
 	r.sess.Save()
 	if r.in.Source == "" || r.in.Source == "startup" || r.in.Source == "resume" || r.in.Source == "fork" {
-		r.log(model.EventStarted, "session "+orDefault(r.in.Source, "startup"))
+		if r.sess.Private {
+			// The session's content is not logged, but the fact that it is unmonitored is.
+			r.log(model.EventPrivate, "session not monitored")
+		} else {
+			r.log(model.EventStarted, "session "+orDefault(r.in.Source, "startup"))
+		}
 	}
 	return &Output{
 		SystemMessage:      r.stale,

@@ -350,3 +350,27 @@ func TestFailOpen(t *testing.T) {
 		t.Errorf("without a cache the hook must fail open, got %+v", o)
 	}
 }
+
+func TestPrivateSessionIsVisibleButNotLogged(t *testing.T) {
+	f := newFixture(t)
+	id := f.directive(model.DirectiveDeny, model.Scope{Paths: []string{"src/auth"}}, "freeze")
+	if err := os.WriteFile(f.proj.PrivateMarker(), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := f.run(SessionStart, map[string]any{"source": "startup"})
+	if !strings.Contains(context_(out), id) {
+		t.Fatal("a private session still receives directives")
+	}
+	if o := f.edit("src/auth/x.go"); decision(o) != "deny" {
+		t.Fatal("a private session is still bound by deny directives")
+	}
+	f.run(Stop, map[string]any{"last_assistant_message": "secret work"})
+	f.run(SessionEnd, map[string]any{"reason": "other"})
+	if _, err := f.eng.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	evs, _ := store.ReadEvents(f.proj.Store.Root(), model.FormatTime(f.now)[:10])
+	if len(evs) != 1 || evs[0].Kind != model.EventPrivate || strings.Contains(evs[0].Text, "secret") {
+		t.Fatalf("want exactly one private marker event, got %+v", evs)
+	}
+}

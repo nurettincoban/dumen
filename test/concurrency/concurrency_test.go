@@ -15,6 +15,7 @@ import (
 	"github.com/nurettincoban/comm-pro/internal/model"
 	"github.com/nurettincoban/comm-pro/internal/op"
 	"github.com/nurettincoban/comm-pro/internal/outbox"
+	"github.com/nurettincoban/comm-pro/internal/render"
 	"github.com/nurettincoban/comm-pro/internal/store"
 	"github.com/nurettincoban/comm-pro/internal/testutil"
 )
@@ -45,7 +46,7 @@ func TestSixWritersThousandOperations(t *testing.T) {
 
 	engines := make([]*op.Engine, writers)
 	for i := range engines {
-		engines[i] = &op.Engine{Store: testutil.NewStore(t, remote, fmt.Sprintf("writer%d", i))}
+		engines[i] = &op.Engine{Store: testutil.NewStore(t, remote, fmt.Sprintf("writer%d", i)), Regenerate: render.Regenerate}
 	}
 	exp := &expect{events: map[string]bool{}, drafts: map[string]bool{}, refs: map[string]bool{},
 		dirs: map[string]bool{}, approved: map[string]bool{}}

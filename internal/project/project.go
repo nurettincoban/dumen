@@ -13,6 +13,7 @@ import (
 
 	"github.com/nurettincoban/comm-pro/internal/cache"
 	"github.com/nurettincoban/comm-pro/internal/op"
+	"github.com/nurettincoban/comm-pro/internal/render"
 	"github.com/nurettincoban/comm-pro/internal/store"
 )
 
@@ -111,7 +112,8 @@ func Find(dir string) (*Project, error) {
 // Engine returns the write engine for this project, wired to keep the cache fresh.
 func (p *Project) Engine() *op.Engine {
 	return &op.Engine{
-		Store: p.Store,
+		Store:      p.Store,
+		Regenerate: render.Regenerate,
 		AfterSync: func(root, head string) {
 			if c, err := cache.Build(root, head, time.Now().UTC()); err == nil {
 				c.Write(p.Store.CachePath())
@@ -153,3 +155,6 @@ func (p *Project) Poll(ctx context.Context) (changed bool, err error) {
 	_, err = p.Refresh(ctx)
 	return err == nil, err
 }
+
+// PrivateMarker is the file whose presence marks new sessions on this machine as not monitored.
+func (p *Project) PrivateMarker() string { return filepath.Join(p.Store.Home, "private") }

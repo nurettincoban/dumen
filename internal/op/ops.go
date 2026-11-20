@@ -79,6 +79,7 @@ func init() {
 	register(func() Op { return &AddRef{} })
 	register(func() Op { return &CheckRef{} })
 	register(func() Op { return &UpdateConfig{} })
+	register(func() Op { return &CompactActivity{} })
 }
 
 // ErrForbidden marks a role or actor-kind violation.
@@ -308,7 +309,9 @@ func (o *CreateDirective) Apply(tx *Tx) error {
 		return err
 	}
 	if d.Starts == "" {
-		d.Starts = model.FormatTime(tx.Now)
+		// Start a minute in the past so a machine whose clock runs slightly behind the
+		// publisher's still sees the directive as active right away.
+		d.Starts = model.FormatTime(tx.Now.Add(-time.Minute))
 	}
 	if o.Propose {
 		d.Status = model.DirectiveProposed
@@ -535,4 +538,45 @@ func (o *UpdateConfig) Apply(tx *Tx) error {
 	}
 	tx.cfg = nil
 	return store.WriteConfig(tx.Root, next)
+}
+
+// ---- maintenance ----
+
+// CompactActivity merges the per-session files of days older than Days into one file per day.
+type CompactActivity struct {
+	Days int `json:"days"`
+}
+
+func (o *CompactActivity) Kind() string { return "activity.compact" }
+
+func (o *CompactActivity) Check() error {
+	if o.Days < 1 {
+		return fmt.Errorf("days must be at least 1")
+	}
+	return nil
+}
+
+func (o *CompactActivity) Apply(tx *Tx) error {
+	days, err := store.ListDays(tx.Root)
+	if err != nil {
+		return err
+	}
+	cutoff := tx.Now.Add(-time.Duration(o.Days) * 24 * time.Hour).Format("2006-01-02")
+	n := 0
+	for _, d := range days {
+		if d >= cutoff {
+			continue
+		}
+		changed, err := store.CompactDay(tx.Root, d)
+		if err != nil {
+			return err
+		}
+		if changed {
+			n++
+		}
+	}
+	if n > 0 {
+		tx.Notes = append(tx.Notes, fmt.Sprintf("compacted %d days of activity", n))
+	}
+	return nil
 }
