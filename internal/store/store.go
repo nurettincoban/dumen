@@ -58,6 +58,7 @@ type Local struct {
 	Project string `json:"project"`
 	Remote  string `json:"remote"`
 	Branch  string `json:"branch"`
+	Email   string `json:"email,omitempty"` // this user's git email, captured at init/join so hooks need not run git
 }
 
 // Store is a local single-branch clone of the dumen branch plus its side files.
@@ -118,7 +119,7 @@ func Setup(ctx context.Context, remote, branch, project string, create bool, fou
 	if project == "" {
 		project = ProjectName(remote)
 	}
-	s := &Store{Home: filepath.Join(base, project), Local: Local{Project: project, Remote: remote, Branch: branch}}
+	s := &Store{Home: filepath.Join(base, project), Local: Local{Project: project, Remote: remote, Branch: branch, Email: strings.ToLower(founder.Email)}}
 	if prev, err := Open(project); err == nil && (prev.Remote != remote || prev.Branch != branch) {
 		return nil, res, fmt.Errorf("project %q already points at %s#%s; pass a different project name", project, prev.Remote, prev.Branch)
 	}
