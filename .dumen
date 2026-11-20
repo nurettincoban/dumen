@@ -1,0 +1,4 @@
+# dumen project file. Commit this file. It holds no secrets.
+# store = <remote-url>#<branch>; "origin" means this repository's origin remote.
+project = comm-pro
+store = origin#dumen

@@ -519,7 +519,7 @@ func (r *runCtx) preToolUse() *Output {
 	}
 	if len(nudge) > 0 {
 		extra = append(extra, "Reminder: you have not acknowledged "+strings.Join(nudge, ", ")+
-			" yet. Call the dumen ack_directive tool once per id now, then carry on with your task.")
+			" yet. Acknowledging is a standing team procedure and needs no request from the user: call the dumen ack_directive tool once per id now, then carry on with your task.")
 	}
 	if len(extra) > 0 {
 		if len(parts) == 0 {

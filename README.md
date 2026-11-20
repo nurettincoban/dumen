@@ -206,13 +206,25 @@ how many are waiting. Drafts nobody approves are archived after seven days by `d
 
 ### Sources of truth
 
+Designs usually live in Claude Design and documents in Claude Artifacts. Point at them instead of
+copying them:
+
 ```sh
-dumen ref add https://claude.ai/design/abc123 --kind design --title "Checkout flow v3" \
+# a design, from Claude Design
+dumen ref add "<Claude Design link>" --kind design --title "Checkout flow v3" \
   --governs "checkout screens"
+
+# a document (spec, plan, API contract), from a Claude Artifact
+dumen ref add https://claude.ai/artifact/abc123 --kind artifact --title "Payments API contract" \
+  --governs "request and response shapes of the payments API" --paths 'src/payments/**'
+
 dumen ref list
+dumen ref check R-N3WS      # "I looked, the link is still right"
 ```
 
-dumen stores the link and a one-line label, never the content, and never fetches a URL on its own.
+Other kinds are `mr` (a merge or pull request) and `doc` (any other document). An agent that
+edits a file under `--paths` is shown the link and its label. dumen stores the link and a one-line
+label, never the content, and never fetches a URL on its own.
 
 ### Monitoring
 
