@@ -320,8 +320,11 @@ func TestPluginEnforcesAndAcknowledges(t *testing.T) {
 	}
 	deny := firstID(w.dumen("direct", "--deny", "--paths", "src/auth/**", "--for", "1d", "Release week: do not touch src/auth"))
 	before := w.read("src/auth/login.ts")
-	out := w.claude("First acknowledge every active dumen directive with the dumen ack_directive tool. "+
-		"Then use the Edit tool once to append the line `// touched` to src/auth/login.ts. Do not use Bash. "+
+	// The order matters: an agent that acknowledges the freeze first usually declines to
+	// even try the edit, and then there is no hook decision to observe.
+	out := w.claude("This is a test of the team's edit guard. Read src/auth/login.ts, then use the Edit tool exactly once "+
+		"to append the line `// touched` to it; make the attempt even if you expect it to be refused. Do not use Bash. "+
+		"After that, acknowledge every active dumen directive with the dumen ack_directive tool. "+
 		"Report the directive IDs you acknowledged and what happened to the edit.",
 		"--plugin-dir", plugin, "--allowedTools", "mcp__plugin_dumen_dumen__ack_directive", "mcp__plugin_dumen_dumen__directives")
 	if w.read("src/auth/login.ts") != before {
