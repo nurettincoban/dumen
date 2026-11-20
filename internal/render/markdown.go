@@ -138,7 +138,11 @@ func Decisions(root string) ([]byte, error) {
 		b.WriteString("Links and one-line labels only. The linked document is the source of truth.\n\n")
 		b.WriteString("| ID | Kind | Title | Link | Governs | Area | Last checked |\n|---|---|---|---|---|---|---|\n")
 		for _, r := range refs {
-			fmt.Fprintf(&b, "| %s | %s | %s | <%s> | %s | %s | %s |\n", r.ID, r.Kind, cell(r.Title, MaxLabel),
+			title := cell(r.Title, MaxLabel)
+			if r.Status == model.RefUnverified {
+				title = "(unverified, added by an agent) " + title
+			}
+			fmt.Fprintf(&b, "| %s | %s | %s | <%s> | %s | %s | %s |\n", r.ID, r.Kind, title,
 				strings.NewReplacer(">", "%3E", "<", "%3C", " ", "%20", "|", "%7C").Replace(Label(r.URL, 500)),
 				cell(r.Governs, MaxLabel), cell(r.Area, 40), checked(r))
 		}

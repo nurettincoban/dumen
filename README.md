@@ -315,8 +315,8 @@ How the human-only actions are kept human:
 - When an agent calls `approve`, `supersede` or `publish_directive`, a hook sends the call to
   Claude Code's permission prompt. The action happens only if you accept it there. The dumen
   server acts on such a call only if it came through that hook, and only the server that Claude
-  Code itself started for the session can do so; a second `dumen mcp` started from a shell
-  cannot.
+  Code itself started for the session, and that was running when you were asked, can do so.
+  A second `dumen mcp` that an agent starts from a shell is not that server.
 - The prompt is used only in the permission modes where a person answers it (`default`,
   `acceptEdits`, `plan`). In every other mode the call is refused, and you run the command in
   your own terminal.

@@ -243,6 +243,11 @@ func TestPathReminderOncePerPath(t *testing.T) {
 func TestHumanOnlyActions(t *testing.T) {
 	f := newFixture(t)
 	f.run(SessionStart, map[string]any{"source": "startup"})
+	// Without the session's own dumen server there is nobody who could act on a yes.
+	if o := f.run(PreToolUse, map[string]any{"tool_name": "mcp__dumen__approve", "permission_mode": "default", "tool_input": map[string]any{"id": "D-4HTR"}}); decision(o) != "deny" {
+		t.Fatalf("no registered server: want deny, got %+v", o)
+	}
+	session.RegisterServer(f.proj.Store.SessionsDir(), 4242, os.Getpid())
 	for _, tool := range []string{"mcp__dumen__approve", "mcp__dumen__supersede", "mcp__dumen__publish_directive", "mcp__plugin_dumen_dumen__approve"} {
 		o := f.run(PreToolUse, map[string]any{"tool_name": tool, "permission_mode": "default", "tool_input": map[string]any{"id": "D-1234"}})
 		if decision(o) != "ask" {

@@ -22,8 +22,10 @@ import (
 //   - the ticket names the Claude Code process (the hook's parent) and the session;
 //   - a server spends it only if it has the same parent, and
 //   - only if it is the first live dumen server registered for that parent, which is the
-//     one Claude Code started at session start. A second `dumen mcp` launched later from
-//     a shell, even with the same parent, is not that server and cannot spend tickets.
+//     one Claude Code started at session start, and
+//   - only if it is the very server that was registered when the hook asked. A second
+//     `dumen mcp` launched later from a shell, even with the same parent, and even after
+//     killing the real one to take over its registration, cannot spend that ticket.
 //
 // A setup where the dumen hooks are missing cannot approve or publish at all.
 
@@ -33,6 +35,7 @@ const TicketTTL = 10 * time.Minute
 type ticket struct {
 	Parent  int    `json:"parent"`
 	Session string `json:"session"`
+	Server  int    `json:"server"` // the dumen MCP server registered when the hook asked
 }
 
 func ticketPath(dir, tool string, rawArgs []byte) string {
@@ -60,7 +63,13 @@ func GrantTicket(dir, tool string, rawArgs []byte, parent int, sessionID string)
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}
-	data, _ := json.Marshal(ticket{Parent: parent, Session: sessionID})
+	// Bind the ticket to the server that is registered right now. If that server dies and
+	// another one takes over the registration afterwards, this ticket is not for it.
+	server := registeredServer(dir, parent)
+	if server <= 0 {
+		return fmt.Errorf("no dumen MCP server is registered for this Claude Code process")
+	}
+	data, _ := json.Marshal(ticket{Parent: parent, Session: sessionID, Server: server})
 	return os.WriteFile(p, data, 0o600)
 }
 
@@ -89,7 +98,7 @@ func ConsumeTicket(dir, tool string, rawArgs []byte, now time.Time, parent, pid 
 	if bound := ForParent(dir, parent); bound != "" && t.Session != "" && bound != safe(t.Session) {
 		return false // the parent pid now belongs to a different session
 	}
-	return registeredServer(dir, parent) == pid
+	return t.Server == pid && registeredServer(dir, parent) == pid
 }
 
 func serverPath(dir string, parent int) string {

@@ -536,7 +536,7 @@ func (r *runCtx) preToolUse() *Output {
 			// The MCP server only acts on a call that carries this proof of having been
 			// asked, and only the server Claude Code started for this session can spend it.
 			if err := session.GrantTicket(r.proj.Store.SessionsDir(), r.in.ToolName, r.in.ToolInput, r.env.ParentPID, r.sess.Session); err != nil {
-				return deny(fmt.Sprintf("dumen: %s%s is a human action and this hook cannot tell which Claude Code process it runs under. Ask your human to run it in their own terminal.", action, target))
+				return deny(fmt.Sprintf("dumen: %s%s is a human action and the dumen server of this session is not running, so it cannot be confirmed here. Ask your human to run it in their own terminal.", action, target))
 			}
 			spec.PermissionDecision, spec.PermissionDecisionReason = "ask", reason
 		}

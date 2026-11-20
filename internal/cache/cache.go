@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/nurettincoban/dumen/internal/model"
@@ -45,6 +46,8 @@ type Cache struct {
 	Decisions  []Decision   `json:"decisions"`  // approved and not superseded, newest first
 	Refs       []model.Ref  `json:"refs"`       // links a person added or checked
 
+	ConfigError string `json:"config_error,omitempty"` // why dumen.yml could not be read, if so
+
 	UnverifiedRefs int `json:"unverified_refs,omitempty"` // links agents added, waiting for a person
 	Drafts         int `json:"drafts"`
 	Proposed       int `json:"proposed"` // proposed directives waiting for a publisher
@@ -57,7 +60,11 @@ func Build(root, head string, now time.Time) (*Cache, error) {
 	c := &Cache{Version: version, Head: head, BuiltAt: model.FormatTime(now), SyncedAt: model.FormatTime(now)}
 	var err error
 	if c.Config, err = store.ReadConfig(root); err != nil {
-		return nil, err
+		// A broken dumen.yml must not switch the guard off. Without roles and areas
+		// nobody can publish and area scopes match nothing, but every directive that is
+		// already in force keeps being delivered and enforced.
+		c.Config = model.DefaultConfig("")
+		c.ConfigError = strings.Join(strings.Fields(err.Error()), " ")
 	}
 	dirs, err := store.ListDirectives(root)
 	if err != nil {

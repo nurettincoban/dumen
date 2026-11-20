@@ -392,6 +392,9 @@ func cmdStatus(a *app, args []string) error {
 		len(c.ActiveDirectives(c.Config.Role(me.Email), p.Repo, now)), len(c.Decisions), c.Drafts, c.Proposed)
 	queued, failed := countJSON(p.Store.OutboxDir()), countJSON(p.Store.FailedDir())
 	fmt.Fprintf(a.out, "outbox    %d queued, %d rejected\n", queued, failed)
+	if c.ConfigError != "" {
+		fmt.Fprintf(a.out, "config    dumen.yml on the %s branch cannot be read, so roles and areas are ignored and nothing can be written: %s\n", p.Store.Branch, clip(c.ConfigError, 200))
+	}
 	if bad := store.Unreadable(p.Store.Root()); len(bad) > 0 {
 		fmt.Fprintf(a.out, "records   %d unreadable and ignored; fix or delete them on the %s branch:\n", len(bad), p.Store.Branch)
 		for _, b := range bad {

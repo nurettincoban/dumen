@@ -5,7 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/nurettincoban/dumen/internal/session"
+	"os"
+	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -347,6 +351,15 @@ func TestDeclinedConfirmationCannotBeSpentByAnotherServer(t *testing.T) {
 	ask()
 	// A server started with `exec`, so that it has the same parent as the real one.
 	refused(w.connect(&Server{Dir: w.proj.Root, ParentPID: parentPID, PID: 700002, Version: "test"}), "a second server with the same parent")
+
+	// Gauntlet N1: the real server dies and a new one takes over its registration. A
+	// ticket granted while the real server was registered is not for the newcomer.
+	ask()
+	sessions := w.proj.Store.SessionsDir()
+	os.Remove(filepath.Join(sessions, "by-parent", strconv.Itoa(parentPID)+".mcp"))
+	refused(w.connect(&Server{Dir: w.proj.Root, ParentPID: parentPID, PID: os.Getpid() + 1000000, Version: "test"}), "a server that took over the registration")
+	os.Remove(filepath.Join(sessions, "by-parent", strconv.Itoa(parentPID)+".mcp"))
+	session.RegisterServer(sessions, parentPID, os.Getpid())
 
 	if got := w.ok("get_decision", args); !strings.Contains(got, "status: draft") {
 		t.Fatalf("the draft was approved without a person: %s", got)
