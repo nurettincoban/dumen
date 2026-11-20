@@ -115,7 +115,7 @@ func (s *Server) logEvent(p *project.Project, sess *session.State, kind, text st
 		return nil
 	}
 	text = render.Label(text, model.MaxEventText-1)
-	ev := model.Event{TS: model.FormatTime(s.now()), Session: sess.Session, Person: p.Store.Email, Kind: kind, Text: text, IDs: ids}
+	ev := model.Event{TS: model.FormatTime(s.now()), Session: sess.Session, Person: p.Store.Email, Repo: p.Repo, Kind: kind, Text: text, IDs: ids}
 	if ev.Person == "" {
 		ev.Person = "unknown"
 	}
@@ -145,7 +145,7 @@ type scopeIn struct {
 	All   bool     `json:"all,omitempty" jsonschema:"applies to every agent"`
 	Role  string   `json:"role,omitempty" jsonschema:"applies to agents of people with this role"`
 	Area  string   `json:"area,omitempty" jsonschema:"applies to this area from dumen.yml"`
-	Paths []string `json:"paths,omitempty" jsonschema:"applies to these repo-relative path patterns, e.g. src/auth/**"`
+	Paths []string `json:"paths,omitempty" jsonschema:"applies to these path patterns, e.g. src/auth/**; prefix with a repository to limit it to one service, e.g. billing-svc:src/auth/**"`
 }
 
 type directiveIn struct {
@@ -194,6 +194,7 @@ type eventIn struct {
 
 type activityIn struct {
 	Since  string `json:"since,omitempty" jsonschema:"today (default), yesterday, 2h, 7d, a date or an RFC 3339 time"`
+	Repo   string `json:"repo,omitempty" jsonschema:"only sessions working in this repository (service)"`
 	Person string `json:"person,omitempty" jsonschema:"email or part of it"`
 	Kind   string `json:"kind,omitempty" jsonschema:"only this event kind"`
 	Events bool   `json:"events,omitempty" jsonschema:"also return the raw events (at most 200)"`
@@ -217,7 +218,7 @@ func (s *Server) Directives(ctx context.Context, _ empty) (string, error) {
 		return "", fmt.Errorf("no local data yet and the remote is unreachable")
 	}
 	sess := s.sessionOf(p, "")
-	ds := c.ActiveDirectives(c.Config.Role(p.Store.Email), s.now())
+	ds := c.ActiveDirectives(c.Config.Role(p.Store.Email), p.Repo, s.now())
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\nACTIVE DIRECTIVES (%d)\n", notice, len(ds))
 	for _, d := range ds {
@@ -246,7 +247,7 @@ func (s *Server) AckDirective(ctx context.Context, in idIn) (string, error) {
 		return "", fmt.Errorf("no local data yet")
 	}
 	found := false
-	for _, d := range c.ActiveDirectives(c.Config.Role(p.Store.Email), s.now()) {
+	for _, d := range c.ActiveDirectives(c.Config.Role(p.Store.Email), p.Repo, s.now()) {
 		found = found || d.ID == id
 	}
 	if !found {
@@ -486,7 +487,7 @@ func (s *Server) DecisionsForPath(ctx context.Context, in pathIn) (string, error
 	if c == nil {
 		return "", fmt.Errorf("no local data yet")
 	}
-	rel := policy.CleanRel(in.Path)
+	rel := policy.Qualify(p.Repo, policy.CleanRelKeepGlob(in.Path))
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\nLinked to %s:\n", notice, render.Label(rel, 200))
 	n := 0
@@ -515,10 +516,8 @@ func (s *Server) DraftDecision(ctx context.Context, in decisionIn) (string, erro
 		return "", err
 	}
 	d := model.Decision{ID: model.NewID(model.PrefixDecision), Title: strings.TrimSpace(in.Title), Area: in.Area,
-		Paths: in.Paths, Sources: upper(in.Sources), Supersedes: upper(in.Supersedes)}
-	if s.Anchor != nil {
-		d.AnchoredAt = s.Anchor(p.Root)
-	}
+		Paths: qualifyAll(p.Repo, in.Paths), Sources: upper(in.Sources), Supersedes: upper(in.Supersedes)}
+	d.AnchoredAt = s.anchor(p)
 	if strings.TrimSpace(in.Body) == "" {
 		return "", fmt.Errorf("body is required: the decision, why, and the rejected alternatives")
 	}
@@ -531,6 +530,30 @@ func (s *Server) DraftDecision(ctx context.Context, in decisionIn) (string, erro
 		s.flushSoon(p)
 	}
 	return fmt.Sprintf("Recorded draft %s. It is a proposal until a human approves it with `dumen approve %s`.%s", out.RecordID, out.RecordID, note), nil
+}
+
+// qualifyAll prefixes paths an agent gave relative to its own repository with that
+// repository's name, in projects that span several repositories.
+func qualifyAll(repo string, paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, policy.Qualify(repo, p))
+		}
+	}
+	return out
+}
+
+// anchor returns "<sha>" or "<repo>@<sha>" for the code repository's main line.
+func (s *Server) anchor(p *project.Project) string {
+	if s.Anchor == nil {
+		return ""
+	}
+	sha := s.Anchor(p.Root)
+	if sha != "" && p.Repo != "" {
+		return p.Repo + "@" + sha
+	}
+	return sha
 }
 
 func upper(in []string) []string {
@@ -567,10 +590,8 @@ func (s *Server) Supersede(ctx context.Context, in decisionIn) (string, error) {
 		return "", fmt.Errorf("id of the decision being superseded is required")
 	}
 	d := model.Decision{ID: model.NewID(model.PrefixDecision), Title: strings.TrimSpace(in.Title), Area: in.Area,
-		Paths: in.Paths, Sources: upper(in.Sources), Supersedes: []string{old}}
-	if s.Anchor != nil {
-		d.AnchoredAt = s.Anchor(p.Root)
-	}
+		Paths: qualifyAll(p.Repo, in.Paths), Sources: upper(in.Sources), Supersedes: []string{old}}
+	d.AnchoredAt = s.anchor(p)
 	out, note, err := s.submit(ctx, p, s.human(p), &op.CreateDecision{Decision: d, Body: in.Body, Approve: true})
 	if err != nil {
 		return "", err
@@ -585,7 +606,7 @@ func (s *Server) AddRef(ctx context.Context, in refIn) (string, error) {
 		return "", err
 	}
 	r := model.Ref{ID: model.NewID(model.PrefixRef), URL: strings.TrimSpace(in.URL), Kind: in.Kind, Title: strings.TrimSpace(in.Title),
-		Governs: strings.TrimSpace(in.Governs), Area: in.Area, Paths: in.Paths}
+		Governs: strings.TrimSpace(in.Governs), Area: in.Area, Paths: qualifyAll(p.Repo, in.Paths)}
 	out, note, err := s.submit(ctx, p, s.agent(p), &op.AddRef{Ref: r})
 	if err != nil {
 		return "", err
@@ -608,7 +629,7 @@ func (s *Server) LogEvent(ctx context.Context, in eventIn) (string, error) {
 	if sess.Private {
 		return "This session is not monitored; nothing was logged.", nil
 	}
-	ev := model.Event{TS: model.FormatTime(s.now()), Session: sess.Session, Person: p.Store.Email, Kind: in.Kind,
+	ev := model.Event{TS: model.FormatTime(s.now()), Session: sess.Session, Person: p.Store.Email, Repo: p.Repo, Kind: in.Kind,
 		Text: render.Label(in.Text, model.MaxEventText-1), IDs: upper(in.IDs)}
 	if _, err := p.Engine().Enqueue(s.agent(p), &op.AppendEvent{Event: ev}); err != nil {
 		return "", err
@@ -637,7 +658,7 @@ func (s *Server) Activity(ctx context.Context, in activityIn) (string, error) {
 	var cfg model.Config
 	err = s.locked(ctx, p, func(root string) error {
 		var err error
-		if evs, err = activity.Query(root, activity.Filter{Since: from, Person: in.Person, Kind: in.Kind}); err != nil {
+		if evs, err = activity.Query(root, activity.Filter{Since: from, Person: in.Person, Kind: in.Kind, Repo: in.Repo}); err != nil {
 			return err
 		}
 		if acks, err = activity.Query(root, activity.Filter{Kind: model.EventDirectiveAck}); err != nil {

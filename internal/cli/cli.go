@@ -191,7 +191,8 @@ func resolveSpec(repoRoot, spec string) (remote, branch string, err error) {
 func cmdInit(a *app, args []string) error {
 	fs := a.flags("init")
 	spec := fs.String("store", "origin#"+store.DefaultBranch, "where records live: <remote-url>#<branch>")
-	name := fs.String("project", "", "project name (default: derived from the remote)")
+	name := fs.String("project", "", "project name (default: derived from the store remote)")
+	repoName := fs.String("repo", "", "this repository's name when several repositories share one store (default: derived from origin)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -220,10 +221,19 @@ func cmdInit(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := project.WriteFile(root, *name, *spec); err != nil {
+	// A store that is not this repository's own origin is shared by several repositories:
+	// give this one a name so paths can be written as <repo>:<path>.
+	if specRemote, _ := store.ParseSpec(*spec); *repoName == "" && specRemote != "" && specRemote != "origin" {
+		if origin := gitOut(root, "remote", "get-url", "origin"); origin != "" {
+			*repoName = store.ProjectName(origin)
+		} else {
+			*repoName = model.Slug(filepath.Base(root))
+		}
+	}
+	if err := project.WriteFile(root, *name, *spec, *repoName); err != nil {
 		return err
 	}
-	p := &project.Project{Root: root, Name: *name, Spec: *spec, Store: s}
+	p := &project.Project{Root: root, Name: *name, Spec: *spec, Repo: *repoName, Store: s}
 	if _, err := p.Refresh(ctx); err != nil {
 		return err
 	}
@@ -233,6 +243,9 @@ func cmdInit(a *app, args []string) error {
 		fmt.Fprintf(a.out, "Branch %q already existed on %s; joined it.\n", branch, remote)
 	}
 	fmt.Fprintf(a.out, "Wrote %s. Commit it so teammates can run `dumen join`.\n", project.File)
+	if *repoName != "" {
+		fmt.Fprintf(a.out, "This repository is %q in project %q. Limit a path to it by writing %s:src/...\n", *repoName, *name, *repoName)
+	}
 	fmt.Fprintf(a.out, "Local state: %s (never inside your working tree).\n", s.Home)
 	for _, w := range res.Warnings {
 		fmt.Fprintln(a.err, "warning:", w)
@@ -353,6 +366,9 @@ func cmdStatus(a *app, args []string) error {
 	}
 	now := time.Now().UTC()
 	fmt.Fprintf(a.out, "project   %s\nstore     %s#%s\n", p.Name, p.Store.Remote, p.Store.Branch)
+	if p.Repo != "" {
+		fmt.Fprintf(a.out, "repo      %s\n", p.Repo)
+	}
 	fmt.Fprintf(a.out, "you       %s (%s, role: %s)\n", me.Email, me.Kind, orDash(c.Config.Role(me.Email)))
 	if online {
 		fmt.Fprintf(a.out, "sync      up to date (%s)\n", short(c.Head))
@@ -360,7 +376,7 @@ func cmdStatus(a *app, args []string) error {
 		fmt.Fprintf(a.out, "sync      OFFLINE, last sync %s ago\n", c.Age(now).Round(time.Second))
 	}
 	fmt.Fprintf(a.out, "active    %d directives, %d approved decisions, %d drafts, %d proposed directives\n",
-		len(c.ActiveDirectives(c.Config.Role(me.Email), now)), len(c.Decisions), c.Drafts, c.Proposed)
+		len(c.ActiveDirectives(c.Config.Role(me.Email), p.Repo, now)), len(c.Decisions), c.Drafts, c.Proposed)
 	queued, failed := countJSON(p.Store.OutboxDir()), countJSON(p.Store.FailedDir())
 	fmt.Fprintf(a.out, "outbox    %d queued, %d rejected\n", queued, failed)
 	return nil

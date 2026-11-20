@@ -120,8 +120,15 @@ func Setup(ctx context.Context, remote, branch, project string, create bool, fou
 		project = ProjectName(remote)
 	}
 	s := &Store{Home: filepath.Join(base, project), Local: Local{Project: project, Remote: remote, Branch: branch, Email: strings.ToLower(founder.Email)}}
-	if prev, err := Open(project); err == nil && (prev.Remote != remote || prev.Branch != branch) {
-		return nil, res, fmt.Errorf("project %q already points at %s#%s; pass a different project name", project, prev.Remote, prev.Branch)
+	if prev, err := Open(project); err == nil {
+		if prev.Remote != remote || prev.Branch != branch {
+			return nil, res, fmt.Errorf("project %q already points at %s#%s; pass a different project name", project, prev.Remote, prev.Branch)
+		}
+		// Another repository of the same project on this machine already set the store up:
+		// share it (one clone, one cache, one outbox per project).
+		if _, err := prev.Sync(ctx); err == nil {
+			return prev, res, nil
+		}
 	}
 	sha, err := gitx.LsRemote(ctx, remote, branch)
 	if err != nil {

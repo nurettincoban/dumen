@@ -19,6 +19,7 @@ type Filter struct {
 	Person  string // exact email, or a substring of it
 	Kind    string
 	Session string
+	Repo    string
 }
 
 func (f Filter) match(e model.Event) bool {
@@ -26,6 +27,9 @@ func (f Filter) match(e model.Event) bool {
 		return false
 	}
 	if f.Person != "" && !strings.Contains(strings.ToLower(e.Person), strings.ToLower(f.Person)) {
+		return false
+	}
+	if f.Repo != "" && !strings.EqualFold(e.Repo, f.Repo) {
 		return false
 	}
 	if f.Session != "" && !strings.HasPrefix(e.Session, f.Session) {
@@ -84,6 +88,7 @@ const (
 type Session struct {
 	Session  string   `json:"session"`
 	Person   string   `json:"person"`
+	Repo     string   `json:"repo,omitempty"`
 	First    string   `json:"first"`
 	Last     string   `json:"last"`
 	State    string   `json:"state"`
@@ -94,10 +99,11 @@ type Session struct {
 
 // Summary aggregates a set of events.
 type Summary struct {
-	Counts   map[string]int      `json:"counts"`   // events by kind
-	Sessions []Session           `json:"sessions"` // ordered by first event, then session id
-	Stuck    []Session           `json:"stuck"`    // sessions whose current state is blocked or asking a human
-	Acks     map[string][]string `json:"acks"`     // directive id -> people whose agents acknowledged it
+	Counts   map[string]int      `json:"counts"`            // events by kind
+	ByRepo   map[string]int      `json:"by_repo,omitempty"` // sessions per repository, when the project spans several
+	Sessions []Session           `json:"sessions"`          // ordered by first event, then session id
+	Stuck    []Session           `json:"stuck"`             // sessions whose current state is blocked or asking a human
+	Acks     map[string][]string `json:"acks"`              // directive id -> people whose agents acknowledged it
 }
 
 // Summarize computes the summary of events (which must be in time order).
@@ -110,7 +116,7 @@ func Summarize(events []model.Event) Summary {
 		sum.Counts[e.Kind]++
 		s := idx[e.Session]
 		if s == nil {
-			s = &Session{Session: e.Session, Person: e.Person, First: e.TS, State: StateActive}
+			s = &Session{Session: e.Session, Person: e.Person, Repo: e.Repo, First: e.TS, State: StateActive}
 			idx[e.Session] = s
 			order = append(order, e.Session)
 		}
@@ -153,6 +159,12 @@ func Summarize(events []model.Event) Summary {
 	})
 	for _, id := range order {
 		s := *idx[id]
+		if s.Repo != "" {
+			if sum.ByRepo == nil {
+				sum.ByRepo = map[string]int{}
+			}
+			sum.ByRepo[s.Repo]++
+		}
 		sum.Sessions = append(sum.Sessions, s)
 		if s.State == StateBlocked || s.State == StateAsking {
 			sum.Stuck = append(sum.Stuck, s)

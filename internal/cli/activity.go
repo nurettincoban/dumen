@@ -48,7 +48,11 @@ func eventLine(e model.Event) string {
 	if len(e.IDs) > 0 {
 		ids = " [" + strings.Join(e.IDs, ", ") + "]"
 	}
-	return fmt.Sprintf("%s  %-14s %-24s %-10s %s%s", ts.Local().Format("01-02 15:04:05"), e.Kind, clip(e.Person, 24), clip(e.Session, 10), e.Text, ids)
+	who := e.Person
+	if e.Repo != "" {
+		who += " @" + e.Repo
+	}
+	return fmt.Sprintf("%s  %-14s %-34s %-10s %s%s", ts.Local().Format("01-02 15:04:05"), e.Kind, clip(who, 34), clip(e.Session, 10), e.Text, ids)
 }
 
 func cmdActivity(a *app, args []string) error {
@@ -56,6 +60,7 @@ func cmdActivity(a *app, args []string) error {
 	since := fs.String("since", "today", "today, yesterday, 2h, 7d, a date, or an RFC 3339 time")
 	person := fs.String("person", "", "only this person (email or part of it)")
 	kind := fs.String("kind", "", "only this event kind: "+strings.Join(model.EventKinds, ", "))
+	repo := fs.String("repo", "", "only sessions working in this repository")
 	events := fs.Bool("events", false, "list every event instead of the summary")
 	asJSON := fs.Bool("json", false, "print the summary as JSON")
 	if err := fs.Parse(args); err != nil {
@@ -70,7 +75,7 @@ func cmdActivity(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	evs, dirs, cfg, err := queryLocked(a, p, activity.Filter{Since: from, Person: *person, Kind: *kind}, true)
+	evs, dirs, cfg, err := queryLocked(a, p, activity.Filter{Since: from, Person: *person, Kind: *kind, Repo: *repo}, true)
 	if err != nil {
 		return err
 	}
@@ -81,7 +86,7 @@ func cmdActivity(a *app, args []string) error {
 		Missing   []string `json:"missing"`
 	}
 	var missing []unacked
-	if *person == "" && *kind == "" {
+	if *person == "" && *kind == "" && *repo == "" {
 		// Acknowledgements are looked up over all time, not only inside --since.
 		all, _, _, err := queryLocked(a, p, activity.Filter{Kind: model.EventDirectiveAck}, false)
 		if err != nil {
@@ -112,12 +117,23 @@ func cmdActivity(a *app, args []string) error {
 		sum.Counts[model.EventStarted], sum.Counts[model.EventFinished], sum.Counts[model.EventBlocked],
 		sum.Counts[model.EventAskingHuman], sum.Counts[model.EventProgress], sum.Counts[model.EventDirectiveAck],
 		sum.Counts[model.EventDraftWritten], sum.Counts[model.EventDecisionRead], sum.Counts[model.EventPrivate])
+	if len(sum.ByRepo) > 0 {
+		fmt.Fprint(a.out, "By repository:")
+		for _, r := range model.SortedKeys(sum.ByRepo) {
+			fmt.Fprintf(a.out, "  %s %d", r, sum.ByRepo[r])
+		}
+		fmt.Fprintln(a.out, " sessions")
+	}
 	if len(sum.Sessions) > 0 {
 		fmt.Fprintf(a.out, "\nSessions (%d)\n", len(sum.Sessions))
 		for _, s := range sum.Sessions {
 			first, _ := model.ParseTime(s.First)
 			last, _ := model.ParseTime(s.Last)
-			fmt.Fprintf(a.out, "  %-24s %-10s %-13s %s-%s  %s\n", clip(s.Person, 24), clip(s.Session, 10), s.State,
+			who := s.Person
+			if s.Repo != "" {
+				who += " @" + s.Repo
+			}
+			fmt.Fprintf(a.out, "  %-34s %-10s %-13s %s-%s  %s\n", clip(who, 34), clip(s.Session, 10), s.State,
 				first.Local().Format("15:04"), last.Local().Format("15:04"), clip(s.LastText, 90))
 		}
 	}

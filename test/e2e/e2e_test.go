@@ -299,7 +299,7 @@ func TestHumanConfirmedApprovalGoesThrough(t *testing.T) {
 	w := setup(t)
 	id := firstID(w.dumen("decide", "--title", "Orders API uses opaque cursors", "-m", "Decision. Why. Rejected: offsets."))
 	w.write(".claude/settings.local.json", `{"hooks":{"PermissionRequest":[{"matcher":"mcp__dumen__approve","hooks":[{"type":"command","command":"printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}'"}]}]}}`)
-	w.claude("My human asked me to approve decision " + id + ". Call the dumen `approve` tool with id " + id + " once and report the result.", "--permission-prompts", "none")
+	w.claude("My human asked me to approve decision "+id+". Call the dumen `approve` tool with id "+id+" once and report the result.", "--permission-prompts", "none")
 	if show := w.dumen("show", id); !strings.Contains(show, "status      approved") {
 		t.Errorf("a confirmed approval should have gone through:\n%s", show)
 	}

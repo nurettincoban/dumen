@@ -26,10 +26,49 @@ func CleanRel(p string) string {
 // are case-insensitive by default (Windows, macOS), so "SRC/Auth" cannot slip past "src/auth".
 var CaseInsensitive bool
 
-// MatchPath reports whether the repo-relative file matches pattern.
-// A pattern without wildcards is a path prefix ("src/auth" matches everything under it).
-// Otherwise "*" matches within one path segment and "**" matches across segments.
+var repoPrefix = regexp.MustCompile(`^(\*|[A-Za-z0-9][A-Za-z0-9._-]*):`)
+
+// SplitRepo splits "billing-svc:src/auth/**" into its repository and path parts. A value
+// without a repository prefix returns repo "". The prefix "*" means any repository.
+func SplitRepo(s string) (repo, rest string) {
+	if m := repoPrefix.FindString(s); m != "" {
+		return strings.ToLower(m[:len(m)-1]), s[len(m):]
+	}
+	return "", s
+}
+
+// Qualify prefixes a repo-relative path with its repository name ("" leaves it as is).
+func Qualify(repo, rel string) string {
+	if repo == "" {
+		return rel
+	}
+	if r, _ := SplitRepo(rel); r != "" {
+		return rel
+	}
+	return strings.ToLower(repo) + ":" + rel
+}
+
+// PatternRepo returns the repository a pattern is limited to ("" when it covers every repository).
+func PatternRepo(pattern string) string {
+	repo, _ := SplitRepo(pattern)
+	if repo == "*" {
+		return ""
+	}
+	return repo
+}
+
+// MatchPath reports whether file matches pattern. Both may carry a repository prefix
+// ("billing-svc:src/auth/**"). A pattern without one covers every repository; a pattern
+// with one only matches files of that repository.
+//
+// In the path part, a pattern without wildcards is a prefix ("src/auth" matches
+// everything under it); otherwise "*" matches within one segment and "**" across segments.
 func MatchPath(pattern, file string) bool {
+	prepo, pattern := SplitRepo(pattern)
+	frepo, file := SplitRepo(file)
+	if prepo != "" && prepo != "*" && prepo != frepo {
+		return false
+	}
 	pattern = strings.TrimSuffix(CleanRelKeepGlob(pattern), "/")
 	file = CleanRel(file)
 	if CaseInsensitive {
@@ -103,17 +142,52 @@ func InArea(cfg model.Config, area, file string) bool {
 	return ok && MatchAny(a.Paths, file)
 }
 
+// touchesRepo reports whether any of the patterns can match a file in repo. A session
+// without a repository (a PM workspace) is concerned with every pattern.
+func touchesRepo(patterns []string, repo string) bool {
+	if repo == "" || len(patterns) == 0 {
+		return true
+	}
+	for _, p := range patterns {
+		if r := PatternRepo(p); r == "" || r == strings.ToLower(repo) {
+			return true
+		}
+	}
+	return false
+}
+
 // Delivered reports whether an active directive should be shown to a session of the given
-// role. Role-scoped directives go to that role only; path and area directives go to
-// everyone, because any session may end up touching those paths.
-func Delivered(d model.Directive, role string, now time.Time) bool {
+// role working in the given repository. Role-scoped directives go to that role only.
+// Path and area directives go to every session whose repository they can touch, because
+// any such session may end up editing those paths.
+func Delivered(cfg model.Config, d model.Directive, role, repo string, now time.Time) bool {
 	if !d.ActiveAt(now) {
 		return false
 	}
-	if d.Scope.Role != "" {
+	switch {
+	case d.Scope.Role != "":
 		return d.Scope.Role == role
+	case len(d.Scope.Paths) > 0:
+		return touchesRepo(d.Scope.Paths, repo)
+	case d.Scope.Area != "":
+		return touchesRepo(cfg.Areas[d.Scope.Area].Paths, repo)
 	}
 	return true
+}
+
+// RelevantTo reports whether a record with these paths and area concerns the repository.
+// Records with no paths and no area concern everyone.
+func RelevantTo(cfg model.Config, paths []string, area, repo string) bool {
+	if repo == "" || (len(paths) == 0 && area == "") {
+		return true
+	}
+	if len(paths) > 0 && touchesRepo(paths, repo) {
+		return true
+	}
+	if a, ok := cfg.Areas[area]; ok && touchesRepo(a.Paths, repo) {
+		return true
+	}
+	return len(paths) == 0 && area != "" && len(cfg.Areas[area].Paths) == 0
 }
 
 // CoversPath reports whether a directive's scope covers the repo-relative file.

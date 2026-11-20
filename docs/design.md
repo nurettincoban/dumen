@@ -289,3 +289,39 @@ writes a local file and spawns.
    initial commit (LICENSE and a stub README) to `main` first, and then open pull requests against it?
 6. The e2e tests run real `claude -p` in GitHub Actions, which needs an `ANTHROPIC_API_KEY` repository
    secret. They will use the smallest model to keep cost low. Can you add that secret before day 3?
+
+## 7. Changes made after approval
+
+These were decided during the build, each at the owner's request or forced by a test.
+
+1. **Multi-repo.** The team runs microservices in many repositories. One dedicated store
+   repository holds the records for all of them (`store = <remote-url>#<branch>`), and each
+   service repository's `.dumen` file names it (`repo = billing-svc`). A path may carry a
+   repository prefix: `billing-svc:src/auth/**` covers that service only, a path without a
+   prefix covers every repository, and `*:src/auth` says so explicitly. Directives limited
+   to other repositories are not delivered to a session. Paths an agent or a person
+   records from inside a repository are stored with that repository's prefix. Events carry
+   the repository, `anchored_at` is `<repo>@<sha>`, and `dumen activity --repo` and the
+   `activity` MCP tool filter by it. On one machine all repositories of a project share
+   one local store (`~/.dumen/<project>/`).
+2. **One PreToolUse handler with matcher `*`** replaces the three matcher groups in
+   section 2. The handler branches on the tool name, and new directives are delivered on
+   every tool call (open question 2).
+3. **Confirmation ticket.** When the PreToolUse hook answers "ask" for `approve`,
+   `supersede` or `publish_directive`, it leaves a single-use ticket bound to the exact
+   arguments. The MCP server refuses those tools without a fresh ticket, so a setup where
+   the hooks are missing cannot approve or publish at all. Verified with real Claude Code:
+   pre-allowing the tools with `--allowedTools` does not get past the hook's "ask" in a
+   `claude -p` run.
+4. **The CLI acts as an agent inside Claude Code.** Shells started by Claude Code have
+   `CLAUDECODE` set; with it set, `dumen approve`, `direct`, `withdraw`, `supersede` and
+   `private` are refused by the role check even if the Bash hook is bypassed.
+5. **Generated files do not depend on the clock.** DECISIONS.md lists published directives
+   with their start and expiry times instead of filtering by "now", so the same records
+   always give the same bytes.
+6. **Directives start one minute in the past** unless a start time is given, so a machine
+   whose clock runs slightly behind the publisher's sees them as active at once.
+7. **CI is off for now** (owner's request). All tests, including the `claude -p`
+   end-to-end tests (`go test -tags e2e ./test/e2e`), run locally.
+8. **Developer sync first.** The PM and designer side (`dumen join <url>` workspace, PM
+   section of the skill) exists but is not the current focus.

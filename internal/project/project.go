@@ -28,15 +28,16 @@ var ErrNoProject = errors.New("not a dumen project (no .dumen file found; run `d
 type Project struct {
 	Root  string // directory containing the .dumen file
 	Name  string
+	Repo  string // this repository's name within the project; "" for a single-repo project or a workspace
 	Spec  string // "<remote-url>#<branch>" or "origin#<branch>"
 	Store *store.Store
 }
 
 // ReadFile parses a .dumen file: "key = value" lines, "#" comments.
-func ReadFile(path string) (name, spec string, err error) {
+func ReadFile(path string) (name, spec, repo string, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	defer f.Close()
 	sc := bufio.NewScanner(f)
@@ -55,20 +56,27 @@ func ReadFile(path string) (name, spec string, err error) {
 			name = v
 		case "store":
 			spec = v
+		case "repo":
+			repo = strings.ToLower(v)
 		}
 	}
 	if name == "" {
-		return "", "", fmt.Errorf("%s: missing project name", path)
+		return "", "", "", fmt.Errorf("%s: missing project name", path)
 	}
-	return name, spec, sc.Err()
+	return name, spec, repo, sc.Err()
 }
 
 // WriteFile writes a .dumen file.
-func WriteFile(dir, name, spec string) error {
+func WriteFile(dir, name, spec string, repo ...string) error {
 	body := "# dumen project file. Commit this file. It holds no secrets.\n" +
 		"# store = <remote-url>#<branch>; \"origin\" means this repository's origin remote.\n" +
 		"project = " + name + "\n" +
 		"store = " + spec + "\n"
+	if len(repo) > 0 && repo[0] != "" {
+		body += "# repo names this repository when several repositories share one store.\n" +
+			"# Paths in directives and decisions can then be written as " + repo[0] + ":src/...\n" +
+			"repo = " + strings.ToLower(repo[0]) + "\n"
+	}
 	return os.WriteFile(filepath.Join(dir, File), []byte(body), 0o644)
 }
 
@@ -81,11 +89,11 @@ func Locate(dir string) (*Project, error) {
 	for {
 		p := filepath.Join(dir, File)
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
-			name, spec, err := ReadFile(p)
+			name, spec, repo, err := ReadFile(p)
 			if err != nil {
 				return nil, err
 			}
-			return &Project{Root: dir, Name: name, Spec: spec}, nil
+			return &Project{Root: dir, Name: name, Spec: spec, Repo: repo}, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {

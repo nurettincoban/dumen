@@ -171,9 +171,9 @@ func Activity(root string) ([]byte, error) {
 			len(sum.Sessions), sum.Counts[model.EventStarted], sum.Counts[model.EventFinished],
 			sum.Counts[model.EventBlocked], sum.Counts[model.EventAskingHuman], sum.Counts[model.EventPrivate])
 		if len(sum.Sessions) > 0 {
-			b.WriteString("\n| Person | Session | First | Last | State | Last note |\n|---|---|---|---|---|---|\n")
+			b.WriteString("\n| Person | Repo | Session | First | Last | State | Last note |\n|---|---|---|---|---|---|---|\n")
 			for _, s := range sum.Sessions {
-				fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s |\n", cell(s.Person, 60), cell(s.Session, 16),
+				fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s |\n", cell(s.Person, 60), cell(s.Repo, 40), cell(s.Session, 16),
 					clock(s.First), clock(s.Last), s.State, cell(s.LastText, 160))
 			}
 		}

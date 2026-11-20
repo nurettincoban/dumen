@@ -230,7 +230,7 @@ func refLine(ref model.Ref) string {
 // undelivered returns active directives this session has not been shown, and marks them delivered.
 func (r *runCtx) undelivered() []cache.Directive {
 	var out []cache.Directive
-	for _, d := range r.c.ActiveDirectives(r.role, r.now) {
+	for _, d := range r.c.ActiveDirectives(r.role, r.proj.Repo, r.now) {
 		if !session.Has(r.sess.Delivered, d.ID) {
 			out = append(out, d)
 			r.sess.Delivered = append(r.sess.Delivered, d.ID)
@@ -264,7 +264,7 @@ func (r *runCtx) log(kind, text string, ids ...string) {
 	if secrets.Scan(text) != nil {
 		text = "" // never let a secret leave the machine through a summary
 	}
-	ev := model.Event{TS: model.FormatTime(r.now), Session: r.sess.Session, Person: person, Kind: kind, Text: text, IDs: ids}
+	ev := model.Event{TS: model.FormatTime(r.now), Session: r.sess.Session, Person: person, Repo: r.proj.Repo, Kind: kind, Text: text, IDs: ids}
 	eng := r.proj.Engine()
 	if _, err := eng.Enqueue(model.Actor{Email: person, Kind: model.KindAgent}, &op.AppendEvent{Event: ev}); err != nil {
 		return
@@ -304,8 +304,9 @@ func (r *runCtx) sessionStart() *Output {
 	}
 
 	const maxDecisions = 10
-	total := len(r.c.Decisions)
-	shown := r.c.Decisions
+	relevant := r.c.DecisionsForRepo(r.proj.Repo)
+	total := len(relevant)
+	shown := relevant
 	if len(shown) > maxDecisions {
 		shown = shown[:maxDecisions]
 	}
@@ -315,12 +316,12 @@ func (r *runCtx) sessionStart() *Output {
 			b.WriteString(decisionLine(d) + "\n")
 		}
 	}
-	if len(r.c.Refs) > 0 {
-		refs := r.c.Refs
+	if all := r.c.RefsForRepo(r.proj.Repo); len(all) > 0 {
+		refs := all
 		if len(refs) > 10 {
 			refs = refs[:10]
 		}
-		fmt.Fprintf(&b, "\nSOURCES OF TRUTH (%d of %d; links only, not fetched automatically)\n", len(refs), len(r.c.Refs))
+		fmt.Fprintf(&b, "\nSOURCES OF TRUTH (%d of %d; links only, not fetched automatically)\n", len(refs), len(all))
 		for _, ref := range refs {
 			b.WriteString(refLine(ref) + "\n")
 		}
@@ -330,7 +331,11 @@ func (r *runCtx) sessionStart() *Output {
 	if role == "" {
 		role = "unassigned"
 	}
-	fmt.Fprintf(&b, "Your role: %s\ndumen session: %s", render.Label(role, 30), r.sess.Session)
+	fmt.Fprintf(&b, "Your role: %s\n", render.Label(role, 30))
+	if r.proj.Repo != "" {
+		fmt.Fprintf(&b, "This repository: %s (paths written as %s:path belong to it)\n", r.proj.Repo, r.proj.Repo)
+	}
+	fmt.Fprintf(&b, "dumen session: %s", r.sess.Session)
 
 	_, err := os.Stat(r.proj.PrivateMarker())
 	r.sess.Private = err == nil
@@ -435,7 +440,9 @@ func (r *runCtx) preToolUse() *Output {
 		if !ok {
 			break // outside the repository: no path rules apply
 		}
-		if d, blocked := r.c.DenyFor(rel, r.now); blocked {
+		// In a project that spans several repositories, paths are matched as "<repo>:<path>".
+		q := policy.Qualify(r.proj.Repo, rel)
+		if d, blocked := r.c.DenyFor(q, r.now); blocked {
 			until := d.Expires
 			if len(until) >= 10 {
 				until = until[:10]
@@ -446,11 +453,11 @@ func (r *runCtx) preToolUse() *Output {
 		}
 		if !session.Has(r.sess.Reminded, rel) {
 			r.sess.Reminded = append(r.sess.Reminded, rel)
-			decs, refs := r.c.DecisionsFor(rel), r.c.RefsFor(rel)
+			decs, refs := r.c.DecisionsFor(q), r.c.RefsFor(q)
 			var ctxDirs []cache.Directive
-			for _, d := range r.c.ActiveDirectives(r.role, r.now) {
+			for _, d := range r.c.ActiveDirectives(r.role, r.proj.Repo, r.now) {
 				full := d.Directive
-				if full.Kind == model.DirectiveContext && policy.CoversPath(r.c.Config, full, rel) {
+				if full.Kind == model.DirectiveContext && policy.CoversPath(r.c.Config, full, q) {
 					ctxDirs = append(ctxDirs, d)
 				}
 			}

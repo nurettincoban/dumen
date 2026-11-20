@@ -135,13 +135,14 @@ func (c *Cache) Age(now time.Time) time.Duration {
 	return now.Sub(t)
 }
 
-// ActiveDirectives returns the directives in force at now that a session of the given role receives.
-func (c *Cache) ActiveDirectives(role string, now time.Time) []Directive {
+// ActiveDirectives returns the directives in force at now that a session of the given
+// role, working in the given repository ("" for none), receives.
+func (c *Cache) ActiveDirectives(role, repo string, now time.Time) []Directive {
 	var out []Directive
 	for _, d := range c.Directives {
 		full := d.Directive
 		full.Text = d.Text
-		if policy.Delivered(full, role, now) {
+		if policy.Delivered(c.Config, full, role, repo, now) {
 			out = append(out, d)
 		}
 	}
@@ -176,6 +177,34 @@ func (c *Cache) RefsFor(file string) []model.Ref {
 	var out []model.Ref
 	for _, r := range c.Refs {
 		if policy.MatchAny(r.Paths, file) || (r.Area != "" && policy.InArea(c.Config, r.Area, file)) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// DecisionsForRepo returns approved decisions that concern the repository, newest first.
+func (c *Cache) DecisionsForRepo(repo string) []Decision {
+	if repo == "" {
+		return c.Decisions
+	}
+	var out []Decision
+	for _, d := range c.Decisions {
+		if policy.RelevantTo(c.Config, d.Paths, d.Area, repo) {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// RefsForRepo returns refs that concern the repository.
+func (c *Cache) RefsForRepo(repo string) []model.Ref {
+	if repo == "" {
+		return c.Refs
+	}
+	var out []model.Ref
+	for _, r := range c.Refs {
+		if policy.RelevantTo(c.Config, r.Paths, r.Area, repo) {
 			out = append(out, r)
 		}
 	}

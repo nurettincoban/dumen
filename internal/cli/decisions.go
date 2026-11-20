@@ -63,7 +63,8 @@ func addDecisionFlags(fs *flag.FlagSet) decisionFlags {
 	}
 }
 
-func (f decisionFlags) build(a *app, root string) (model.Decision, string, error) {
+func (f decisionFlags) build(a *app, p *project.Project) (model.Decision, string, error) {
+	root := p.Root
 	body := *f.body
 	if *f.file == "-" {
 		data, err := io.ReadAll(a.in)
@@ -85,7 +86,13 @@ func (f decisionFlags) build(a *app, root string) (model.Decision, string, error
 		return model.Decision{}, "", fmt.Errorf("a body is required (-m or --file): the decision, why, and rejected alternatives")
 	}
 	d := model.Decision{ID: model.NewID(model.PrefixDecision), Title: strings.TrimSpace(*f.title), Area: *f.area,
-		Paths: splitList(*f.paths), Sources: splitList(strings.ToUpper(*f.sources)), AnchoredAt: Anchor(root)}
+		Sources: splitList(strings.ToUpper(*f.sources)), AnchoredAt: Anchor(root)}
+	for _, x := range splitList(*f.paths) {
+		d.Paths = append(d.Paths, policy.Qualify(p.Repo, x)) // paths typed inside a repository belong to it
+	}
+	if d.AnchoredAt != "" && p.Repo != "" {
+		d.AnchoredAt = p.Repo + "@" + d.AnchoredAt
+	}
 	return d, body, nil
 }
 
@@ -100,7 +107,7 @@ func cmdDecide(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	d, body, err := df.build(a, p.Root)
+	d, body, err := df.build(a, p)
 	if err != nil {
 		return err
 	}
@@ -130,7 +137,7 @@ func cmdSupersede(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	d, body, err := df.build(a, p.Root)
+	d, body, err := df.build(a, p)
 	if err != nil {
 		return err
 	}
@@ -205,7 +212,7 @@ func cmdDecisions(a *app, args []string) error {
 		derived := policy.Derive(decs)
 		rel := ""
 		if path != "" {
-			rel = relPath(p.Root, path)
+			rel = policy.Qualify(p.Repo, relPath(p.Root, path))
 		}
 		n := 0
 		for _, d := range decs {
@@ -242,6 +249,9 @@ func cmdDecisions(a *app, args []string) error {
 
 // relPath turns a user-supplied path into a repo-relative one.
 func relPath(root, path string) string {
+	if r, _ := policy.SplitRepo(path); r != "" {
+		return path // already written as <repo>:<path>
+	}
 	if !strings.HasPrefix(path, "/") && !strings.Contains(path, ":") {
 		wd, _ := os.Getwd()
 		if r, err := relTo(root, wd, path); err == nil {

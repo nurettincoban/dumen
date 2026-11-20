@@ -35,7 +35,11 @@ that role below. Everyone follows "Always".
    human actions. Call them only when your human explicitly asks in this conversation;
    they will be asked to confirm. Never run `dumen approve`, `dumen direct`,
    `dumen withdraw` or `dumen private` from the shell, and never touch `~/.dumen`.
-7. **No secrets** in any text you send to dumen. Writes that look like credentials are rejected.
+7. **Several repositories can share one dumen project.** If the session-start block has a
+   `This repository:` line, a path written as `<repo>:<path>` belongs to that repository
+   only, and a path without a prefix applies to every repository. Paths you pass to the
+   dumen tools are taken as relative to this repository.
+8. **No secrets** in any text you send to dumen. Writes that look like credentials are rejected.
 
 ## Developer roles (backend, frontend, lead, and any role not listed below)
 

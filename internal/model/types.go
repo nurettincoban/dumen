@@ -318,6 +318,7 @@ type Event struct {
 	TS      string   `json:"ts"`
 	Session string   `json:"session"`
 	Person  string   `json:"person"`
+	Repo    string   `json:"repo,omitempty"` // repository the session works in, when the project spans several
 	Kind    string   `json:"kind"`
 	Text    string   `json:"text,omitempty"`
 	IDs     []string `json:"ids,omitempty"`
@@ -423,6 +424,13 @@ func (r Ref) Validate() error {
 
 func validatePaths(paths []string) error {
 	for _, p := range paths {
+		// An optional "<repo>:" prefix limits the pattern to one repository.
+		if i := strings.Index(p, ":"); i > 0 && !strings.ContainsAny(p[:i], "/\\") {
+			p = p[i+1:]
+			if p == "" {
+				p = "**"
+			}
+		}
 		if p == "" || strings.HasPrefix(p, "/") || strings.Contains(p, "\\") || strings.Contains(p, "..") {
 			return fmt.Errorf("invalid path %q: use repo-relative paths with forward slashes", p)
 		}
