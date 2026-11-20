@@ -9,6 +9,7 @@ See [docs/gauntlet.md](../docs/gauntlet.md). Tick a stage when it passed; write 
 - [ ] 3. Claude Code conformance: hooks reference checked, `claude plugin validate .`, e2e when hooks or MCP changed
 - [ ] 4. Cross-platform and host independence: builds for linux, darwin, windows
 - [ ] 5. Open source and data model: version gate and migration note for layout changes, README still true
+- [ ] 6. README and first run: setup followed literally on a clean machine, quoted output matches, only `example.com` addresses, links work
 
 Open findings (Critical and High block the merge):
 

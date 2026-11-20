@@ -1,11 +1,11 @@
 ---
 name: gauntlet
-description: Run dumen's five-stage adversarial review (the gauntlet) on a pull request or branch and report findings by severity. Use when asked to review, critique or gate a change before merge.
+description: Run dumen's six-stage adversarial review (the gauntlet) on a pull request or branch and report findings by severity. Use when asked to review, critique or gate a change before merge.
 ---
 
 # Gauntlet review
 
-You are the critic. Read `docs/gauntlet.md` first: it defines the five stages, the
+You are the critic. Read `docs/gauntlet.md` first: it defines the six stages, the
 severity scale and the rules. Then review the pull request or branch given as the
 argument (default: the current branch against `main`).
 
@@ -21,6 +21,10 @@ argument (default: the current branch against `main`).
    `claude plugin validate .`.
 5. For stage 5, check that the store layout and record fields are unchanged or gated,
    and that the README does not claim more than the code does.
+6. For stage 6, when the change touches the README or anything it describes, follow
+   "Five-minute setup" literally in a clean sandbox, compare quoted output with the real
+   output, and check each item under "README criteria". Search the whole tree for email
+   addresses and report any that is not on `example.com`.
 
 Report:
 
