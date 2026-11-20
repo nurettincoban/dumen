@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/nurettincoban/comm-pro/internal/gitx"
 	"github.com/nurettincoban/comm-pro/internal/hook"
 	"github.com/nurettincoban/comm-pro/internal/install"
+	"github.com/nurettincoban/comm-pro/internal/mcpserver"
 	"github.com/nurettincoban/comm-pro/internal/model"
 	"github.com/nurettincoban/comm-pro/internal/op"
 	"github.com/nurettincoban/comm-pro/internal/project"
@@ -40,7 +42,7 @@ var commands []command
 func init() {
 	commands = []command{
 		{"init", "init [--store <remote-url>#<branch>]", "create the dumen store for this repository", cmdInit},
-		{"join", "join", "connect this machine to the repository's dumen store", cmdJoin},
+		{"join", "join [<remote-url>[#branch]]", "connect this machine to a dumen store; with a URL, create a no-code workspace (PM, designer)", cmdJoin},
 		{"status", "status", "show sync state, role and queued operations", cmdStatus},
 		{"direct", `direct [--deny] (--all | --role R | --area A | --paths P1,P2) [--for 7d | --until DATE] "text"`, "publish a directive", cmdDirect},
 		{"directives", "directives [--all]", "list directives", cmdDirectives},
@@ -50,7 +52,8 @@ func init() {
 		{"private", "private [on|off]", "stop or resume monitoring of your new sessions (the fact stays visible)", cmdPrivate},
 		{"gc", "gc", "archive stale drafts and compact activity older than 30 days", cmdGC},
 		{"sync", "sync [--project NAME] [--quiet]", "push queued operations and refresh the local cache", cmdSync},
-		{"install", "install [--binary PATH]", "write the Claude Code hook configuration into this repository", cmdInstall},
+		{"install", "install [--binary PATH]", "write the Claude Code hooks, MCP registration and skill into this repository", cmdInstall},
+		{"mcp", "mcp", "MCP stdio server for Claude Code (also runs the background sync)", cmdMCP},
 		{"hook", "hook <event>", "Claude Code hook entry point (reads JSON on stdin)", cmdHook},
 		{"version", "version", "print the version", func(a *app, _ []string) error { fmt.Fprintln(a.out, "dumen", Version); return nil }},
 	}
@@ -243,6 +246,9 @@ func cmdJoin(a *app, args []string) error {
 		return err
 	}
 	wd, _ := os.Getwd()
+	if fs.NArg() == 1 {
+		return joinWorkspace(a, fs.Arg(0))
+	}
 	loc, err := project.Locate(wd)
 	if err != nil {
 		return err
@@ -271,6 +277,56 @@ func cmdJoin(a *app, args []string) error {
 		role = "unassigned (ask a lead to add you to dumen.yml)"
 	}
 	fmt.Fprintf(a.out, "Joined project %q as %s, role: %s.\n", loc.Name, me.Email, role)
+	for _, w := range res.Warnings {
+		fmt.Fprintln(a.err, "warning:", w)
+	}
+	return nil
+}
+
+// joinWorkspace creates ~/dumen/<project>/ for someone who does not have the code (a PM
+// or designer): the project file and the Claude Code configuration, and nothing else.
+func joinWorkspace(a *app, spec string) error {
+	remote, branch := store.ParseSpec(spec)
+	name := store.ProjectName(remote)
+	base := os.Getenv("DUMEN_WORKSPACES")
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		base = filepath.Join(home, "dumen")
+	}
+	dir := filepath.Join(base, name)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	me := actor(dir, nil)
+	if me.Email == "" {
+		return fmt.Errorf("git user.email is not set; run `git config --global user.email you@example.com` first")
+	}
+	ctx, cancel := longCtx()
+	defer cancel()
+	s, res, err := store.Setup(ctx, remote, branch, name, false, me)
+	if err != nil {
+		return err
+	}
+	if err := project.WriteFile(dir, name, remote+"#"+branch); err != nil {
+		return err
+	}
+	if _, err := install.All(dir, "dumen"); err != nil {
+		return err
+	}
+	p := &project.Project{Root: dir, Name: name, Store: s}
+	c, err := p.Refresh(ctx)
+	if err != nil {
+		return err
+	}
+	role := c.Config.Role(me.Email)
+	if role == "" {
+		role = "unassigned (ask a lead to add you to dumen.yml)"
+	}
+	fmt.Fprintf(a.out, "Joined project %q as %s, role: %s.\n", name, me.Email, role)
+	fmt.Fprintf(a.out, "Your workspace is %s. It contains no code. Open Claude Code there:\n\n  cd %s && claude\n", dir, dir)
 	for _, w := range res.Warnings {
 		fmt.Fprintln(a.err, "warning:", w)
 	}
@@ -520,6 +576,16 @@ func cmdWithdraw(a *app, args []string) error {
 	return nil
 }
 
+// ---- mcp ----
+
+func cmdMCP(a *app, args []string) error {
+	dir := os.Getenv("CLAUDE_PROJECT_DIR")
+	if dir == "" {
+		dir, _ = os.Getwd()
+	}
+	return mcpserver.Run(context.Background(), &mcpserver.Server{Dir: dir, ParentPID: os.Getppid(), Version: Version, Anchor: Anchor})
+}
+
 // ---- install ----
 
 func cmdInstall(a *app, args []string) error {
@@ -533,11 +599,14 @@ func cmdInstall(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	path, err := install.WriteSettings(loc.Root, *binary)
+	written, err := install.All(loc.Root, *binary)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(a.out, "Wrote dumen hooks to %s. Commit it so every teammate's Claude Code picks them up.\n", path)
+	for _, w := range written {
+		fmt.Fprintln(a.out, "wrote", w)
+	}
+	fmt.Fprintln(a.out, "Commit these files so every teammate's Claude Code picks up the hooks, the MCP server and the skill.")
 	return nil
 }
 

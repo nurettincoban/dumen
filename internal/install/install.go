@@ -2,6 +2,7 @@
 package install
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -93,4 +94,58 @@ func WriteSettings(dir, binary string) (string, error) {
 		return path, err
 	}
 	return path, os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
+// Skill is the role-aware dumen skill for Claude Code.
+//
+//go:embed assets/SKILL.md
+var Skill []byte
+
+// WriteSkill writes <dir>/.claude/skills/dumen/SKILL.md.
+func WriteSkill(dir string) (string, error) {
+	path := filepath.Join(dir, ".claude", "skills", "dumen", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return path, err
+	}
+	return path, os.WriteFile(path, Skill, 0o644)
+}
+
+// WriteMCP registers the dumen MCP server in <dir>/.mcp.json, keeping other servers.
+func WriteMCP(dir, binary string) (string, error) {
+	path := filepath.Join(dir, ".mcp.json")
+	cfg := map[string]any{}
+	if data, err := os.ReadFile(path); err == nil {
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			return path, fmt.Errorf("%s is not valid JSON: %v", path, err)
+		}
+	}
+	servers, _ := cfg["mcpServers"].(map[string]any)
+	if servers == nil {
+		servers = map[string]any{}
+	}
+	// The key must be "dumen": hooks match the tool names mcp__dumen__<tool>.
+	servers["dumen"] = map[string]any{"command": binary, "args": []string{"mcp"}}
+	cfg["mcpServers"] = servers
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return path, err
+	}
+	return path, os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
+// All writes hooks, the MCP registration and the skill into dir.
+func All(dir, binary string) ([]string, error) {
+	var written []string
+	for _, f := range []func() (string, error){
+		func() (string, error) { return WriteSettings(dir, binary) },
+		func() (string, error) { return WriteMCP(dir, binary) },
+		func() (string, error) { return WriteSkill(dir) },
+	} {
+		p, err := f()
+		if err != nil {
+			return written, err
+		}
+		written = append(written, p)
+	}
+	return written, nil
 }

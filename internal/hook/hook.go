@@ -495,6 +495,8 @@ func (r *runCtx) preToolUse() *Output {
 				return deny(fmt.Sprintf("dumen: %s%s is a human action and this session skips permission prompts, so it cannot be confirmed here. Ask your human to run it in their own terminal.", action, target))
 			}
 			spec.PermissionDecision, spec.PermissionDecisionReason = "ask", reason
+			// The MCP server only acts on a call that carries this proof of having been asked.
+			session.GrantTicket(r.proj.Store.SessionsDir(), r.in.ToolName, r.in.ToolInput)
 		}
 	}
 

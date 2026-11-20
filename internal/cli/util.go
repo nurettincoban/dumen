@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/nurettincoban/comm-pro/internal/cache"
@@ -44,4 +46,14 @@ func countJSON(dir string) int {
 		}
 	}
 	return n
+}
+
+// relTo resolves path (relative to wd) into a path relative to root, with forward slashes.
+func relTo(root, wd, path string) (string, error) {
+	abs := filepath.Join(wd, path)
+	rel, err := filepath.Rel(root, abs)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "", fmt.Errorf("outside the repository")
+	}
+	return filepath.ToSlash(rel), nil
 }
