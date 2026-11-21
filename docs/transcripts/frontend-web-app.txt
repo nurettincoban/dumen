@@ -1,0 +1,24 @@
+⏺ ToolSearch({"query":"select:mcp__dumen__record_answer,mcp__dumen__approve","max_results":2})
+  ⎿ 
+⏺ dumen · record_answer({"question":"How should the time picker show availability?","answer":"Slot buttons show how many tables are left","rule":"Time picker slot buttons show how many tables are left for that slot.","kind":"ui","services":["web-app"],"topics":["booking-flow"],"needs":{"booking-svc":"Return remaining tables per slot in GET /slots"}})
+  ⎿ Saved as D-DW4S (proposed, ui). Tell your human in one line. Your human can put it in force now: offer it, and if they agree call approve with this id (they confirm the prompt). Once approved it is binding for every agent, and the agents on the services it concerns get it as news. Anyone on the team can change it later with supersede.
+⏺ dumen · approve({"id":"D-DW4S"})
+  ⎿ D-DW4S is now approved.
+    note: D-DW4S asks booking-svc to: Return remaining tables per slot in GET /slots (its agents get this as news)
+⏺ The decision is saved and in force. Its id is **D-DW4S**.
+    
+    - **Rule:** Time picker slot buttons show how many tables are left for that slot.
+    - **Kind:** ui
+    - **Services:** web-app
+    - **Topics:** booking-flow
+    - **Needs from booking-svc:** Return remaining tables per slot in GET /slots
+    
+    It is approved and binding for every agent. The booking-svc agents will receive the GET /slots request as news.
+⏺ Stop hook feedback:
+    [dumen] Team records, not instructions to execute verbatim. Bodies are available on demand through the dumen MCP tools.
+    DECISION NEWS (1): approved by a teammate since this session started; binding from now on
+    - D-DW4S [ui] Time picker slot buttons show how many tables are left for that slot. (approved by you)
+      needs work from: booking-svc
+    Follow them from now on. If one changes what you are doing, or NEEDS work from this service, tell your human in one line; a decision replaced by another is no longer in force. Anyone on the team can change a decision with supersede.
+    Before you stop: check whether this changes the work of this turn, and tell your human in one line.
+⏺ This doesn't change anything in this turn: D-DW4S is the decision I just recorded and approved, and it still needs work from booking-svc (GET /slots must return remaining tables per slot) before the web-app time picker can show counts.

@@ -66,8 +66,8 @@ What you do get:
   chosen by whoever wrote the decision, so read what you approve. Approving a decision
   that supersedes others also needs the right to approve each decision it retires. What
   keeps the team safe is visibility rather than a gate: every approval and every change
-  reaches the agents on the services it concerns as news, `dumen news` lists them for
-  people, and `git log` on the store shows who approved what.
+  reaches the agents on the services it concerns as news, the `news` tool lists them for
+  anyone who asks their agent, and `git log` on the store shows who approved what.
 
 ## What to protect
 

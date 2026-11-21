@@ -23,114 +23,157 @@ any kind (product, UX, UI, architecture, technical). A decision is binding but c
 team member puts one in force, anyone can change it, and every change reaches the other agents
 as news. It runs on the git remote you already have, with no server.
 
-## Two everyday problems, solved
+## Install: it is a Claude Code plugin
 
-A table-reservation product: Sofia works on the site (`web-app`), Ayşe on `booking-svc`,
-Mehmet on `billing-svc`, each in their own Claude Code session. One dumen store serves all
-three repositories. The plan was made up front, but new questions come up every day.
+You need `git` and Claude Code. dumen uses the SSH keys or credential helper your `git`
+already has.
 
-### The frontend changes something, and the backend hears it at once
+**1. Put the `dumen` binary on your PATH** (once per machine; the plugin's hooks and tools
+call it):
 
-Sofia's agent reworks the time picker. Sofia decides that slot buttons show how many tables
-are left, which the backend does not return yet. The decision says what it needs:
-
-```text
-⏺ dumen · record_answer(kind ui, services web-app,
-    rule "Slot buttons show how many tables are left",
-    needs {"booking-svc": "Return remaining tables per slot in GET /slots"})
-⏺ dumen · approve(D-3MWE)   ▸ Yes
+```sh
+go install github.com/nurettincoban/dumen/cmd/dumen@latest
 ```
 
-Ayşe's agent is in the middle of other work in `booking-svc`. Within about ten seconds, on
-its next step and in the same session, it gets:
+**2. Add the plugin** (inside Claude Code):
+
+```text
+/plugin marketplace add nurettincoban/dumen
+/plugin install dumen@dumen
+```
+
+**3. Ask your agent to set it up.** From here on you only talk to Claude. This is a real
+session, shortened, with the store's address replaced; the permission prompt line is the text
+dumen gives Claude Code to show:
+
+```text
+> Set up dumen for our team in this repository. The team store is
+  git@git.example.com:team/dumen-store.git#dumen and the project is called shop.
+
+⏺ Bash(dumen init -project shop -store git@git.example.com:team/dumen-store.git#dumen; dumen status)
+  ⎿ Created branch "dumen" on git@git.example.com:team/dumen-store.git with you (maya@example.com) as lead.
+    Wrote .dumen. Commit it so teammates can run `dumen join`.
+    This repository is "booking-svc" in project "shop". Limit a path to it by writing booking-svc:src/...
+    ...
+⏺ Dumen is set up for the shop project: `dumen init` created the `dumen` branch in the team
+  store and wrote `.dumen` in booking-svc, with you as lead (maya@example.com) ...
+
+> Add ayse@example.com to the dumen team as a dev.
+
+⏺ dumen · set_role({"email":"ayse@example.com","role":"dev"})
+  Claude Code: dumen: changing who is on the team is a human action. It gives
+  ayse@example.com the role "dev". Confirm only if you, the human, want this.   ▸ Yes
+  ⎿ ayse@example.com now has the role dev.
+```
+
+Teammates do the same: they install the plugin and say "join our dumen project". Their agent
+runs `dumen join`. The store holds your teammates' email addresses and one-line summaries of
+what their agents did, so **never keep it in a public repository**; see
+[Set up the store](docs/usage.md#set-up-the-store).
+
+## Real sessions
+
+The transcripts below come from real Claude Code sessions run by dumen's end-to-end tests
+([test/e2e/decisions_test.go](test/e2e/decisions_test.go)), shortened and with temporary
+paths removed. The full recordings are in [docs/transcripts](docs/transcripts). A
+table-reservation product: Sofia works on the site (`web-app`) and Ayşe on `booking-svc`, each
+in their own Claude Code session, with one dumen store for both repositories.
+
+### The frontend decides, and the backend hears it in the session it is running
+
+Sofia asked her agent how the time picker should show availability and answered "slot
+buttons show how many tables are left". The backend does not return that yet. Her agent saves
+the answer, says what it needs from `booking-svc`, and Sofia confirms the prompt:
+
+```text
+⏺ dumen · record_answer({"question":"How should the time picker show availability?",
+    "answer":"Slot buttons show how many tables are left",
+    "rule":"Time picker slot buttons show how many tables are left for that slot.",
+    "kind":"ui","services":["web-app"],"topics":["booking-flow"],
+    "needs":{"booking-svc":"Return remaining tables per slot in GET /slots"}})
+  ⎿ Saved as D-DW4S (proposed, ui). Tell your human in one line. Your human can put it in
+    force now: offer it, and if they agree call approve with this id (they confirm the prompt). ...
+⏺ dumen · approve({"id":"D-DW4S"})                                    ▸ Yes
+  ⎿ D-DW4S is now approved.
+    note: D-DW4S asks booking-svc to: Return remaining tables per slot in GET /slots (its agents get this as news)
+```
+
+At that moment Ayşe's agent was in the middle of a 35-second check in `booking-svc`. On its
+next step, in the same session, dumen handed it the news. Its answer to Ayşe:
+
+```text
+⏺ Team changes: Yes. A teammate (sofia@example.com) approved decision D-DW4S during this
+  session. It is a UI decision: time picker slot buttons show how many tables are left for
+  each slot. It is binding now. For this service it means `GET /slots` must return the
+  remaining tables per slot. Right now `slots.List()` returns nothing, so that work is not
+  started.
+```
+
+What dumen put in front of the agent is the news block below (recorded from Sofia's own
+session, where the Stop hook shows it too):
 
 ```text
 [dumen] DECISION NEWS (1): approved by a teammate since this session started; binding from now on
-- D-3MWE [ui] Slot buttons show how many tables are left (approved by sofia@example.com; in web-app)
-  NEEDS FROM booking-svc: Return remaining tables per slot in GET /slots
+- D-DW4S [ui] Time picker slot buttons show how many tables are left for that slot. (approved by you)
+  needs work from: booking-svc
+Follow them from now on. If one changes what you are doing, or NEEDS work from this service,
+tell your human in one line; a decision replaced by another is no longer in force. ...
 ```
 
-It tells Ayşe in one line and offers to do it. If the agent was about to end its turn, dumen
-holds it once so the news is read before it says "done".
+### The agent looks before it asks
 
-### Two backend developers, one question
-
-Ayşe works on `booking-svc`, Mehmet on `billing-svc`.
-
-**1. Ayşe's agent asks, Ayşe answers, the answer becomes a decision.** Her agent is building
-cancellation and needs to know what happens to the money. It asks with Claude Code's question
-tool. Ayşe picks "store credit". The agent saves the answer and offers to put it in force:
+The team had already decided that cancelled bookings are refunded as store credit. A
+developer building the cancel endpoint says "check before you ask me card or store credit":
 
 ```text
-⏺ dumen · record_answer("What happens to the money when a guest cancels?",
-                         "Store credit", kind product, topics payments)
-  ⎿ Saved as D-7K2P (proposed, product). Your human can put it in force now ...
-⏺ dumen · approve(D-7K2P)
-  Claude Code: dumen: approving a decision (D-7K2P) is a human action. It puts in force
-  D-7K2P [product] "Cancelled bookings are refunded as store credit". Allow?  ▸ Yes
+⏺ dumen · decisions_for_topic({"topic":"payments"})
+  ⎿ Approved decisions on topic payments (1):
+    - D-7TCH [product] Cancelled bookings are refunded as store credit (product-wide; topics: payments)
+    Follow them; do not ask your human again what they settle. get_decision has the reasons.
+⏺ The team already decided this. Decision D-7TCH (product-wide, topic: payments, approved):
+  "Cancelled bookings are refunded as store credit." ... So I won't ask whether the refund goes
+  to the card or to store credit. ...
+  One thing the decision doesn't settle is the amount of store credit. I'll assume the full
+  amount paid for the booking ... Do you want a different amount, such as a cancellation fee?
 ```
 
-**2. Mehmet's agent hears about it on its next step.** It is in the middle of a refund
-endpoint in `billing-svc`. Its next tool call carries the news:
+The agent asked only what was still open. When an agent is about to ask a question the team
+already answered, with Claude Code's question tool, dumen also holds the question back once
+and shows the decision.
 
-```text
-[dumen] DECISION NEWS (1): approved by a teammate since this session started; binding from now on
-- D-7K2P [product] Cancelled bookings are refunded as store credit (approved by ayse@example.com; in booking-svc)
-Follow them from now on. If one changes what you are doing, tell your human in one line ...
-```
+### Two backend developers, one product
 
-**3. Nobody asks the same question twice.** A week later Sofia's agent in `web-app` is about
-to ask her "refund to the card, or store credit?" for the cancel screen. dumen holds the
-question back once and shows the answer the team already gave:
+Ayşe's agent in `booking-svc` asks her what happens to the money when a guest cancels. She
+picks an option in Claude Code's question prompt; the agent saves it with `record_answer` and
+she confirms `approve`. Mehmet's agent in `billing-svc`, in the middle of a refund endpoint,
+gets the same DECISION NEWS on its next step. When Mehmet later learns that store credit
+breaks the accounting rules in one country, he tells his agent to change it; the agent calls
+`supersede`, he confirms, and every agent on payments hears "D-9QXA ... replaces D-7K2P".
+Anyone who asks their agent "what changed this week?" gets the same list from the `news` tool.
 
-```text
-dumen: the team may already have decided this. This approved decision looks related:
-- D-7K2P [product] Cancelled bookings are refunded as store credit
-If one of them answers your question, follow it and tell your human which decision you
-followed; do not ask. ...
-```
-
-**4. Changing your mind is one step, and it is news too.** Mehmet learns that store credit
-breaks the accounting rules in one country. He asks his Claude to supersede D-7K2P with
-"Cancelled bookings are refunded to the card", confirms the prompt, and every agent working on
-payments gets "D-9QXA ... replaces D-7K2P" on its next step. `dumen news` shows the same to
-people:
-
-```text
-$ dumen news --all
-Decisions in force for this project since 2026-11-14 10:00 (2), newest first
-
-11-21 15:02  D-9QXA  product      Cancelled bookings are refunded to the card
-                    approved by mehmet@example.com in billing-svc; applies to all (product-wide)
-                    replaces D-7K2P: Cancelled bookings are refunded as store credit
-11-21 11:40  D-7K2P  product      Cancelled bookings are refunded as store credit
-...
-```
-
-(The output above follows dumen's messages, shortened; it was not recorded from one session.)
-
-Other decisions the same team keeps: "Only billing-svc talks to the payment provider"
-(architecture), "Guests pick a time from slot buttons grouped by part of day" (UI), "A
-booking is held for 10 minutes while the guest pays" (product), "Creating a booking is
-idempotent with an Idempotency-Key header" (technical).
+Other decisions such a team keeps: "Only billing-svc talks to the payment provider"
+(architecture), "A booking is held for 10 minutes while the guest pays" (product), "Creating a
+booking is idempotent with an Idempotency-Key header" (technical).
 
 ## Who does what
 
-Once dumen is installed, nobody has to learn a new command. People talk to Claude as usual.
+Nobody learns a new command. People talk to Claude as usual; the commands and tools are the
+agent's.
 
-| The agent does it on its own | A person decides |
+| The agent does it | A person decides, inside Claude Code |
 | --- | --- |
+| **Sets dumen up** and joins teammates' machines, from its own shell | **Asks for it**: "set up dumen", "join our project" |
 | **Sees the decisions** for its service and the product-wide ones at session start | **Answers the agent's question**, as they already do |
 | **Looks before it asks**: decisions on the topics of the prompt, the plan, the question | **Puts the answer in force** with one Yes in the permission prompt |
-| **Saves an answer** as a proposed decision with the question it came from | **Changes a decision** (supersede) when the team learns more |
+| **Saves an answer** as a proposed decision, with what it needs from other services | **Changes a decision** (supersede) when the team learns more |
 | **Gets news** when a teammate approves or replaces a decision | **Publishes a directive** (PM or lead): "Freeze billing auth for release week" |
-| **Reports** when it is blocked, waiting for its human, or finished | |
+| **Reports** when it is blocked, waiting for its human, or finished | **Adds teammates** and names the product's services and topics |
 
-**An agent cannot approve through its tools.** Approving or superseding a decision and
-publishing a directive go through Claude Code's own permission prompt, where a person answers
-Yes or No, and agents only ever receive decisions a person approved. The same actions are
-available from a terminal with the `dumen` CLI. This is a guard rail, not a security boundary:
-see [Security model](docs/security.md).
+**An agent cannot approve on its own.** Every human action (approve, reject, supersede,
+publish or withdraw a directive, change roles or the product, confirm a link, turn monitoring
+off) goes through Claude Code's permission prompt, and the prompt says exactly what will
+happen. Agents only ever receive decisions a person approved. This is a guard rail, not a
+security boundary: see [Security model](docs/security.md).
 
 ## How it works
 
@@ -159,64 +202,6 @@ Your code never leaves your machine. dumen stores what people and agents write f
 activity, file paths and a one-line summary of the agent's last message with code removed. It
 never stores file contents, prompts or tool output.
 
-## Quickstart
-
-You need `git`, Go 1.25 or newer, and Claude Code. dumen uses the SSH keys or credential helper
-your `git` already has.
-
-**1. Install the binary** (everyone)
-
-```sh
-go install github.com/nurettincoban/dumen/cmd/dumen@latest
-```
-
-**2. Create the store** (one person, once, inside your code repository)
-
-```sh
-dumen init
-git add .dumen && git commit -m "Add dumen" && git push
-dumen role set ayse@example.com dev      # teammates, by their git user.email
-```
-
-```text
-Created branch "dumen" on git@git.example.com:team/shop.git with you (maya@example.com) as lead.
-Wrote .dumen. Commit it so teammates can run `dumen join`.
-...
-```
-
-The store holds your teammates' email addresses and one-line summaries of what their agents
-did. **Never keep it in a public repository.** For a public or busy repository, give the store
-a private repository of its own: see [Set up the store](docs/usage.md#set-up-the-store).
-
-**3. Connect Claude Code** (each developer, once, inside Claude Code)
-
-```text
-/plugin marketplace add nurettincoban/dumen
-/plugin install dumen@dumen
-```
-
-**4. Join** (every other developer, once per machine)
-
-```sh
-git pull && dumen join
-```
-
-```text
-Joined project "shop" as ayse@example.com, role: dev.
-```
-
-That is all. Start Claude Code as usual. Optionally tell dumen your services and the words of
-your product, so it can match decisions to what people ask for:
-
-```sh
-dumen product --name "Table reservations" \
-  --service booking-svc="Creates, changes and cancels bookings" \
-  --service billing-svc="Payments and refunds" \
-  --service web-app="The guest-facing site" \
-  --topic payments=refund,charge,card,deposit \
-  --topic booking-flow="booking page,time picker,slot"
-```
-
 ## What you get
 
 - **Decisions of every kind.** Product, UX, UI, architecture and technical, each with a
@@ -224,9 +209,9 @@ dumen product --name "Table reservations" \
   allowed and not, and the options not taken. Teams can add kinds of their own.
 - **Ask once.** An answer to an agent's question becomes a decision, with the question and
   the picked option, and dumen holds back the same question later.
-- **News.** A decision approved or replaced anywhere reaches the agents it concerns on their
-  next step, and the next session opens with what changed. `dumen news` is the same for
-  people.
+- **News, mid-session.** A decision approved or replaced anywhere reaches the agents it
+  concerns on their next step, with what it needs from their service, and the next session
+  opens with what changed.
 - **Look before you ask.** Decisions on the topics of a prompt or a plan are shown to the
   agent; `decisions_for_topic` answers "did we decide this?".
 - **Directives.** Short-lived instructions for every agent, one role, one area or some
@@ -234,11 +219,12 @@ dumen product --name "Table reservations" \
   ![A directive blocks an edit](docs/assets/dumen-demo.gif)
 - **Sources of truth.** Point at a Claude Design file, an Artifact, a pull request or a doc.
   dumen keeps the link and a one-line label, and never fetches a URL.
-- **An activity log.** Who started, who finished, who is blocked, who waits for a human.
+- **An activity log.** Ask your agent who started, who finished, who is blocked, who waits
+  for a human.
 - **Many repositories, one product.** One store for all your services; a decision can name
   the services it applies to.
-- **A check on the diff.** `dumen check` fails when a change touches a frozen path, whatever
-  tool made it. Run it in CI or before a push.
+- **A check on the diff for CI.** `dumen check` fails when a change touches a frozen path,
+  whatever tool made it.
 - **Private sessions** and **a secret scan on every write**.
 
 ## Honest limits
@@ -250,7 +236,7 @@ the real `claude` CLI; it compiles for macOS and Windows and has not been run th
   who can `git push` to the store can forge a record.
 - **`deny` blocks Claude Code's file tools.** An agent that runs `sed -i` through Bash can still
   change a frozen file. Agents are told not to, and nearly always comply. dumen does not undo
-  such a change; it reports it in `dumen activity`, and `dumen check` fails on it in CI.
+  such a change; it reports it in the activity log, and `dumen check` fails on it in CI.
 - **About 10 seconds, then the next step.** News reaches a working agent on its next tool
   call or prompt, or before it stops. An agent waiting for its human hears it with the next
   message.
@@ -258,6 +244,8 @@ the real `claude` CLI; it compiles for macOS and Windows and has not been run th
   prompt, plan or question. It does not understand meaning, so it can miss a decision or
   show an unrelated one; asking again always goes through.
 - **Claude Code only, small teams.** Built for about 2 to 20 people.
+- **The plugin needs the `dumen` binary** on each machine's PATH; there is no packaged
+  release yet.
 - **Everyone needs git access to the store**, including product managers.
 
 The full list is in [Limits](docs/limits.md), and the reasoning in [Security model](docs/security.md).
@@ -266,8 +254,8 @@ The full list is in [Limits](docs/limits.md), and the reasoning in [Security mod
 
 | Page | What is in it |
 | --- | --- |
-| [Using dumen](docs/usage.md) | Store setup, directives, decisions, links, monitoring, several repositories, privacy |
-| [Reference](docs/reference.md) | Every command and flag, environment variables, MCP tools, hooks, data layout |
+| [Using dumen](docs/usage.md) | What to say to your agent for setup, decisions, directives, links, monitoring, several repositories, privacy |
+| [Reference](docs/reference.md) | The agent's interface: MCP tools, hooks, CLI commands and flags, environment variables, data layout |
 | [Security model](docs/security.md) | What an agent can and cannot do, how human actions stay human, what to protect |
 | [Limits](docs/limits.md) | Everything dumen does not do yet |
 | [Design](docs/design.md) | Why it is built this way |

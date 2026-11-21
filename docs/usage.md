@@ -1,105 +1,76 @@
 # Using dumen
 
-Day-to-day use, for people. Agents do most of this on their own through the MCP tools; every
-command here is also something you can simply ask your Claude to do.
+You use dumen by talking to Claude Code. Your agent runs the `dumen` commands and calls the
+dumen tools; you answer its questions and confirm the permission prompts of the human
+actions. Each section below shows what you say, what the agent does, and what you confirm.
+The commands and tools themselves are listed in the [Reference](reference.md), as the
+agent's interface.
 
 - [Set up the store](#set-up-the-store)
 - [Connect Claude Code](#connect-claude-code)
-- [Directives](#directives)
+- [The team](#the-team)
 - [Decisions](#decisions)
+- [Directives](#directives)
 - [Sources of truth](#sources-of-truth)
 - [Monitoring](#monitoring)
-- [Check a change](#check-a-change)
 - [Several repositories, one team](#several-repositories-one-team)
 - [Privacy](#privacy)
+- [Check a change in CI](#check-a-change-in-ci)
 - [claude.ai on the web](#claudeai-on-the-web)
 
 ## Set up the store
 
-The store is where the records live. We recommend a small, private repository of its own: create
-an empty one on your git host, then point your code repository at it.
+The store is where the records live. We recommend a small, private repository of its own.
+Create an empty one on your git host, then, in your code repository:
 
-```sh
-cd your-repo
-dumen init --store git@git.example.com:team/dumen-store.git#dumen
-git add .dumen && git commit -m "Add dumen" && git push
-```
+> Set up dumen for our team. The store is git@git.example.com:team/dumen-store.git#dumen and
+> the project is called shop.
 
-To try dumen quickly you can leave `--store` out. The records then go to an orphan branch named
-`dumen` in the code repository itself:
+The agent runs `dumen init` from its shell, which creates the branch `dumen` in the store
+with you as lead and writes a small `.dumen` file telling teammates where the store is (it
+holds no secrets). It then offers to commit `.dumen`. Teammates, in their clone:
 
-```sh
-dumen init              # creates the orphan branch "dumen" on origin, with you as lead
-```
+> Join our dumen project.
 
-Two reasons to prefer a separate repository. Every activity event is a small commit, so a busy
-team adds thousands of commits a day that every `git fetch` of the code repository would carry.
-And the store holds your teammates' email addresses and one-line summaries of what their agents
-did: **never keep the store in a public repository.**
-
-`.dumen` is a small text file that tells teammates where the store is. It holds no secrets.
-
-Add your teammates by their git `user.email`:
-
-```sh
-dumen role set ayse@example.com dev
-dumen role set mehmet@example.com lead
-dumen role list
-```
-
-Everybody with a role may approve and change decisions: they are binding but changeable, and
-every change reaches the other agents as news. People with the role `lead` or `pm` may also
-publish directives. Agents may read, draft and propose, never approve.
+The agent runs `dumen join`. To try dumen quickly you can leave the store out; the records
+then go to an orphan branch named `dumen` in the code repository itself. Two reasons to
+prefer a separate repository: every activity event is a small commit, which a busy team
+would otherwise carry in every `git fetch` of the code; and the store holds your teammates'
+email addresses and one-line summaries of what their agents did. **Never keep the store in
+a public repository.**
 
 ## Connect Claude Code
 
-**Option A, the plugin (recommended).** Each developer runs this once inside Claude Code:
+**The plugin (recommended).** Each developer, once, inside Claude Code:
 
-```
+```text
 /plugin marketplace add nurettincoban/dumen
 /plugin install dumen@dumen
 ```
 
-The plugin brings the hooks, the MCP server and the skill. It stays silent in directories that
-have nothing to do with a dumen project. The first time an agent uses a dumen tool, Claude Code asks for permission;
-choose "always allow" for the reading and acknowledging tools. Never pre-approve `approve`,
-`supersede` or `publish_directive`: those are your confirmation step.
+The plugin brings the hooks, the MCP server and the skill; it needs the `dumen` binary on
+`PATH`. It stays silent in directories that have nothing to do with a dumen project. The
+first time an agent uses a dumen tool, Claude Code asks for permission: choose "always
+allow" for the reading, acknowledging and drafting tools. Never pre-approve the human
+actions (`approve`, `reject`, `supersede`, `publish_directive`, `withdraw_directive`,
+`set_role`, `set_product`, `check_ref`, `set_private`): their prompt is your confirmation.
 
-**Option B, files in the repository.** One person runs this and commits the result. Nobody has to
-install a plugin, but every developer still needs the binary on `PATH`.
+**Files in the repository, instead.** Ask your agent to "install dumen into this
+repository". It runs `dumen install`, which writes `.claude/settings.json`, `.mcp.json` and
+`.claude/skills/dumen/`, and offers to commit them. Nobody installs a plugin then, but every
+developer still needs the binary. Use one option or the other: with both, every hook runs
+twice.
 
-```sh
-dumen install           # writes .claude/settings.json, .mcp.json, .claude/skills/dumen/
-git add .claude .mcp.json && git commit -m "Wire dumen into Claude Code" && git push
-```
+## The team
 
-`dumen install` also pre-approves the dumen tools an agent may always use (reading, acknowledging,
-drafting), so sessions are not interrupted by permission prompts. The three human actions are
-never pre-approved. Claude Code applies these permissions only after you have opened the repository once and
-accepted its trust dialog; until then it asks.
+> Add ayse@example.com to the team as a dev, and mehmet@example.com as a lead.
 
-Use one option or the other. With both, every hook runs twice and the activity log gets duplicate
-events.
+The agent calls `set_role` once per person. The prompt says what happens, for example
+`It gives ayse@example.com the role "dev"`. People are named by their git `user.email`.
 
-## Directives
-
-```sh
-dumen direct --all "Prefer small pull requests this week"
-dumen direct --role dev --for 12h "Run the integration tests before you finish"
-dumen direct --deny --paths 'src/auth/**,migrations/**' --until 2026-12-01 "Frozen for the audit"
-dumen direct --area payments "The payments API contract is frozen, see R-N3WS"
-dumen directives            # what is active
-dumen withdraw Y-MXE3
-```
-
-A directive is either `context` (agents are told) or `--deny` (agents are told, and edits under
-the scope are blocked). It is scoped to everyone, a role, an area or path patterns, and it always
-expires (seven days unless you say otherwise). Anyone, including an agent, can *propose* a
-directive with `--propose`; a publisher puts it in force with `dumen direct --publish <id>`.
-
-Each agent acknowledges a directive once per session. An agent that has not done so is reminded
-once, on its next tool call. `dumen activity` lists who has not acknowledged yet. For a directive
-limited to some repositories, only people whose agents worked there are listed.
+Everybody with a role may approve and change decisions: they are binding but changeable,
+and every change reaches the other agents as news. People with the role `lead` or `pm` may
+also publish directives. Agents may read, draft and propose, never approve.
 
 ## Decisions
 
@@ -116,171 +87,114 @@ below are from a table-reservation product with `booking-svc`, `billing-svc` and
 
 ### Most decisions start as a question
 
-You rarely type a decision. Your agent asks you "A or B?" while it works, you answer, and the
-agent saves the answer with `record_answer`: the question, the option you picked, a
-one-sentence rule, its kind, services and topics. It then offers to put it in force. Say yes,
-confirm the permission prompt, and the decision binds every agent from then on. Agents in the
-services it concerns get it as `DECISION NEWS` on their next step, in the session they are
-running: each session checks the store about every 10 seconds, and an agent about to end its
-turn is held once to read the news.
+Your agent asks you "A or B?" while it works, you answer, and the agent saves the answer
+with `record_answer`: the question, the option you picked, a one-sentence rule, its kind,
+services and topics. It then offers to put it in force. Say yes and confirm the prompt, which
+quotes the rule; from then on it binds every agent. Agents in the services it concerns get it
+as `DECISION NEWS` on their next step, in the session they are running: each session checks
+the store about every 10 seconds, and an agent about to end its turn is held once to read the
+news.
 
-When an agent is about to ask something an approved decision already answers, dumen holds the
-question back once and shows the decision. If it does not fit, the agent asks again and the
-question goes through.
+When an agent is about to ask something an approved decision already answers, dumen holds
+the question back once and shows the decision. If it does not fit, the agent asks again and
+the question goes through. Agents also look on their own before asking (`decisions_for_topic`).
 
-### From a terminal
+### Decisions you state yourself
 
-```sh
-dumen decide --kind architecture --title "Payments go through billing" \
-  --rule "Only billing-svc talks to the payment provider" --topics payments \
-  -m "Why: one place for PCI scope and refunds. Not allowed: calling the provider's SDK from booking-svc."
-dumen decide --kind ui --services web-app --topics booking-flow \
-  --title "Time selection" --rule "Guests pick a time from slot buttons grouped by part of day" \
-  -m "Why: fewer taps on phones. Rejected: a calendar with a free time picker." --approve
+> Record an architecture decision: only billing-svc talks to the payment provider. Why: one
+> place for PCI scope and refunds. Not allowed: calling the provider's SDK from booking-svc.
+> Put it in force.
 
-dumen decisions                      # in force for this repository
-dumen decisions --kind product       # or --service billing-svc, --topic payments
-dumen questions                      # proposed decisions you may approve, with the question asked
-dumen approve D-7K2P                 # or: dumen reject D-7K2P
-dumen supersede D-7K2P --title "Refunds to the card" --rule "Cancelled bookings are refunded to the card" -m "Why: ..."
-dumen news --since 7d                # what came into force or was replaced lately
-dumen show D-7K2P
-```
+The agent drafts it with `draft_decision` and calls `approve`; you confirm. A lasting choice
+the agent made without asking you (a library, an API shape) is drafted the same way and stays
+proposed until you approve it.
 
-When a decision needs work from another service, name it with `--needs`, for example a UI
-decision in `web-app` that needs the backend to return a new field:
+### When a decision needs work from another service
 
-```sh
-dumen decide --kind ui --services web-app --title "Seats on slots" \
-  --rule "Slot buttons show how many tables are left" \
-  --needs booking-svc="Return remaining tables per slot in GET /slots" -m "Why: ..." --approve
-```
+> The slot buttons should show how many tables are left. The backend needs to return that
+> per slot in GET /slots.
 
-The agents working on `booking-svc` get it as news with `NEEDS FROM booking-svc: ...`, in the
-session they are running.
+The agent adds `needs` (`{"booking-svc": "Return remaining tables per slot in GET /slots"}`).
+The approve prompt says `It asks booking-svc to: ...`, and the agents working on `booking-svc`
+get `NEEDS FROM booking-svc: ...` in the session they are running. A real session of exactly
+this is in the [README](../README.md#real-sessions).
 
-Without `--services`, a decision applies to the whole product. `--paths` still links a
-decision to files, for the teams that want that.
+### Changing a decision
+
+> D-7K2P is wrong for our accounting: refunds go back to the card. Change it.
+
+The agent calls `supersede`; the prompt says `It retires D-7K2P ... and puts in force ...`.
+Every agent on the topic hears "D-9QXA ... replaces D-7K2P".
+
+### What changed, what is open
+
+> What decisions changed this week?
+> Which proposed decisions are waiting for an approval?
+
+The agent calls `news` and `search_decisions` with status `proposed`. It can show any
+decision in full with `get_decision`, and approve or reject one when you say so.
 
 ### Who may approve
 
-Anyone with a role. Decisions are binding but changeable, and the safeguard is that everyone
-hears about every change. A team that wants a gate for a kind sets an owner role, for example
-only leads for architecture:
-
-```sh
-dumen product --kind architecture=lead
-```
-
-Proposed decisions are never shown to other agents as facts, only as a count. Proposed
-decisions nobody approves are archived after seven days by `dumen gc`.
+Anyone with a role. The safeguard is that everyone hears about every change. A team that
+wants a gate for a kind asks its agent to set an owner role, for example "only leads approve
+architecture decisions" (`set_product` with `kinds`). Proposed decisions are never shown to
+other agents as facts, only as a count, and the ones nobody approves are archived after seven
+days.
 
 ### Products, services and topics
 
-`dumen product` tells dumen the words of your product, so it can match decisions to prompts,
-plans and questions:
+> Our product is Table reservations. Services: booking-svc creates, changes and cancels
+> bookings; billing-svc does payments and refunds; web-app is the guest-facing site. Topics:
+> payments (refund, charge, card, deposit) and booking-flow (booking page, time picker, slot).
 
-```sh
-dumen product --name "Table reservations" \
-  --service booking-svc="Creates, changes and cancels bookings" \
-  --service billing-svc="Payments and refunds" \
-  --service web-app="The guest-facing site" \
-  --topic payments=refund,charge,card,deposit \
-  --topic booking-flow="booking page,time picker,slot"
-dumen product                        # show it
-```
+The agent calls `set_product`; the prompt lists every name, service and topic it sets. These
+words let dumen match decisions to prompts, plans and questions. A topic need not be
+declared: its own name is a keyword. Matching is by words, not meaning.
 
-A topic need not be declared: its own name is a keyword. Matching is by words, not meaning.
+## Directives
+
+A directive is a short-lived instruction to agents, either `context` (agents are told) or
+`deny` (agents are told, and edits under its scope are blocked). It is scoped to everyone, a
+role, an area or path patterns, and it always expires, after seven days unless you say
+otherwise.
+
+> Tell every agent: auth is frozen until the audit ends, for a week. Block edits in src/auth.
+
+A PM or lead says this; the agent calls `publish_directive`, and the prompt says
+`It tells paths src/auth/** [deny]: "..."`. Anyone's agent can *propose* a directive with
+`propose_directive`; a PM or lead puts it in force. "End the auth freeze" withdraws it
+(`withdraw_directive`).
+
+Each agent acknowledges a directive once per session; an agent that has not is reminded once.
+Ask your agent who has not acknowledged yet.
 
 ## Sources of truth
 
-Designs usually live in Claude Design and documents in Claude Artifacts. Point at them instead of
-copying them:
+Designs usually live in Claude Design and documents in Claude Artifacts. Point at them
+instead of copying them:
 
-```sh
-# a design, from Claude Design
-dumen ref add "<Claude Design link>" --kind design --title "Checkout flow v3" \
-  --governs "checkout screens"
+> Link the checkout design (paste the Claude Design link) as the source of truth for the
+> checkout screens.
 
-# a document (spec, plan, API contract), from a Claude Artifact
-dumen ref add https://claude.ai/artifact/abc123 --kind artifact --title "Payments API contract" \
-  --governs "request and response shapes of the payments API" --paths 'src/payments/**'
-
-dumen ref list
-dumen ref check R-7GE1      # "I looked, the link is right"
-```
-
-An agent can add a link too, but a link added by an agent is marked unverified and is not shown
-to any agent until a person confirms it with `dumen ref check`. Text written by one agent never
-reaches the others without a person in between.
-
-Other kinds are `mr` (a merge or pull request) and `doc` (any other document). An agent that
-edits a file under `--paths` is shown the link and its label. dumen stores the link and a one-line
-label, never the content, and never fetches a URL on its own.
+The agent calls `add_ref` with the link, a one-line title and what it governs. A link added
+by an agent is unverified and not shown to any agent until a person confirms it: the agent
+offers `check_ref`, and the prompt shows the link's title and URL. dumen stores the link and a
+one-line label, never the content, and never fetches a URL.
 
 ## Monitoring
 
-```sh
-dumen activity                         # today: counts, sessions, who is stuck, who has not acked
-dumen activity --since 7d --person ayse
-dumen activity --kind blocked --events
-dumen activity --json                  # for scripts
-dumen watch                            # live tail
-```
+> What did the team's agents do today? Who is stuck?
 
-## Check a change
-
-A hook can stop Claude Code's file tools, but not a shell command that rewrites a file. A diff
-shows every change, whatever made it. `dumen check` fails when a change touches a path under an
-active deny directive:
-
-```sh
-dumen check                    # the work tree against HEAD, for a pre-commit hook
-dumen check origin/main..HEAD  # a commit range, for CI or a pre-push hook
-```
-
-```text
-src/auth/login.go  Y-PBG4  Auth is frozen until the audit ends (until 2026-11-24 10:51)
-dumen: 1 of 3 changed files in origin/main..HEAD is under a deny directive
-```
-
-A range is checked the way a pull request shows it: what `HEAD` changed since it forked from
-`origin/main`. Commits that `origin/main` gained in the meantime do not count against the
-branch. `a..b` and `a...b` mean the same here.
-
-It prints `OK: ...` and exits with 0 when nothing is found, exits with 1 when a change is under
-a deny directive, and with 2 when the check could not be made (an unknown commit, no common
-ancestor). It applies the deny directives that are active at the moment it runs.
-
-To run it in CI, on any git host, the job needs the `dumen` binary, read access to the store,
-a git identity, and enough history to find where the branch forked. Most CI systems make a
-shallow clone by default: set the fetch depth to the full history, or run
-`git fetch --unshallow` first.
-
-```sh
-git config user.email ci@example.com
-dumen join
-dumen check "$BASE_SHA..$HEAD_SHA"
-```
-
-Running sessions do the same check at the end of each turn, on their work tree and on the
-commits they made and have not pushed. A change
-under a deny directive shows up in `dumen activity` under "Changes under a deny directive". The
-session is not stopped and nothing is undone.
+The agent calls `activity`: counts, finished sessions with their last note, sessions blocked
+or waiting for a person, and who has not acknowledged each directive.
 
 ## Several repositories, one team
 
-Teams with microservices keep one store for all of their repositories. Create it once, in any
-repository you like (a small dedicated one works well), and point every service at it:
-
-```sh
-# in each service repository
-dumen init --store git@git.example.com:team/dumen-store.git#dumen --repo orders
-git add .dumen && git commit -m "Add dumen" && git push
-```
-
-The repository name defaults to the name of the `origin` remote. Paths in directives, decisions
-and refs can then name a repository:
+Teams with microservices keep one store for all of their repositories. In each service, ask
+the agent to set dumen up with the same store and project; it runs `dumen init --store ...`
+there, and the repository's name comes from its `origin` remote. Paths can then name a
+repository:
 
 | Pattern | Matches |
 | --- | --- |
@@ -288,33 +202,46 @@ and refs can then name a repository:
 | `orders:src/db/**` | that path in the `orders` repository only |
 | `orders:**` | everything in `orders` |
 
-```sh
-dumen direct --deny --paths 'orders:migrations/**' "Schema is frozen until the release"
-dumen activity --repo orders
-```
-
-One `dumen activity` shows the sessions of every service. The rules that apply to an edit are
-those of the repository the file is in, so a session opened in `gateway` cannot edit a frozen
-path in `../orders`, and a session opened in the directory that holds all the repositories gets
-the directives of all of them.
+A decision can name the services it applies to; agents in a service see that service's
+decisions and the product-wide ones. The rules that apply to an edit are those of the
+repository the file is in, so a session opened in `gateway` cannot edit a frozen path in
+`../orders`.
 
 ## Privacy
 
-Monitoring is visible and optional per session.
+> Don't monitor my sessions on this machine for now.
+
+The agent calls `set_private`; the prompt says it turns monitoring off. The fact that a
+session is private is itself recorded, so the team sees "a private session ran", and nothing
+else. Directives and decisions still apply.
+
+Activity events hold a kind, a one-line summary, file paths, the repository name and the
+commit the session started from. They never hold prompts or tool output. The summary is the
+first paragraph of the agent's last message with code removed, cut to one line. Every write
+is scanned for common secret formats and is rejected when one matches.
+
+## Check a change in CI
+
+A hook can stop Claude Code's file tools, but not a shell command that rewrites a file. A
+diff shows every change, whatever made it. In CI, which is a machine and not a person,
+`dumen check` fails when a change touches a path under an active deny directive:
 
 ```sh
-dumen private on      # your new sessions stop sending activity
-dumen private off
+git config user.email ci@example.com
+dumen join
+dumen check "$BASE_SHA..$HEAD_SHA"
 ```
 
-The fact that a session is private is itself recorded, so the team sees "a private session ran",
-and nothing else. Directives still apply to private sessions.
+```text
+src/auth/login.go  Y-PBG4  Auth is frozen until the audit ends (until 2026-11-24 10:51)
+dumen: 1 of 3 changed files in origin/main..HEAD is under a deny directive
+```
 
-Activity events hold a kind, a one-line summary, file paths, the repository name and the commit
-the session started from. They never hold prompts or tool output. The summary is the first
-paragraph of the agent's last message with code blocks and long code spans removed, cut to one
-line. Every write is scanned for common secret formats (cloud keys, git host tokens, private keys
-and others) and is rejected when one matches.
+A range is checked the way a pull request shows it. It exits with 0 when nothing is found,
+1 when a change is under a deny directive, and 2 when the check could not be made. The job
+needs the binary, read access to the store and enough history to find where the branch
+forked (most CI systems make a shallow clone by default). Running sessions do the same check
+at the end of each turn and report a change under a deny directive in the activity log.
 
 ## claude.ai on the web
 

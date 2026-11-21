@@ -1,0 +1,15 @@
+⏺ Bash({"command":"sh check.sh","description":"Run check.sh once and wait for it to finish"})
+  ⎿ go vet: ok
+⏺ Read({"file_path":"/work/slots.go"})
+  ⎿ 1	package slots
+    2	
+    3	// List returns the open slots of a day.
+    4	func List() []string { return nil }
+    5
+⏺ **check.sh** ran once and passed: `go vet: ok`.
+    
+    **src/slots.go** is a stub: a `List()` function that returns `nil` and no slot data.
+    
+    **Team changes:** Yes. A teammate (sofia@example.com) approved decision **D-DW4S** during this session. It is a UI decision: time picker slot buttons show how many tables are left for each slot. It is binding now. For this service it means `GET /slots` must return the remaining tables per slot. Right now `slots.List()` returns nothing, so that work is not started. The `/slots` handler isn't in this file, so I haven't checked where it lives.
+    
+    I haven't pulled the full decision record from dumen, so the details above come from the news summary only.

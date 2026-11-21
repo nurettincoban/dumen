@@ -244,7 +244,7 @@ or writes under `~/.dumen` (redirects, `rm`, `mv`, `cp`, `tee`, `sed -i`, `git -
   "hookSpecificOutput": {
     "hookEventName": "PreToolUse",
     "permissionDecision": "deny",
-    "permissionDecisionReason": "dumen: approving and publishing are human actions and the dumen store is not edited directly. Ask your human to run this in their own terminal."
+    "permissionDecisionReason": "dumen: approving, rejecting, superseding, publishing ... are human actions. Call the matching dumen tool instead (approve, reject, supersede, publish_directive, ...) only when your human agrees: they confirm it in the permission prompt. If no prompt appears, ask them to switch to a mode that asks (shift+tab) or to reconnect dumen with /mcp."
   }
 }
 ```

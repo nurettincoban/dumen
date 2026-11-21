@@ -1,5 +1,11 @@
 # Reference
 
+This page is the agent's interface: the MCP tools and hooks Claude Code uses, and the `dumen`
+commands the agent runs from its shell. People do not type these; they talk to their agent and
+confirm its permission prompts (see [Using dumen](usage.md)). The only callers besides an agent
+are CI (`dumen check`) and, as an emergency path, a person at a real terminal for the human
+actions.
+
 - [Commands](#commands)
 - [Environment variables](#environment-variables)
 - [MCP tools](#mcp-tools)
@@ -113,11 +119,20 @@ Claude Code starts `dumen mcp` for each session. Through the plugin the tools ar
 | `draft_decision` | Record a proposed decision for a lasting choice of any kind, with its rule, kind, services and topics. | nobody |
 | `approve` | Approve a proposed decision. | **the person** |
 | `supersede` | Replace an approved decision with a new approved one. | **the person** |
-| `add_ref` | Record a link. It stays unverified until a person runs `dumen ref check`. | nobody |
+| `reject` | Reject a proposed decision. | **the person** |
+| `withdraw_directive` | End an active directive early. | **the person** |
+| `set_role` | Add a teammate with a role, change it, or remove them with an empty role. | **the person** |
+| `set_product` | Name the product, its services, topics with keywords, and the approver role of a kind. | **the person** |
+| `check_ref` | Confirm a link an agent added, so other agents see it. | **the person** |
+| `set_private` | Stop or resume monitoring of new sessions on this machine. | **the person** |
+| `news` | Decisions that came into force recently, with who approved them, where, what they replaced and what they need. | nobody |
+| `add_ref` | Record a link. It stays unverified until a person confirms it (`check_ref`). | nobody |
 | `log_event` | Log where the session stands: `asking_human`, `blocked`, `progress`, `finished` or `decision_read`. | nobody |
 | `activity` | Summarise activity: counts, sessions, who is stuck, who has not acknowledged. | nobody |
 
-"The person" means Claude Code's permission prompt. It is used only in the permission modes
+"The person" means Claude Code's permission prompt, which says what the call will do (for
+example `It gives ayse@example.com the role "dev"`). Every tool also accepts an optional
+`session`, the dumen session id from the session-start block. It is used only in the permission modes
 where a person answers it (`default`, `acceptEdits`, `plan`); in every other mode the call is
 refused. See [Security model](security.md).
 

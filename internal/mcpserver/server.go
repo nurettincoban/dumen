@@ -162,7 +162,12 @@ func (s *Server) flushSoon(p *project.Project) {
 
 // ---- tool inputs ----
 
-type empty struct{}
+type empty struct{ sessionOpt }
+
+// sessionOpt lets an agent pass the session id it saw at session start to any tool.
+type sessionOpt struct {
+	Session string `json:"session,omitempty" jsonschema:"the dumen session id from the session-start block; only needed if dumen asks for it"`
+}
 
 type idIn struct {
 	ID      string `json:"id" jsonschema:"record id, for example D-4HTR or Y-7K2M"`
@@ -177,6 +182,7 @@ type scopeIn struct {
 }
 
 type directiveIn struct {
+	sessionOpt
 	ID   string  `json:"id,omitempty" jsonschema:"publish_directive only: id of an existing proposal to publish as is"`
 	Text string  `json:"text,omitempty" jsonschema:"the instruction, one or two sentences"`
 	Kind string  `json:"kind,omitempty" jsonschema:"context (default) or deny; deny blocks edits and needs paths or area"`
@@ -185,11 +191,13 @@ type directiveIn struct {
 }
 
 type searchIn struct {
+	sessionOpt
 	Query  string `json:"query,omitempty" jsonschema:"words to look for in titles, areas and paths; empty lists everything"`
 	Status string `json:"status,omitempty" jsonschema:"approved (default), proposed or all"`
 }
 
 type pathIn struct {
+	sessionOpt
 	Path string `json:"path" jsonschema:"repo-relative file path"`
 }
 
@@ -210,6 +218,7 @@ type decisionIn struct {
 }
 
 type refIn struct {
+	sessionOpt
 	URL     string   `json:"url" jsonschema:"the link; dumen stores the link and labels only, never the content"`
 	Kind    string   `json:"kind" jsonschema:"design, artifact, mr or doc"`
 	Title   string   `json:"title" jsonschema:"one-line label"`
@@ -226,6 +235,7 @@ type eventIn struct {
 }
 
 type activityIn struct {
+	sessionOpt
 	Since  string `json:"since,omitempty" jsonschema:"today (default), yesterday, 2h, 7d, a date or an RFC 3339 time"`
 	Repo   string `json:"repo,omitempty" jsonschema:"only sessions working in this repository (service)"`
 	Person string `json:"person,omitempty" jsonschema:"email or part of it"`
