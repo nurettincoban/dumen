@@ -38,6 +38,7 @@ type Input struct {
 	Cwd            string `json:"cwd"`
 	PermissionMode string `json:"permission_mode"`
 	HookEventName  string `json:"hook_event_name"`
+	AgentID        string `json:"agent_id"` // set when the event comes from a subagent
 
 	Source string `json:"source"` // SessionStart
 	Reason string `json:"reason"` // SessionEnd
@@ -236,12 +237,25 @@ func refLine(ref model.Ref) string {
 }
 
 // undelivered returns active directives this session has not been shown, and marks them delivered.
+//
+// A subagent shares its parent's session id but not its context: what a hook tells the
+// subagent, the main agent never reads. Delivery is therefore tracked per agent, so a
+// subagent's tool call cannot use up the notice meant for the main agent.
 func (r *runCtx) undelivered() []cache.Directive {
+	seen := &r.sess.Delivered
+	if id := r.in.AgentID; id != "" {
+		if r.sess.SubDelivered == nil {
+			r.sess.SubDelivered = map[string][]string{}
+		}
+		list := r.sess.SubDelivered[id]
+		seen = &list
+		defer func() { r.sess.SubDelivered[id] = list }()
+	}
 	var out []cache.Directive
 	for _, d := range r.c.ActiveDirectives(r.role, r.proj.Repo, r.now) {
-		if !session.Has(r.sess.Delivered, d.ID) {
+		if !session.Has(*seen, d.ID) {
 			out = append(out, d)
-			r.sess.Delivered = append(r.sess.Delivered, d.ID)
+			*seen = append(*seen, d.ID)
 		}
 	}
 	return out
@@ -286,7 +300,7 @@ func (r *runCtx) log(kind, text string, ids ...string) {
 
 func (r *runCtx) sessionStart() *Output {
 	// After compaction or /clear the earlier context is gone, so everything is shown again.
-	r.sess.Delivered = nil
+	r.sess.Delivered, r.sess.SubDelivered = nil, nil
 	r.sess.Reminded = nil
 	r.sess.Finished = false
 	if r.sess.Started == "" {
@@ -634,7 +648,8 @@ func (r *runCtx) preToolUse() *Output {
 	// Before new directives are marked delivered below, so that a directive is first
 	// shown and only reminded about on a later tool call.
 	var nudge []string
-	if !strings.HasSuffix(r.in.ToolName, "__ack_directive") {
+	// A subagent is not reminded: the reminder is spent once per session, and the main agent must be the one to read it.
+	if r.in.AgentID == "" && !strings.HasSuffix(r.in.ToolName, "__ack_directive") {
 		nudge = r.unackedOnce()
 	}
 	if ds := r.undelivered(); len(ds) > 0 {

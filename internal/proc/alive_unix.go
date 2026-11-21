@@ -1,6 +1,6 @@
 //go:build !windows
 
-package session
+package proc
 
 import (
 	"errors"
@@ -8,8 +8,8 @@ import (
 	"syscall"
 )
 
-// alive reports whether a process with this pid exists.
-func alive(pid int) bool {
+// Alive reports whether a process with this pid exists.
+func Alive(pid int) bool {
 	p, err := os.FindProcess(pid)
 	if err != nil {
 		return false

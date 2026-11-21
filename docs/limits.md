@@ -23,16 +23,14 @@ Everything dumen does not do, or does not do yet. dumen is early and has not bee
 - **Not run on macOS or Windows yet.** It compiles for both, and nothing more has been checked.
   Expect rough edges there, for example a credential manager window opening during a background
   sync on Windows.
-- **Activity is one commit per event.** The store grows by roughly 1 KB per event, and its local
-  clone under `~/.dumen` is never compacted automatically. Run `git gc` there now and then, and
-  keep the store in its own repository.
-- **A crashed dumen can leave a lock behind.** If a `dumen` process is killed in the middle of a
-  write, other dumen commands on that machine wait up to two minutes. If `dumen status` then
-  keeps reporting an error that mentions `index.lock`, delete
-  `~/.dumen/<project>/store/.git/index.lock`.
-- **Subagents share their parent's session.** A directive that arrives mid-session is shown once
-  per session. If a subagent's tool call happens to receive it, the main agent only sees it at
-  its next prompt.
+- **Activity is one commit per event.** The store grows by roughly 1 KB per event. The local
+  clone under `~/.dumen` is packed once a day by the background sync, but the branch itself only
+  grows; `dumen gc` compacts activity older than 30 days. Keep the store in its own repository.
+- **A crashed dumen.** A lock left by a dumen or git process that was killed is taken over by
+  the next dumen command: at once when the process is gone, after two minutes otherwise.
+- **Subagents share their parent's session.** A directive that arrives mid-session is shown to
+  the main agent and to each subagent once, since each has its own context. Acknowledgement and
+  the activity log are per session: a subagent's acknowledgement counts for the session.
 - **Large teams of records.** The block injected at session start is kept under 8,000
   characters, because Claude Code shows an agent only a preview of anything much longer. When it
   does not fit, links are left out first, then decisions; the agent is told the lists are

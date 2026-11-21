@@ -149,6 +149,8 @@ cache.json       the snapshot hooks read
 outbox/          operations waiting for the next sync (offline work)
 outbox-failed/   operations the store rejected
 sessions/        per-session state
+local.json       where the store is, your email, the directories that joined
+lock             held while one process syncs, applies and pushes
 ```
 
 **`.dumen`** in your code repository tells teammates where the store is. It holds no secrets:
@@ -165,8 +167,8 @@ not, which records are unreadable, and what is still queued. Then run `dumen syn
 host refuses the push (a protected branch, a missing permission, a rule that commits must be
 signed), it prints the host's own message.
 
-If `dumen status` keeps reporting an error that mentions `index.lock`, a dumen process was
-killed in the middle of a write. Delete `~/.dumen/<project>/store/.git/index.lock`.
+A dumen or git process that was killed in the middle of a write leaves lock files behind. The
+next dumen command clears them; no manual step is needed.
 
 ## Development
 

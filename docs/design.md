@@ -369,3 +369,13 @@ These were decided during the build, each at the owner's request or forced by a 
     budget of 8,000 characters: links are dropped first, then decisions, never directives.
     (d) Temporary files carry the process id; git is run with `GCM_INTERACTIVE=never`, and
     network commands with ssh in batch mode unless the person configured an ssh command.
+
+13. **Medium findings O2, O3 and O5.** (a) The store lock holds the holder's pid and a
+    token and is touched every 20 seconds while held. It is taken over at once when the
+    pid is gone and after two minutes without a touch otherwise, so a long flush keeps
+    its lock. Whoever takes the lock removes git lock files a killed git left in the
+    clone. (b) `dumen sync` packs the clone once a day (`git gc`), under the lock;
+    automatic collection stays off so that it can never start in the middle of a write.
+    (c) Delivery of directives is tracked per agent (`agent_id` in the hook input), so a
+    subagent's tool call does not use up the notice for the main agent. The one-time
+    acknowledgement reminder goes to the main agent only.

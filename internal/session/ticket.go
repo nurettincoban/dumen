@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/nurettincoban/dumen/internal/proc"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -136,7 +137,7 @@ func RegisterServer(dir string, parent, pid int) bool {
 		if held == pid {
 			return true
 		}
-		if held > 0 && alive(held) {
+		if held > 0 && proc.Alive(held) {
 			return false
 		}
 		os.Remove(path) // the earlier server is gone (the parent pid was reused)

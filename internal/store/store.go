@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/nurettincoban/dumen/internal/proc"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nurettincoban/dumen/internal/gitx"
@@ -438,21 +440,50 @@ func (s *Store) HasMergeCommits(ctx context.Context) (bool, error) {
 
 // Lock takes the store's exclusive lock, waiting until ctx is done.
 // Only one process at a time may sync, apply and push in a local store.
+//
+// The lock file holds the holder's pid and a random token, and the holder touches it
+// every lockRefresh while it works. A lock whose holder is gone, or that nobody has
+// touched for lockStale, is taken over; a long flush keeps its lock for as long as it runs.
 func (s *Store) Lock(ctx context.Context) (unlock func(), err error) {
 	path := filepath.Join(s.Home, "lock")
-	const stale = 2 * time.Minute
+	mine := fmt.Sprintf("%d %s", os.Getpid(), model.NewID("L"))
 	for {
 		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 		if err == nil {
-			f.WriteString(strconv.Itoa(os.Getpid()))
+			f.WriteString(mine)
 			f.Close()
-			return func() { os.Remove(path) }, nil
+			s.clearGitLocks()
+			stop := make(chan struct{})
+			go func() {
+				t := time.NewTicker(lockRefresh)
+				defer t.Stop()
+				for {
+					select {
+					case <-stop:
+						return
+					case now := <-t.C:
+						os.Chtimes(path, now, now)
+					}
+				}
+			}()
+			var once sync.Once
+			return func() {
+				once.Do(func() {
+					close(stop)
+					if cur, _ := os.ReadFile(path); string(cur) == mine {
+						os.Remove(path)
+					}
+				})
+			}, nil
 		}
 		if !errors.Is(err, os.ErrExist) {
 			return nil, err
 		}
-		if st, serr := os.Stat(path); serr == nil && time.Since(st.ModTime()) > stale {
-			os.Remove(path) // the holder died; a live holder finishes well within the limit
+		if held, st := readLock(path); st != nil && lockAbandoned(held, st.ModTime()) {
+			// Remove it only if it is still the lock that was judged abandoned.
+			if cur, _ := os.ReadFile(path); string(cur) == held {
+				os.Remove(path)
+			}
 			continue
 		}
 		select {
@@ -461,4 +492,66 @@ func (s *Store) Lock(ctx context.Context) (unlock func(), err error) {
 		case <-time.After(15 * time.Millisecond):
 		}
 	}
+}
+
+const (
+	lockRefresh = 20 * time.Second
+	lockStale   = 2 * time.Minute
+)
+
+func readLock(path string) (string, os.FileInfo) {
+	st, err := os.Stat(path)
+	if err != nil {
+		return "", nil
+	}
+	data, _ := os.ReadFile(path)
+	return string(data), st
+}
+
+// lockAbandoned reports whether a lock can be taken over: its holder's process is gone,
+// or nobody has touched it for lockStale (a live holder touches it every lockRefresh, so
+// an old lock under a live pid means the pid now belongs to some other program).
+func lockAbandoned(content string, touched time.Time) bool {
+	if time.Since(touched) > lockStale {
+		return true
+	}
+	fields := strings.Fields(content)
+	if len(fields) == 0 {
+		return time.Since(touched) > 2*time.Second // being written right now, or left empty by a crash
+	}
+	pid, err := strconv.Atoi(fields[0])
+	return err == nil && pid > 0 && !proc.Alive(pid)
+}
+
+// clearGitLocks removes lock files a killed git left in the store's clone. Every git
+// command in the clone runs under the store lock, so whoever holds that lock knows that
+// no git process is working there.
+func (s *Store) clearGitLocks() {
+	gitDir := filepath.Join(s.Root(), ".git")
+	for _, name := range []string{"index.lock", "HEAD.lock", "config.lock", "shallow.lock", "packed-refs.lock"} {
+		os.Remove(filepath.Join(gitDir, name))
+	}
+	branch := filepath.Join(gitDir, "refs", "heads", filepath.FromSlash(s.Branch)+".lock")
+	os.Remove(branch)
+}
+
+// Maintain packs the clone's loose objects when that has not been done for a day. Every
+// record is a commit and automatic garbage collection is off in the clone (it must never
+// start in the middle of a write), so without this the clone grows without bound. The
+// caller holds no lock; Maintain takes it.
+func (s *Store) Maintain(ctx context.Context) error {
+	marker := filepath.Join(s.Home, "maintained")
+	if st, err := os.Stat(marker); err == nil && time.Since(st.ModTime()) < 24*time.Hour {
+		return nil
+	}
+	unlock, err := s.Lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err := os.WriteFile(marker, nil, 0o644); err != nil { // first: a failing gc is not retried in a loop
+		return err
+	}
+	_, err = s.git().Run(ctx, "gc", "--quiet")
+	return err
 }
