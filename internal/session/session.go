@@ -153,3 +153,31 @@ func ForParent(dir string, ppid int) string {
 	}
 	return strings.TrimSpace(string(data))
 }
+
+// MarkApproved records that the dumen server of session id put decision did in force,
+// in a file of its own so that it never races the hooks' writes to the session state.
+func MarkApproved(dir, id, did string) error {
+	if id == "" || did == "" {
+		return nil
+	}
+	p := filepath.Join(dir, safe(id)+".approved")
+	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.WriteString(did + "\n")
+	return err
+}
+
+// Approved lists the decisions the dumen server of session id put in force.
+func Approved(dir, id string) []string {
+	if id == "" {
+		return nil
+	}
+	data, err := os.ReadFile(filepath.Join(dir, safe(id)+".approved"))
+	if err != nil {
+		return nil
+	}
+	return strings.Fields(string(data))
+}

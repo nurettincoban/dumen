@@ -103,9 +103,10 @@ func TestSubagentDoesNotUseUpNews(t *testing.T) {
 	}
 }
 
-// A decision the person approved in this repository is not news to their own session:
-// the live run showed the Stop hook blocking to announce it "approved by you".
-func TestOwnApprovalIsNotNews(t *testing.T) {
+// A decision the person approved outside this session, in the same repository, is
+// still news here: they may run two sessions (gauntlet N2). Only the session whose own
+// server approved it is spared; see mcpserver.TestOwnApprovalIsNewsOnlyElsewhere.
+func TestSamePersonOtherSessionGetsNews(t *testing.T) {
 	f := newFixture(t)
 	f.now = f.now.Add(-time.Hour)
 	f.run(SessionStart, map[string]any{"source": "startup"})
@@ -115,11 +116,7 @@ func TestOwnApprovalIsNotNews(t *testing.T) {
 	if _, err := f.proj.Refresh(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if got := ctxOf(f.run(PreToolUse, map[string]any{"tool_name": "Read", "tool_input": map[string]any{"file_path": "x"}})); strings.Contains(got, mine) {
-		t.Errorf("own approval delivered as news:\n%s", got)
-	}
-	theirs := f.approved("Theirs", "Only billing-svc talks to the payment provider")
-	if got := ctxOf(f.run(PreToolUse, map[string]any{"tool_name": "Read", "tool_input": map[string]any{"file_path": "x"}})); !strings.Contains(got, theirs) {
-		t.Errorf("a decision approved in another repository must still be news:\n%s", got)
+	if got := ctxOf(f.run(PreToolUse, map[string]any{"tool_name": "Read", "tool_input": map[string]any{"file_path": "x"}})); !strings.Contains(got, mine) || !strings.Contains(got, "approved by you") {
+		t.Errorf("the same person's decision from another session must be news here:\n%s", got)
 	}
 }

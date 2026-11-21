@@ -485,3 +485,33 @@ func TestEveryToolAcceptsSession(t *testing.T) {
 		}
 	}
 }
+
+// Gauntlet N2: a decision put in force through a session's own server is not news to
+// that session, but it is to every other session, the same person's in the same
+// repository included.
+func TestOwnApprovalIsNewsOnlyElsewhere(t *testing.T) {
+	w := setup(t)
+	other := func(event string, in map[string]any) string {
+		in["session_id"], in["cwd"] = "sess-2", w.proj.Root
+		data, _ := json.Marshal(in)
+		var out bytes.Buffer
+		hook.Run(event, bytes.NewReader(data), &out, hook.Env{ParentPID: parentPID + 1})
+		return out.String()
+	}
+	other(hook.SessionStart, map[string]any{"source": "startup"})
+	text := w.ok("draft_decision", map[string]any{"title": "Refunds", "rule": "Cancelled bookings are refunded as store credit", "kind": "product", "body": "Why."})
+	id := text[strings.Index(text, "D-") : strings.Index(text, "D-")+6]
+	if text, isErr := w.confirmed("approve", map[string]any{"id": id}); isErr {
+		t.Fatalf("approve: %s", text)
+	}
+	if got := w.hook(hook.Stop, map[string]any{}); strings.Contains(got, id) {
+		t.Errorf("the approving session was told about its own decision:\n%s", got)
+	}
+	if got := w.hook(hook.UserPromptSubmit, map[string]any{"prompt": "carry on"}); strings.Contains(got, id) {
+		t.Errorf("the approving session was told about its own decision:\n%s", got)
+	}
+	got := other(hook.Stop, map[string]any{})
+	if !strings.Contains(got, "DECISION NEWS") || !strings.Contains(got, id) || !strings.Contains(got, `"block"`) {
+		t.Errorf("the same person's other session in the same repository must get the news:\n%s", got)
+	}
+}
