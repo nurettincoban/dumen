@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dumen · steer your team's Claude Code agents</title>
+<meta name="description" content="dumen steers and monitors every Claude Code agent on your team through the git remote you already have. Directives, shared decisions and an activity log. No server, no accounts.">
+<meta property="og:title" content="dumen">
+<meta property="og:description" content="Steer and monitor every Claude Code agent on your team, through the git remote you already have.">
+<meta property="og:image" content="assets/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d1117'/%3E%3Ccircle cx='32' cy='32' r='16' fill='none' stroke='%23e8a54b' stroke-width='5'/%3E%3Cpath d='M32 8v48M8 32h48M15 15l34 34M49 15 15 49' stroke='%23e8a54b' stroke-width='4' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='32' r='6' fill='%23e8a54b'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="logo" href="#top">d<b>u</b>men</a>
+    <nav>
+      <a href="#demo">Demo</a>
+      <a href="#how">How it works</a>
+      <a href="#setup">Setup</a>
+      <a href="#limits">Limits</a>
+      <a class="gh" href="https://github.com/nurettincoban/dumen">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+<section class="hero wrap">
+  <p class="eyebrow">Open source · Apache-2.0 · early, not released yet</p>
+  <h1>Steer every Claude Code agent on your team, through the git remote you already have.</h1>
+  <p class="lead">Each developer now runs several agents. They don't know what the team decided yesterday, that <code>src/auth</code> is frozen for the audit, or that another agent is stuck on the same problem. dumen tells them, and tells you what they did.</p>
+  <div class="cta">
+    <a class="btn primary" href="#setup">Set it up in five minutes</a>
+    <a class="btn" href="https://github.com/nurettincoban/dumen">View on GitHub</a>
+  </div>
+  <div class="install"><span class="dim">$</span> go install github.com/nurettincoban/dumen/cmd/dumen@latest<button class="copy" data-copy="go install github.com/nurettincoban/dumen/cmd/dumen@latest" aria-label="Copy install command">Copy</button></div>
+</section>
+
+<section class="wrap" id="demo">
+  <div class="video">
+    <video controls preload="metadata" poster="assets/poster.jpg" playsinline>
+      <source src="assets/dumen-demo.mp4" type="video/mp4">
+      <img src="assets/dumen-demo.gif" alt="dumen demo: a PM publishes a directive and a running agent is blocked from editing a frozen path">
+    </video>
+  </div>
+  <p class="caption">Two minutes with a fictional team. Every command, hook message and agent reply comes from real dumen runs and real Claude Code sessions, lightly trimmed to fit the screen.</p>
+</section>
+
+<section class="wrap pillars">
+  <article>
+    <h3>Directives</h3>
+    <p>"Don't touch <code>billing-svc:src/auth/**</code> until v2.4 ships." Published by a lead or PM, delivered to running sessions within about 30 seconds, acknowledged by each agent. A <code>deny</code> directive is enforced by a hook that blocks the edit.</p>
+  </article>
+  <article>
+    <h3>Shared decisions</h3>
+    <p>"Order creation requires an Idempotency-Key header." Agents see the approved decisions that govern the files they touch. An agent can draft a decision. Only a human can approve one.</p>
+  </article>
+  <article>
+    <h3>An activity log</h3>
+    <p>Who started what, who finished, who is blocked, who waits for a human, and who has not acknowledged a directive yet. Ask for it from the CLI, or ask Claude in plain English.</p>
+  </article>
+</section>
+
+<section class="wrap" id="story">
+  <h2>One day at Acme</h2>
+  <p class="sub">Six people, three microservices, one shared store. This is what the video shows, step by step.</p>
+  <div class="team">
+    <div class="p"><i style="--c:#f0883e">M</i><div><b>Maya</b><span>PM · no code checkout</span></div></div>
+    <div class="p"><i style="--c:#bc8cff">L</i><div><b>Leo</b><span>Designer · no code checkout</span></div></div>
+    <div class="p"><i style="--c:#58a6ff">O</i><div><b>Omar</b><span>Backend lead · orders-svc</span></div></div>
+    <div class="p"><i style="--c:#3fb950">A</i><div><b>Ayşe</b><span>Backend · billing-svc</span></div></div>
+    <div class="p"><i style="--c:#ff7b72">S</i><div><b>Sofia</b><span>Frontend · web-app</span></div></div>
+    <div class="p"><i style="--c:#d29922">D</i><div><b>Daniel</b><span>Full-stack · orders-svc</span></div></div>
+  </div>
+
+  <ol class="steps">
+    <li>
+      <div class="txt"><h4>Omar sets it up once</h4><p>He points all three services at one store, an orphan branch in a repository the team already pushes to, and adds his teammates by their git email.</p></div>
+<pre class="term"><span class="pr">$</span> dumen init --store git@git.example.com:acme/team-store.git#dumen
+Created branch "dumen" on git@git.example.com:acme/team-store.git with you (omar@example.com) as lead.
+This repository is "billing-svc" in project "team-store".
+<span class="pr">$</span> dumen role set maya@example.com pm
+maya@example.com is now pm</pre>
+    </li>
+    <li>
+      <div class="txt"><h4>Designs and docs stay where they live</h4><p>Leo links the checkout design from Claude Design, Maya links the release plan Artifact. dumen stores the link and a one-line label, never the content.</p></div>
+<pre class="term"><span class="pr">$</span> dumen ref add "https://claude.ai/design/p/checkout-flow-v3" --kind design \
+    --title "Checkout flow v3" --paths 'web-app:src/checkout/**'
+Recorded R-3QWZ [design] Checkout flow v3</pre>
+    </li>
+    <li>
+      <div class="txt"><h4>An agent drafts, a human decides</h4><p>Omar's agent makes an API choice and records it as a draft. The draft is never shown to other agents as a fact until Omar approves it.</p></div>
+<pre class="term"><span class="tool">⏺ dumen · draft_decision</span>("Order creation requires an Idempotency-Key header; keys stored for 24h")
+  <span class="dim">⎿</span> <span class="ok">Recorded draft D-4TYD. It is a proposal until a human approves it.</span>
+<span class="pr">$</span> dumen approve D-4TYD
+<span class="ok">D-4TYD is now approved</span></pre>
+    </li>
+    <li>
+      <div class="txt"><h4>A directive arrives mid-session</h4><p>Ayşe's agent is waiting for a test database. Maya freezes billing-svc auth for release week. On the agent's next tool call, the hook delivers it and the agent acknowledges.</p></div>
+<pre class="term"><span class="pr">$</span> dumen direct --deny --paths 'billing-svc:src/auth/**' --for 5d \
+    "Release week: don't touch billing-svc auth until v2.4 ships"
+<span class="ok">Published Y-ARAG [deny] paths billing-svc:src/auth/**</span>
+
+<span class="hk">[dumen] NEW DIRECTIVES (1)
+- Y-ARAG [deny] paths billing-svc:src/auth/** | until 2026-11-25</span>
+<span class="tool">⏺ dumen · ack_directive</span>(Y-ARAG)
+  <span class="dim">⎿</span> <span class="ok">Acknowledged Y-ARAG.</span></pre>
+    </li>
+    <li>
+      <div class="txt"><h4>Enforced, not just advised</h4><p>Ayşe tells her agent that Maya agreed on Slack. The hook blocks the write anyway. Only a person with the right role can withdraw a directive, and only in dumen.</p></div>
+<pre class="term"><span class="tool">⏺ Write</span>(src/auth/token.go)
+<span class="no">PreToolUse:Write hook error: Blocked by team directive Y-ARAG ("Release week:
+don't touch billing-svc auth until v2.4 ships", active until 2026-11-25). This path
+is frozen for every agent. Do not work around it with another tool. Ask your human.</span></pre>
+    </li>
+    <li>
+      <div class="txt"><h4>The PM asks in plain English</h4><p>Maya has no code checkout. <code>dumen join &lt;store&gt;</code> gave her a workspace, and her Claude reads the activity log through dumen's MCP tools.</p></div>
+<pre class="term"><span class="usr">&gt; Who's stuck today? Keep it short.</span>
+<span class="tool">⏺ dumen · activity</span>()
+⏺ Stuck: Ayşe (billing-svc). Her edit to src/auth/token.go was blocked by the
+  release-week directive Y-ARAG. She did acknowledge it. She needs either a
+  different task or a decision on whether this change can wait or is exempt.</pre>
+    </li>
+  </ol>
+</section>
+
+<section class="wrap" id="how">
+  <h2>How it works</h2>
+  <p class="sub">One static Go binary that shells out to your system <code>git</code>. If <code>git push</code> works, dumen works, on GitHub, GitLab, Gitea, Bitbucket or a bare repository on a server.</p>
+  <div class="diagram" role="img" aria-label="A lead's laptop pushes records to a dumen branch on the git remote; developers' Claude Code sessions poll it every 30 seconds and hooks read a local cache.">
+    <div class="box"><b>Lead or PM</b><span>dumen direct<br>dumen activity</span></div>
+    <div class="arrow"><span>push</span><span>fetch</span></div>
+    <div class="box mid"><b>Your git remote</b><span>branch <code>dumen</code><br>records only, never code</span></div>
+    <div class="arrow"><span>fetch every 30 s</span><span>push events</span></div>
+    <div class="box"><b>Developer's Claude Code</b><span>dumen mcp + hooks<br>local cache, ~4 ms</span></div>
+  </div>
+  <div class="grid2">
+    <ul class="facts">
+      <li><b>Storage</b> is an orphan branch with small YAML, Markdown and JSON Lines files, plus generated <code>DECISIONS.md</code> and <code>ACTIVITY.md</code> anyone can read in the web UI of your git host.</li>
+      <li><b>Writes never merge text.</b> Fetch, apply, commit, fast-forward push. If someone pushed first, dumen re-applies on the new head. Offline writes wait in a local outbox.</li>
+      <li><b>No daemon.</b> Claude Code starts <code>dumen mcp</code> per session, which checks the remote with <code>git ls-remote</code> and fetches only when something changed.</li>
+      <li><b>Hooks fail open.</b> They read a local cache (p95 about 4 ms). If anything goes wrong, the tool call proceeds.</li>
+    </ul>
+    <table class="can">
+      <thead><tr><th>An agent can</th><th>An agent cannot</th></tr></thead>
+      <tbody>
+        <tr><td>read directives, decisions, links, activity</td><td>approve, reject or supersede a decision</td></tr>
+        <tr><td>acknowledge a directive</td><td>publish or withdraw a directive</td></tr>
+        <tr><td>draft a decision, propose a directive</td><td>change roles</td></tr>
+        <tr><td>add a link (unverified until a person checks it)</td><td>confirm a link</td></tr>
+        <tr><td>log progress or a blocker</td><td>mark a session private</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="wrap" id="setup">
+  <h2>Five-minute setup</h2>
+  <p class="sub">You need <code>git</code> and Claude Code. dumen uses your existing SSH keys or credential helper.</p>
+  <div class="setup">
+    <div><span class="n">1</span><h4>Install (everyone)</h4>
+<pre class="term"><span class="pr">$</span> go install github.com/nurettincoban/dumen/cmd/dumen@latest</pre></div>
+    <div><span class="n">2</span><h4>Create the store (one person, once)</h4>
+<pre class="term"><span class="pr">$</span> cd your-repo
+<span class="pr">$</span> dumen init --store git@git.example.com:team/dumen-store.git#dumen
+<span class="pr">$</span> git add .dumen &amp;&amp; git commit -m "Add dumen" &amp;&amp; git push
+<span class="pr">$</span> dumen role set ayse@example.com dev</pre></div>
+    <div><span class="n">3</span><h4>Connect Claude Code</h4>
+<pre class="term"><span class="dim"># inside Claude Code, once per developer</span>
+/plugin marketplace add nurettincoban/dumen
+/plugin install dumen@dumen</pre>
+      <p class="note">Or run <code>dumen install</code> once and commit <code>.claude/</code> and <code>.mcp.json</code>. Use one or the other, not both.</p></div>
+    <div><span class="n">4</span><h4>Join (every other developer)</h4>
+<pre class="term"><span class="pr">$</span> git pull &amp;&amp; dumen join &amp;&amp; dumen status</pre>
+      <p class="note">Several services? Point each one at the same store with <code>--repo &lt;name&gt;</code> and write paths as <code>orders-svc:src/db/**</code>.</p></div>
+  </div>
+</section>
+
+<section class="wrap" id="limits">
+  <h2>Honest limits</h2>
+  <p class="sub">dumen is a guard rail, not a security boundary. It guards against agents, not against colleagues.</p>
+  <ul class="limits">
+    <li><b>30-second window.</b> A new directive reaches running sessions within about 30 seconds, not instantly.</li>
+    <li><b><code>deny</code> covers Claude Code's file tools.</b> Edit, Write, MultiEdit and NotebookEdit are blocked. A shell command or code generator can still change files. Use branch protection and review for hard guarantees.</li>
+    <li><b>Anyone who can push to the store can write any record.</b> There is no server to check identities. Protect the <code>dumen</code> branch and keep the store private.</li>
+    <li><b>Linux only, so far.</b> It compiles for macOS and Windows, and nothing more has been checked.</li>
+    <li><b>Small teams.</b> Designed for about 2 to 20 people. Every write is a git push.</li>
+    <li><b>Claude Code only.</b> Other tools can read the store, but nothing is enforced there.</li>
+  </ul>
+  <p class="more">The full list, the security model and the design notes are in the <a href="https://github.com/nurettincoban/dumen#honest-limits">README</a>.</p>
+</section>
+</main>
+
+<footer class="wrap foot">
+  <span class="logo small">d<b>u</b>men</span>
+  <span>The name comes from <i>dümen</i>, the Turkish word for rudder.</span>
+  <span><a href="https://github.com/nurettincoban/dumen">GitHub</a> · <a href="https://github.com/nurettincoban/dumen/blob/main/LICENSE">Apache-2.0</a></span>
+</footer>
+<script>
+document.querySelectorAll('.copy').forEach(b=>b.addEventListener('click',()=>{try{navigator.clipboard.writeText(b.dataset.copy);b.textContent='Copied';setTimeout(()=>b.textContent='Copy',1500)}catch(e){}}));
+</script>
+</body>
+</html>
