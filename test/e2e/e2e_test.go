@@ -95,7 +95,10 @@ func (w *world) sh(dir, name string, args ...string) string {
 	return string(out)
 }
 
-func (w *world) dumen(args ...string) string { return w.sh(w.repo, w.bin, args...) }
+// dumen runs the CLI as the person: the test has no terminal, so it opts out of that check.
+func (w *world) dumen(args ...string) string {
+	return w.sh(w.repo, w.bin, append([]string{"--no-terminal"}, args...)...)
+}
 
 func (w *world) write(rel, content string) {
 	w.t.Helper()

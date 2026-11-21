@@ -32,9 +32,12 @@ How the human-only actions are kept human:
 - The prompt is used only in the permission modes where a person answers it (`default`,
   `acceptEdits`, `plan`). In every other mode the call is refused, and you run the command in
   your own terminal.
-- A hook blocks shell commands such as `dumen approve` inside a session, and the CLI refuses
-  human actions when it sees that it runs inside Claude Code. These two are a second layer, not a
-  wall: an agent that deliberately clears its environment can get past them. See
+- A hook blocks shell commands such as `dumen approve` or `dumen decide --approve` inside a
+  session, and the CLI refuses human actions when it runs inside Claude Code or has no terminal:
+  an agent's shell tool has none, so clearing the environment does not help. Scripts opt out with
+  `--no-terminal`, which the hook refuses in an agent's shell. These are a second layer, not a
+  wall: an agent that deliberately works around them (for example by allocating a terminal) can
+  get past them. See
   [the next section](#a-guard-rail-not-a-boundary).
 
 ## A guard rail, not a boundary

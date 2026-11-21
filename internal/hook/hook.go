@@ -476,7 +476,11 @@ func guardedMCP(name string) (action string, ok bool) {
 
 var (
 	// decideApproved catches `dumen decide ... --approve`: it puts a decision in force.
-	decideApproved = regexp.MustCompile(`(?i)\bdumen(\.exe)?['"]?\s+decide\b[^;&|\n]*\s-{1,2}approve\b`)
+	// It does not stop at ; & or |, which can sit inside a quoted title: a false refusal
+	// costs an agent nothing it may do.
+	decideApproved = regexp.MustCompile(`(?is)\bdumen(\.exe)?['"]?\s+decide\b.*-{1,2}approve\b`)
+	// noTerminal catches the opt-out that makes a command without a terminal count as a person's.
+	noTerminal = regexp.MustCompile(`(?i)-{1,2}no-terminal\b`)
 	// envMarker catches a command that names dumen and also touches CLAUDECODE, the
 	// variable by which the CLI knows it runs inside an agent's session.
 	envMarker = regexp.MustCompile(`(?i)CLAUDECODE`)
@@ -658,7 +662,7 @@ func (r *runCtx) preToolUse() *Output {
 	case "Bash", "PowerShell":
 		cmd := ti.Command
 		if humanCmd.MatchString(cmd) || decideApproved.MatchString(cmd) ||
-			(envMarker.MatchString(cmd) && strings.Contains(strings.ToLower(cmd), "dumen")) {
+			((envMarker.MatchString(cmd) || noTerminal.MatchString(cmd)) && strings.Contains(strings.ToLower(cmd), "dumen")) {
 			return deny("dumen: approving, rejecting, superseding, publishing, withdrawing, changing roles, confirming links and marking a session private are human actions, and `dumen mcp` and `dumen hook` are started by Claude Code only. Ask your human to run this in their own terminal.")
 		}
 		if storeRef.MatchString(cmd) || (base != "" && mentionsPath(cmd, base)) {

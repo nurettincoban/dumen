@@ -71,6 +71,11 @@ Every command accepts `--help`. Ids look like `Y-2APW` (directive), `D-PG18` (de
 Human actions (`approve`, `reject`, `supersede`, `direct`, `withdraw`, `private`, `role set`,
 `role rm`, `ref check`) are refused when the command runs inside a Claude Code session.
 
+Human actions (approve, reject, supersede, `decide --approve`, direct, withdraw, role, product,
+ref check, private) need a terminal: a command without one counts as an agent's. Scripts and CI
+add the global flag `--no-terminal`, for example `dumen --no-terminal approve D-7K2P`; the hook
+refuses that flag in an agent's shell.
+
 ## Environment variables
 
 | Variable | Effect |

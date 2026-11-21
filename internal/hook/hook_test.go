@@ -291,6 +291,8 @@ func TestHumanOnlyActions(t *testing.T) {
 		"dumen decide --title x --rule r --kind product -m b -approve",
 		"CLAUDECODE= dumen decisions",
 		"unset CLAUDECODE; dumen status",
+		`env -i PATH="$PATH" HOME="$HOME" dumen decide --title "x; y" --rule r --kind product -m b --approve`,
+		"dumen --no-terminal approve D-1234",
 	}
 	for _, cmd := range denied {
 		for _, tool := range []string{"Bash", "PowerShell"} {

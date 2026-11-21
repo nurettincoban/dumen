@@ -55,7 +55,7 @@ func repo(t *testing.T) (dir string, p *project.Project) {
 func run(t *testing.T, args ...string) string {
 	t.Helper()
 	var out, errb bytes.Buffer
-	if code := Main(args, strings.NewReader(""), &out, &errb); code != 0 {
+	if code := Main(append([]string{"--no-terminal"}, args...), strings.NewReader(""), &out, &errb); code != 0 {
 		t.Fatalf("dumen %s: exit %d\n%s%s", strings.Join(args, " "), code, out.String(), errb.String())
 	}
 	return out.String()
@@ -63,7 +63,7 @@ func run(t *testing.T, args ...string) string {
 
 func runErr(args ...string) (string, int) {
 	var out, errb bytes.Buffer
-	code := Main(args, strings.NewReader(""), &out, &errb)
+	code := Main(append([]string{"--no-terminal"}, args...), strings.NewReader(""), &out, &errb)
 	return out.String() + errb.String(), code
 }
 
@@ -836,5 +836,26 @@ func TestAnotherRepositoryWithTheSameProjectNameIsNotTheProject(t *testing.T) {
 	if os.Symlink(dir, link) == nil {
 		t.Chdir(link)
 		run(t, "status")
+	}
+}
+
+// Gauntlet S3: a human action from a command without a terminal is an agent's, whatever
+// the environment says, so an agent's shell cannot pose as a person.
+func TestHumanActionsNeedATerminal(t *testing.T) {
+	repo(t)
+	t.Setenv("CLAUDECODE", "")
+	out := run(t, "decide", "--title", "x; y", "--rule", "r", "--kind", "product", "-m", "b")
+	id := out[strings.Index(out, "D-") : strings.Index(out, "D-")+6]
+	for _, args := range [][]string{
+		{"approve", id}, {"reject", id},
+		{"decide", "--title", "t", "--rule", "r", "--kind", "product", "-m", "b", "--approve"},
+		{"direct", "--all", "x"},
+		{"role", "set", "someone@example.com", "dev"},
+		{"product", "--name", "x"},
+	} {
+		var o, e bytes.Buffer
+		if code := Main(args, strings.NewReader(""), &o, &e); code == 0 || !strings.Contains(e.String(), "no terminal") {
+			t.Errorf("%v without a terminal: exit %d\n%s%s", args, code, o.String(), e.String())
+		}
 	}
 }
