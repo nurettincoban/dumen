@@ -1,0 +1,79 @@
+# A real interactive Claude Code session (v2.1.330), recorded from the terminal with tmux.
+# The person is in plan mode and writes: "I agree with D-GYN6 about cancellation refunds. Put it
+# in force for the team." Claude writes a plan. The person approves it with "Yes, and use auto
+# mode", and dumen refuses to approve in a mode that may not ask the person. The person switches
+# to manual (default) mode, and Claude Code asks them. Nobody answers in the person's place.
+# Only the temporary path is shortened; the ticket is one-use and expired long ago.
+
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   Ready to code?
+   Here is Claude's plan:
+  ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+   Put D-GYN6 in force
+   Context
+   The user agreed with D-GYN6 (Cancellation refunds) and asked to put it in force for the team.
+   dumen show D-GYN6 (read-only) shows: kind product, whole product (no services), status proposed,
+   proposed_by sofia@example.com, rule: "Cancelled bookings are refunded to the original card".
+   No needs, no source.
+   Steps (after plan approval)
+   1. Run dumen approve D-GYN6 as a command of its own. Claude Code shows the decision's exact words and asks the user to confirm; that
+      confirmation is the approval.
+   2. Report the result: the decision is in force for every agent, delivered as DECISION NEWS.
+   Notes
+   - The rule applies to the whole product, so every service's agents will follow it.
+   - No repo files change; only the dumen store (git) is updated by the command.
+   Verification
+   dumen list should show D-GYN6 as in force; dumen show D-GYN6 should show status in force.
+  ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   Claude has written up a plan and is ready to execute. Would you like to proceed?
+   ❯ 1. Yes, and use auto mode
+     2. Yes, manually approve edits
+     3. Tell Claude what to change
+        shift+tab to approve with this feedback
+   ctrl+g to edit in Vim · ~/.claude/plans/i-agree-with-d-gyn6-sprightly-noodle.md
+
+# The person picks 1 (Yes, and use auto mode).
+
+  Did not run 1 call
+  ⎿  $ dumen approve D-GYN6
+  ⎿  Not run · permission denied
+     │ Reason: PreToolUse:Bash hook error: dumen: approve needs your human's yes, and the permission mode auto may not ask them. Ask them to
+     │ switch to the default mode (shift+tab), then run it again.
+● I couldn't put D-GYN6 in force yet. dumen approve needs Claude Code to show you the decision and ask you to confirm, and the current
+  permission mode (auto) won't ask. Nothing was approved or changed.
+  Please switch to the default permission mode with shift+tab and tell me when you have. I'll run dumen approve D-GYN6 again, and the
+  confirmation prompt will show the rule: "Cancelled bookings are refunded to the original card".
+  This is a product decision for the whole product, so every service's agents will follow it once it's in force. It was proposed by
+  sofia@example.com.
+✻ Cogitated for 10s · done 6:09 PM
+
+# The person presses shift+tab until manual mode is on.
+
+❯ I switched to the default mode. Go ahead.
+● Approve decision D-GYN6 (asks the user to confirm)
+  ⎿  $ dumen approve D-GYN6
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+ Approve decision D-GYN6 (asks the user to confirm)
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ dumen approve D-GYN6 --ticket 5a36285e08576bda24004437ebded127
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ │ Hook PreToolUse:Bash requires confirmation for this command:
+ │ dumen: it puts D-GYN6 "Cancelled bookings are refunded to the original card" [product] for the whole product in force for every agent on
+ │ the team. It is recorded as sofia@example.com's decision. Allow only if you, the person, agreed to it. [plugin:dumen]
+ plugin hooks.json to update hooks
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. No
+ Esc to cancel · Tab to amend
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────── approve-decision-d-gyn6 ─
+
+# The person presses 1 (Yes).
+
+  Ran 1 shell command
+● D-GYN6 is now in force for the whole team: "Cancelled bookings are refunded to the original card" (kind: product, applies to every
+  service).
+  Agents on every service get it as DECISION NEWS, including sessions that are already running. They'll follow it and won't ask again how
+  cancellation refunds should work.
+✻ Brewed for 2s · done 6:09 PM
