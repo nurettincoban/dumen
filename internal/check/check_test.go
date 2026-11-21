@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"sort"
 	"testing"
 	"time"
 
@@ -67,6 +68,25 @@ func TestChangedFiles(t *testing.T) {
 	// Both sides of the rename are listed, so moving a file out of a frozen path is seen.
 	if want := []string{"src/api/a.go", "src/auth/gone.go", "src/auth/login.go", "src/auth/login.go ", "src/auth/signin.go"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("diff: got %q, want %q", got, want)
+	}
+	// Commits on no remote, since a point in time: here both, with the latest commit's time.
+	committed, err := CommittedFiles(ctx, root, time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for f, when := range committed {
+		names = append(names, f)
+		if time.Since(when) > time.Minute {
+			t.Errorf("%s: commit time %v", f, when)
+		}
+	}
+	sort.Strings(names)
+	if want := []string{"src/api/a.go", "src/auth/gone.go", "src/auth/login.go", "src/auth/login.go ", "src/auth/signin.go"}; !reflect.DeepEqual(names, want) {
+		t.Errorf("committed: got %q, want %q", names, want)
+	}
+	if later, _ := CommittedFiles(ctx, root, time.Now().Add(time.Hour)); len(later) != 0 {
+		t.Errorf("no commit is that recent: %v", later)
 	}
 	if _, err := DiffFiles(ctx, root, "--output=/tmp/x", "HEAD"); err == nil {
 		t.Error("a revision that looks like an option must be an error")

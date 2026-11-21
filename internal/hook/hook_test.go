@@ -605,3 +605,61 @@ func TestStopReportsChangesUnderADenyDirective(t *testing.T) {
 		t.Errorf("only changes made under the freeze during the session count: %q", e.Text)
 	}
 }
+
+// Gauntlet O10: an agent that changes a frozen file and commits it in the same turn leaves
+// a clean work tree. The commits made since the session began, and on no remote yet, are
+// checked too. A commit made before the freeze began is not a violation.
+func TestStopReportsCommittedChangesUnderADenyDirective(t *testing.T) {
+	f := newFixture(t)
+	git := func(env []string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-c", "user.email=dev@example.com", "-c", "user.name=Dev"}, args...)...)
+		cmd.Dir = f.proj.Root
+		cmd.Env = append(os.Environ(), env...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	commit := func(rel string, age time.Duration) {
+		t.Helper()
+		p := filepath.Join(f.proj.Root, filepath.FromSlash(rel))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(rel+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		when := time.Now().Add(-age)
+		os.Chtimes(p, when, when)
+		git(nil, "add", "-A")
+		git([]string{"GIT_COMMITTER_DATE=" + when.Format(time.RFC3339), "GIT_AUTHOR_DATE=" + when.Format(time.RFC3339)}, "commit", "-q", "-m", rel)
+	}
+	git(nil, "init", "-q")
+	f.now = time.Now().UTC().Add(-3 * time.Hour)
+	f.run(SessionStart, map[string]any{"source": "startup"})
+	commit("src/auth/early.go", 2*time.Hour) // in this session, before the freeze
+	id := f.directive(model.DirectiveDeny, model.Scope{Paths: []string{"src/auth/**"}}, "Auth is frozen")
+	if _, err := f.proj.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.now = time.Now().UTC().Add(time.Minute)
+	commit("src/auth/token.go", 0) // under the freeze, committed at once
+	commit("src/api/orders.go", 0)
+	f.run(Stop, map[string]any{"last_assistant_message": "Committed."})
+	f.run(Stop, map[string]any{"last_assistant_message": "Still done."})
+	if _, err := f.eng.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var found []model.Event
+	days, _ := store.ListDays(f.proj.Store.Root())
+	for _, day := range days {
+		evs, _ := store.ReadEvents(f.proj.Store.Root(), day)
+		for _, e := range evs {
+			if e.Kind == model.EventViolation {
+				found = append(found, e)
+			}
+		}
+	}
+	if len(found) != 1 || len(found[0].IDs) != 1 || found[0].IDs[0] != id ||
+		found[0].Text != "1 file changed under a deny directive: src/auth/token.go" {
+		t.Fatalf("want one violation for src/auth/token.go, got %+v", found)
+	}
+}

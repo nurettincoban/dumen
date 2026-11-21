@@ -12,10 +12,11 @@ Everything dumen does not do, or does not do yet. dumen is early and has not bee
   change. It makes it visible: at the end of a turn the session reports the change as a
   `violation` in the activity log, and `dumen check` fails on it. Run `dumen check` in CI, with
   branch protection and code review, for a hard guarantee.
-- **A `violation` says where, not who.** It means the work tree of a session held a change under
-  a deny directive, made after the session and the directive began. dumen cannot tell whether
-  the agent or the person at the keyboard made it. Changes the agent already committed are found
-  by `dumen check <base>..<head>`, not by the session.
+- **A `violation` says where, not who.** It means a session's work tree, or a commit made since
+  the session began and not pushed yet, holds a change under a deny directive that was made
+  after the directive began. dumen cannot tell whether the agent or the person at the keyboard
+  made it. A change that was pushed before the turn ended is found by
+  `dumen check <base>..<head>`, not by the session.
 - **Not run on macOS or Windows yet.** It compiles for both, and nothing more has been checked.
   Expect rough edges there, for example a credential manager window opening during a background
   sync on Windows.
