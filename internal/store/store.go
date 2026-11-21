@@ -515,6 +515,28 @@ func (s *Store) Maintain(ctx context.Context) error {
 	if err := os.WriteFile(marker, nil, 0o644); err != nil { // first: a failing gc is not retried in a loop
 		return err
 	}
+	pruneSessions(s.SessionsDir(), time.Now().Add(-sessionKeep))
 	_, err = s.git().Run(ctx, "gc", "--quiet")
 	return err
+}
+
+// sessionKeep is how long the local state of a session that no longer writes is kept.
+const sessionKeep = 14 * 24 * time.Hour
+
+// pruneSessions removes the state files of sessions untouched since before: the session
+// state and the list of decisions its own server approved.
+func pruneSessions(dir string, before time.Time) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !(strings.HasSuffix(name, ".json") || strings.HasSuffix(name, ".approved")) {
+			continue
+		}
+		if info, err := e.Info(); err == nil && info.ModTime().Before(before) {
+			os.Remove(filepath.Join(dir, name))
+		}
+	}
 }

@@ -13,7 +13,7 @@ import (
 // `DUMEN_UPDATE_PLUGIN=1 go test ./internal/install` after changing either.
 func TestPluginFilesMatchInstall(t *testing.T) {
 	root := filepath.Join("..", "..", "plugin")
-	hooks, err := json.MarshalIndent(map[string]any{"hooks": Hooks("dumen")}, "", "  ")
+	hooks, err := json.MarshalIndent(map[string]any{"hooks": Hooks(PluginCommand)}, "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}

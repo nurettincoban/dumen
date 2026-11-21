@@ -189,17 +189,6 @@ decision you followed; do not ask.</span></pre>
   </ul>
 </section>
 
-<section class="wrap" id="demo">
-  <h2>Directives, in two minutes</h2>
-  <div class="video">
-    <video controls preload="metadata" poster="assets/poster.jpg" playsinline>
-      <source src="assets/dumen-demo.mp4" type="video/mp4">
-      <img src="assets/dumen-demo.gif" alt="dumen demo: a PM publishes a directive and a running agent is blocked from editing a frozen path">
-    </video>
-  </div>
-  <p class="caption">Directives are for short-lived instructions, such as a freeze for release week. Here a PM publishes one and a running agent is stopped at a frozen path. Real dumen runs and real Claude Code sessions, lightly trimmed; recorded before decisions became the center of dumen.</p>
-</section>
-
 <section class="wrap" id="how">
   <h2>How it works</h2>
   <p class="sub">One static Go binary that shells out to your system <code>git</code>. There is no server and no account. If <code>git push</code> works, dumen works, on GitHub, GitLab, Gitea, Bitbucket or a bare repository on a server.</p>
@@ -222,13 +211,14 @@ decision you followed; do not ask.</span></pre>
   <h2>Install: a Claude Code plugin</h2>
   <p class="sub">You need <code>git</code> and Claude Code. After this, people only talk to Claude; the commands are the agent's.</p>
   <div class="setup">
-    <div><span class="n">1</span><h4>The binary (once per machine)</h4>
-<pre class="term"><span class="pr">$</span> go install github.com/nurettincoban/dumen/cmd/dumen@latest</pre>
-      <p class="note">The plugin's hooks and tools call it. There is no packaged release yet.</p></div>
-    <div><span class="n">2</span><h4>The plugin (inside Claude Code)</h4>
+    <div><span class="n">1</span><h4>The plugin (inside Claude Code)</h4>
 <pre class="term">/plugin marketplace add nurettincoban/dumen
 /plugin install dumen@dumen</pre>
       <p class="note">Hooks, MCP tools and the skill, in one install.</p></div>
+    <div><span class="n">2</span><h4>The binary comes with it</h4>
+<pre class="term"><span class="dim"># downloaded from the latest release on first start,
+# checked against its checksums; restart Claude Code once</span></pre>
+      <p class="note">A <code>dumen</code> on PATH is used instead. Until the first release: <code>go install github.com/nurettincoban/dumen/cmd/dumen@latest</code>.</p></div>
     <div><span class="n">3</span><h4>Ask your agent</h4>
 <pre class="term"><span class="usr">&gt; Set up dumen for our team. The store is
   git@git.example.com:team/dumen-store.git#dumen.</span>

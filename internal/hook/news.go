@@ -91,7 +91,7 @@ func (r *runCtx) newsBlock() string {
 		return ""
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "DECISION NEWS (%d): approved by a teammate since this session started; binding from now on\n", len(ds))
+	fmt.Fprintf(&b, "DECISION NEWS (%d): put in force since this session started; binding from now on\n", len(ds))
 	ids := make([]string, 0, len(ds))
 	for i, d := range ds {
 		if sub := r.in.AgentID; sub != "" {

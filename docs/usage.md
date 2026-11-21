@@ -48,8 +48,10 @@ a public repository.**
 /plugin install dumen@dumen
 ```
 
-The plugin brings the hooks, the MCP server and the skill; it needs the `dumen` binary on
-`PATH`. It stays silent in directories that have nothing to do with a dumen project. The
+The plugin brings the hooks, the MCP server and the skill. When Claude Code first starts
+the MCP server, the plugin downloads the `dumen` binary for your system from the latest
+GitHub release, checks its checksum and keeps it in the plugin's data directory; restart
+Claude Code once so the hooks use it. A `dumen` on `PATH` takes precedence. It stays silent in directories that have nothing to do with a dumen project. The
 first time an agent uses a dumen tool, Claude Code asks for permission: choose "always
 allow" for the reading, acknowledging and drafting tools. Never pre-approve the human
 actions (`approve`, `reject`, `supersede`, `publish_directive`, `withdraw_directive`,

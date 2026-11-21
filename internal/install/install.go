@@ -182,3 +182,7 @@ func All(dir, binary string) ([]string, error) {
 	}
 	return written, nil
 }
+
+// PluginCommand is how the Claude Code plugin starts dumen: a launcher that uses a dumen
+// on PATH or downloads the release binary.
+const PluginCommand = "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch"
