@@ -55,6 +55,7 @@ Every command accepts `--help`. Ids look like `Y-2APW` (directive), `D-PG18` (de
 | --- | --- |
 | `dumen activity [--since WHEN] [--person P] [--repo R] [--kind K] [--events] [--json]` | Counts, sessions, who is stuck, who has not acknowledged. `--since` takes `today`, `yesterday`, `2h`, `7d`, a date or an RFC 3339 time. |
 | `dumen watch [--since 10m] [--interval 5s] [--once]` | Live tail of activity. |
+| `dumen check [BASE..HEAD]` | Fail (exit 1) when a change touches a path under an active deny directive. Without a range it checks the work tree against HEAD. `BASE HEAD` as two arguments also works. |
 | `dumen private [on\|off]` | Stop or resume activity from your new sessions. |
 
 ### For Claude Code, not for people
@@ -110,7 +111,7 @@ refused. See [Security model](security.md).
 | `SessionStart` | Injects the block of team records: active directives first, then the approved decisions that apply, links and the role. Logs `started`. |
 | `UserPromptSubmit` | Injects directives that arrived since the last prompt. |
 | `PreToolUse` (every tool) | Hands over new directives, blocks `Edit`, `Write`, `MultiEdit` and `NotebookEdit` under a `deny` directive, sends human actions to the permission prompt, and blocks shell commands that would take a human action. Reminds the agent once about an unacknowledged directive. |
-| `Stop` | Logs `progress` with a one-line summary of the agent's last message. |
+| `Stop` | Logs `progress` with a one-line summary of the agent's last message. When a deny directive is active, also looks at the work tree (`git status`, cut off after 2 seconds) and logs a `violation` for changes made under it since the session began. |
 | `SessionEnd` | Logs `finished`. |
 
 Hooks answer with `hookSpecificOutput`. A blocked edit looks like this:

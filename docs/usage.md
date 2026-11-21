@@ -9,6 +9,7 @@ command here is also something you can simply ask your Claude to do.
 - [Decisions](#decisions)
 - [Sources of truth](#sources-of-truth)
 - [Monitoring](#monitoring)
+- [Check a change](#check-a-change)
 - [Several repositories, one team](#several-repositories-one-team)
 - [Privacy](#privacy)
 - [claude.ai on the web](#claudeai-on-the-web)
@@ -149,6 +150,38 @@ dumen activity --kind blocked --events
 dumen activity --json                  # for scripts
 dumen watch                            # live tail
 ```
+
+## Check a change
+
+A hook can stop Claude Code's file tools, but not a shell command that rewrites a file. A diff
+shows every change, whatever made it. `dumen check` fails when a change touches a path under an
+active deny directive:
+
+```sh
+dumen check                    # the work tree against HEAD, for a pre-commit hook
+dumen check origin/main..HEAD  # a commit range, for CI or a pre-push hook
+```
+
+```text
+src/auth/login.go  Y-PBG4  Auth is frozen until the audit ends (until 2026-11-24 10:51)
+dumen: 1 of 3 changed files in origin/main..HEAD are under a deny directive
+```
+
+It exits with status 1 when it finds something and prints `OK: ...` otherwise. It applies the
+deny directives that are active at the moment it runs.
+
+To run it in CI, on any git host, the job needs the `dumen` binary, read access to the store,
+and a git identity:
+
+```sh
+git config user.email ci@example.com
+dumen join
+dumen check "$BASE_SHA..$HEAD_SHA"
+```
+
+Running sessions do the same check on their own work tree at the end of each turn. A change
+under a deny directive shows up in `dumen activity` under "Changes under a deny directive". The
+session is not stopped and nothing is undone.
 
 ## Several repositories, one team
 

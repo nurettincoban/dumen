@@ -197,6 +197,12 @@ func Activity(root string) ([]byte, error) {
 				fmt.Fprintf(&b, "- %s %s %s: %s%s\n", clock(e.TS), cell(e.Person, 60), e.Kind, cell(e.Text, 200), ids)
 			}
 		}
+		if len(sum.Violations) > 0 {
+			b.WriteString("\nChanges left under a deny directive:\n\n")
+			for _, e := range sum.Violations {
+				fmt.Fprintf(&b, "- %s %s: %s (%s)\n", clock(e.TS), cell(e.Person, 60), cell(e.Text, 200), strings.Join(e.IDs, ", "))
+			}
+		}
 	}
 	return []byte(b.String()), nil
 }

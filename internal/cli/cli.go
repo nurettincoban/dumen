@@ -49,6 +49,7 @@ func init() {
 		{"directives", "directives [--all]", "list directives", cmdDirectives},
 		{"withdraw", "withdraw <id>", "withdraw a directive", cmdWithdraw},
 		{"activity", "activity [--since today|2h|7d|DATE] [--person P] [--kind K] [--events] [--json]", "what agents did: counts, sessions, who is stuck", cmdActivity},
+		{"check", "check [<base>..<head>]", "fail when a change touches a path under a deny directive (work tree, or a commit range for CI)", cmdCheck},
 		{"watch", "watch [--interval 5s]", "live tail of agent activity", cmdWatch},
 		{"private", "private [on|off]", "stop or resume monitoring of your new sessions (the fact stays visible)", cmdPrivate},
 		{"role", "role set <email> <role> | role rm <email> | role list", "manage who is on the team and what they may do", cmdRole},
@@ -134,8 +135,11 @@ func openProject() (*project.Project, error) {
 	}
 	p, err := project.Find(wd)
 	if err != nil {
-		if p != nil {
+		if p != nil && errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("this machine has not joined project %q yet: run `dumen join`", p.Name)
+		}
+		if p != nil {
+			return nil, fmt.Errorf("the local state of project %q cannot be used: %v", p.Name, err)
 		}
 		return nil, err
 	}

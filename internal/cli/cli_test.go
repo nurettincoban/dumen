@@ -645,3 +645,76 @@ func TestProjectNameCannotLeaveTheDumenHome(t *testing.T) {
 		t.Fatal("dumen removed a directory outside the dumen home")
 	}
 }
+
+// `dumen check` fails when a change, however it was made, touches a path under a deny
+// directive: in the work tree, or in a commit range for CI.
+func TestCheckFindsChangesUnderADenyDirective(t *testing.T) {
+	dir, _ := repo(t)
+	git := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	put := func(rel, body string) {
+		t.Helper()
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("src/auth/login.go", "one\n")
+	put("src/api/orders.go", "one\n")
+	git("add", "-A")
+	git("commit", "-q", "-m", "one")
+	base := git("rev-parse", "HEAD")
+	out := run(t, "direct", "--deny", "--paths", "src/auth/**", "Auth is frozen")
+	id := out[strings.Index(out, "Y-") : strings.Index(out, "Y-")+6]
+
+	put("src/api/orders.go", "two\n")
+	if out := run(t, "check"); !strings.Contains(out, "OK: 1 changed files") {
+		t.Fatalf("a change outside the frozen path is fine:\n%s", out)
+	}
+	put("src/auth/login.go", "two\n") // as `sed -i` would
+	out, code := runErr("check")
+	if code == 0 || !strings.Contains(out, "src/auth/login.go") || !strings.Contains(out, id) {
+		t.Fatalf("check must fail and name the file and the directive (exit %d):\n%s", code, out)
+	}
+	git("add", "-A")
+	git("commit", "-q", "-m", "two")
+	if out := run(t, "check"); !strings.Contains(out, "OK: 0 changed files") {
+		t.Fatalf("a clean work tree passes:\n%s", out)
+	}
+	for _, args := range [][]string{{"check", base + "..HEAD"}, {"check", base + ".."}, {"check", base, "HEAD"}} {
+		out, code := runErr(args...)
+		if code == 0 || !strings.Contains(out, "src/auth/login.go") || !strings.Contains(out, "1 of 2 changed files") {
+			t.Errorf("dumen %v must fail on the committed change (exit %d):\n%s", args, code, out)
+		}
+	}
+	run(t, "withdraw", id)
+	if out := run(t, "check", base+"..HEAD"); !strings.Contains(out, "OK: 2 changed files") {
+		t.Fatalf("after the directive is withdrawn the range passes:\n%s", out)
+	}
+	if _, code := runErr("check", "a", "b", "c"); code == 0 {
+		t.Error("too many arguments must be an error")
+	}
+}
+
+// A local state file that was tampered with is refused with the reason, not with the
+// advice to join.
+func TestTamperedLocalStateIsReportedAsSuch(t *testing.T) {
+	_, p := repo(t)
+	local := filepath.Join(p.Store.Home, "local.json")
+	if err := os.WriteFile(local, []byte(`{"project":"x","remote":"--upload-pack=x","branch":"dumen"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, code := runErr("status")
+	if code == 0 || !strings.Contains(out, "refusing store remote") || strings.Contains(out, "has not joined") {
+		t.Fatalf("status with a tampered local.json (exit %d):\n%s", code, out)
+	}
+}
