@@ -39,6 +39,9 @@ func newFixture(t *testing.T) *fixture {
 	if err := project.WriteFile(root, "proj", remote+"#dumen"); err != nil {
 		t.Fatal(err)
 	}
+	if err := s.AddRoot(root); err != nil { // as `dumen join` does
+		t.Fatal(err)
+	}
 	f := &fixture{t: t, now: time.Now().UTC()}
 	f.proj = &project.Project{Root: root, Name: "proj", Store: s}
 	f.eng = f.proj.Engine()
@@ -498,6 +501,9 @@ func TestDenyAppliesToTheRepositoryOfTheFile(t *testing.T) {
 		if err := project.WriteFile(dir, "proj", spec, repo); err != nil {
 			t.Fatal(err)
 		}
+		if err := f.proj.Store.AddRoot(dir); err != nil { // as `dumen join` does
+			t.Fatal(err)
+		}
 	}
 	id := f.directive(model.DirectiveDeny, model.Scope{Paths: []string{"billing:src/auth/**"}}, "Billing auth is frozen")
 	if _, err := f.proj.Refresh(context.Background()); err != nil {
@@ -684,6 +690,10 @@ func TestDenyAppliesToOtherMCPFileTools(t *testing.T) {
 		{"mcp__filesystem__edit_file", map[string]any{"path": "src/auth/login.go"}, "deny"},
 		{"mcp__ide__createFile", map[string]any{"file_path": frozen}, "deny"},
 		{"mcp__filesystem__move_file", map[string]any{"path": filepath.Join(f.proj.Root, ".dumen")}, "deny"},
+		{"mcp__filesystem__move_file", map[string]any{"source": frozen, "destination": filepath.Join(f.proj.Root, "x.go")}, "deny"},
+		{"mcp__filesystem__move_file", map[string]any{"source": filepath.Join(f.proj.Root, "x.go"), "destination": frozen}, "deny"},
+		{"mcp__fs__get_output", map[string]any{"path": frozen}, ""}, // "put" inside a word is not a verb
+		{"mcp__fs__removeFile", map[string]any{"path": frozen}, "deny"},
 		{"mcp__filesystem__write_file", map[string]any{"path": filepath.Join(f.proj.Root, "src", "api", "a.go")}, ""},
 		{"mcp__filesystem__read_file", map[string]any{"path": frozen}, ""},
 		{"mcp__filesystem__list_directory", map[string]any{"path": filepath.Dir(frozen)}, ""},

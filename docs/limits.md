@@ -8,8 +8,8 @@ Everything dumen does not do, or does not do yet. dumen is early and has not bee
   `MultiEdit` and `NotebookEdit` under a denied path, following symlinks. An agent that runs
   `sed -i`, a build script or a code generator through Bash can still change those files. File
   tools of other MCP servers are covered on a best effort: a tool whose name says it writes
-  (`write_file`, `edit_file`, `move_file` and the like) is refused when its `path`, `file_path`
-  or `notebook_path` is under a denied path; a tool with another name or another input is not. The directive text tells the agent not to,
+  (`write_file`, `edit_file`, `move_file` and the like) is refused when its `path`, `file_path`,
+  `notebook_path`, `source` or `destination` is under a denied path; a tool with another name or another input is not. The directive text tells the agent not to,
   and agents nearly always comply, but it is not a sandbox. dumen does not prevent or undo such a
   change. It makes it visible: at the end of a turn the session reports the change as a
   `violation` in the activity log, and `dumen check` fails on it. Run `dumen check` in CI, with

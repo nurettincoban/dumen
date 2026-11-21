@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -273,7 +274,7 @@ func (s *Store) AddRoot(dir string) error {
 		s.Roots = cur.Roots // another repository may have joined since this one was opened
 	}
 	for _, r := range s.Roots {
-		if r == dir {
+		if sameDir(r, dir) {
 			return nil
 		}
 	}
@@ -281,19 +282,24 @@ func (s *Store) AddRoot(dir string) error {
 	return s.saveLocal()
 }
 
-// Knows reports whether the directory joined this store. Local state written before
-// roots were recorded lists none and accepts every directory.
+// Knows reports whether the directory joined this store.
 func (s *Store) Knows(dir string) bool {
-	if len(s.Roots) == 0 {
-		return true
-	}
 	dir = realDir(dir)
 	for _, r := range s.Roots {
-		if r == dir {
+		if sameDir(r, dir) {
 			return true
 		}
 	}
 	return false
+}
+
+// sameDir compares two resolved directory names. Where the file system ignores case
+// (Windows, macOS by default) one directory can arrive spelled in more than one way.
+func sameDir(a, b string) bool {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
 }
 
 // ciFiles are the pipeline definitions of the common git hosts and CI services. A store

@@ -362,10 +362,10 @@ These were decided during the build, each at the owner's request or forced by a 
 
 12. **Medium findings of the first gauntlet (O4, O6, O7, O9).** (a) The local state of a
     project lists the directories that joined it; a `.dumen` file elsewhere with the same
-    project name is not the project. Local state written before this lists none and
-    accepts every directory until the next `dumen init` or `dumen join`. (b) The deny rules
+    project name is not the project. Local state that lists none, as written by an
+    earlier build, counts as not joined: run `dumen join` again. (b) The deny rules
     also apply to tools of other MCP servers whose name says they write files, looking at
-    the `path`, `file_path` and `notebook_path` inputs. (c) The session-start block has a
+    the `path`, `file_path`, `notebook_path`, `source` and `destination` inputs. (c) The session-start block has a
     budget of 8,000 characters: links are dropped first, then decisions, never directives.
     (d) Temporary files carry the process id; git is run with `GCM_INTERACTIVE=never`, and
     network commands with ssh in batch mode unless the person configured an ssh command.

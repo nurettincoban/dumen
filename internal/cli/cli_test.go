@@ -810,6 +810,23 @@ func TestAnotherRepositoryWithTheSameProjectNameIsNotTheProject(t *testing.T) {
 		t.Fatalf("the unrelated session queued %d operations for the team's store", len(entries))
 	}
 
+	// Local state that lists no directory at all, as an earlier build wrote it, is not a
+	// licence for every directory: it counts as not joined.
+	local := filepath.Join(p.Store.Home, "local.json")
+	saved, err := os.ReadFile(local)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state map[string]any
+	json.Unmarshal(saved, &state)
+	delete(state, "roots")
+	bare, _ := json.Marshal(state)
+	os.WriteFile(local, bare, 0o644)
+	if out, code := runErr("status"); code == 0 || !strings.Contains(out, "has not joined project") {
+		t.Errorf("local state without roots must fail closed (exit %d):\n%s", code, out)
+	}
+	os.WriteFile(local, saved, 0o644)
+
 	// The first repository still works, also through a symlink to it.
 	t.Chdir(dir)
 	if out := run(t, "directives"); !strings.Contains(out, "structured logger") {

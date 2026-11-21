@@ -50,11 +50,17 @@ var (
 )
 
 // sshBatch makes ssh fail instead of asking for a passphrase or a host key, which a
-// background sync could never answer. A person's own ssh command is left alone: it is set
-// only when neither the environment nor git's configuration names one.
+// background sync could never answer. It applies only when dumen does not run at a
+// terminal, and a person's own ssh command is left alone: it is set only when neither the
+// environment nor git's configuration names one.
 func sshBatch(dir string) []string {
 	sshOnce.Do(func() {
 		if os.Getenv("GIT_SSH_COMMAND") != "" || os.Getenv("GIT_SSH") != "" {
+			return
+		}
+		// At a terminal a person can type the passphrase of a key that is not in an
+		// agent; only a hook, the MCP server or a detached sync has nobody to ask.
+		if st, err := os.Stdin.Stat(); err == nil && st.Mode()&os.ModeCharDevice != 0 {
 			return
 		}
 		cmd := exec.Command("git", "config", "--get", "core.sshCommand")

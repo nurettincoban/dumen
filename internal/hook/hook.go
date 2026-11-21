@@ -434,7 +434,10 @@ var (
 	storeRef = regexp.MustCompile(`(?i)(~|\$HOME|\$\{HOME\}|%USERPROFILE%|\$env:USERPROFILE|\$\{env:USERPROFILE\})[/\\]+\.dumen\b|DUMEN_HOME`)
 )
 
-var writeVerb = regexp.MustCompile(`(?i)(write|edit|creat|delet|remov|renam|mov|append|patch|replac|updat|insert|save|put|mkdir|touch|truncat|copy)`)
+var (
+	writeVerb = regexp.MustCompile(`^(write|edit|create|delete|remove|rename|move|append|patch|replace|update|insert|save|put|mkdir|touch|truncate|copy|rm|mv|cp)$`)
+	nameToken = regexp.MustCompile(`[A-Z]?[a-z]+|[A-Z]+`)
+)
 
 // writesFiles reports whether a tool of another MCP server looks like one that changes
 // files, going by its name. dumen's own tools and tools that only read are left alone.
@@ -443,7 +446,14 @@ func writesFiles(tool string) bool {
 	if len(parts) != 3 || parts[0] != "mcp" || strings.Contains(parts[1], "dumen") {
 		return false
 	}
-	return writeVerb.MatchString(parts[2])
+	// The name is read word by word ("write_file", "createFile"), so that a verb inside
+	// another word ("get_output") does not count.
+	for _, tok := range nameToken.FindAllString(parts[2], -1) {
+		if writeVerb.MatchString(strings.ToLower(tok)) {
+			return true
+		}
+	}
+	return false
 }
 
 // denyWrite returns the reason a write to file must be refused, or "". It applies the
@@ -576,7 +586,7 @@ func (r *runCtx) preToolUse() *Output {
 		}
 		var paths map[string]json.RawMessage
 		json.Unmarshal(r.in.ToolInput, &paths)
-		for _, key := range []string{"file_path", "path", "notebook_path"} {
+		for _, key := range []string{"file_path", "path", "notebook_path", "source", "destination"} {
 			var file string
 			if json.Unmarshal(paths[key], &file) != nil || file == "" {
 				continue
