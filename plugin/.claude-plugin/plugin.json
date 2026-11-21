@@ -2,7 +2,7 @@
   "name": "dumen",
   "displayName": "dumen",
   "version": "0.2.0",
-  "description": "Shared product, UX, UI, architecture and technical decisions for every Claude Code agent on the team, kept as markdown in your own git repository. Everything is inside the plugin.",
+  "description": "Live spec-driven development for teams on Claude Code: the spec written up front, its sources and every decision made along the way, in one living spec in git. Every agent works from its latest version and hears a change while it works.",
   "author": { "name": "Nurettin Coban" },
   "homepage": "https://github.com/nurettincoban/dumen",
   "repository": "https://github.com/nurettincoban/dumen",

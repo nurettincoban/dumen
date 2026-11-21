@@ -1,12 +1,12 @@
 {
   "name": "dumen",
-  "description": "dumen: one set of team decisions for every Claude Code agent",
+  "description": "dumen: live spec-driven development for teams on Claude Code",
   "owner": { "name": "Nurettin Coban" },
   "plugins": [
     {
       "name": "dumen",
       "source": "./plugin",
-      "description": "Shared team decisions for every Claude Code agent, kept as markdown in your own git repository. Nothing else to install."
+      "description": "Live spec-driven development for teams on Claude Code: one living spec in git, shared by every agent on the team. Nothing else to install."
     }
   ]
 }

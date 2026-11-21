@@ -203,14 +203,25 @@ function lock(c, wait) {
       fs.writeFileSync(f, me, { flag: 'wx' });
       return () => { if (readState(c, 'lock') === me) fs.rmSync(f, { force: true }); };
     } catch (e) { if (e.code !== 'EEXIST') throw e; }
-    const [pid] = readState(c, 'lock').split(' ');
-    let alive = Boolean(pid);
+    const seen = readState(c, 'lock');
+    const [pid] = seen.split(' ');
+    let age = 0;
+    try { age = Date.now() - fs.statSync(f).mtimeMs; } catch { continue; }
+    // Creating the file and writing the pid into it are two steps: an empty lock is one being
+    // taken right now, not a dead one (on Windows the gap is long enough to be hit).
+    let alive = Boolean(pid) || age < 5000;
     try { if (pid) process.kill(Number(pid), 0); } catch (e) { alive = e.code === 'EPERM'; }
-    let old = false;
-    try { old = Date.now() - fs.statSync(f).mtimeMs > 10 * 60 * 1000; } catch { continue; }
-    if (!alive || old) {
-      const away = `${f}.stale-${process.pid}`;
-      try { fs.renameSync(f, away); fs.rmSync(away, { force: true }); } catch {}
+    if (!alive || age > 10 * 60 * 1000) {
+      const away = `${f}.stale-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
+      try {
+        fs.renameSync(f, away);
+        // Another process may have taken over the same dead lock first: if what was moved is
+        // not the lock judged dead, put it back.
+        let moved = '';
+        try { moved = fs.readFileSync(away, 'utf8').trim(); } catch {}
+        if (moved !== seen) { try { fs.linkSync(away, f); } catch {} }
+        fs.rmSync(away, { force: true });
+      } catch {}
       continue;
     }
     if (Date.now() >= deadline) return null;

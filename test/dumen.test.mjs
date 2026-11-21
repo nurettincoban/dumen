@@ -284,6 +284,12 @@ test('a lock left by a killed process is taken over', () => {
   const r = repos['web-app'];
   fs.writeFileSync(path.join(r, '.git', 'dumen', 'state', 'lock'), '999999 dead');
   assert.match(dumen(r, 'propose', ...slotRule), /Proposed D-/);
+  // An empty lock is one being taken right now (its pid is not written yet): it is waited for,
+  // never taken over at once, or two writers would share the store.
+  fs.writeFileSync(path.join(r, '.git', 'dumen', 'state', 'lock'), '');
+  const t0 = Date.now();
+  assert.match(dumen(r, 'propose', '--kind', 'ui', '--rule', 'Another rule'), /Proposed D-/);
+  assert.ok(Date.now() - t0 >= 4000, 'an empty lock was taken over at once');
 });
 
 test('hostile input never reaches the frontmatter', () => {
