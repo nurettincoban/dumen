@@ -604,7 +604,7 @@ test('a commit holds exactly the files its change wrote', shimmed, () => {
   assert.ok(!files.includes('D-STRAY22'), 'a file the change did not write was committed with it');
 });
 
-test('a lock held elsewhere never blinds a clone: news and show read the store, list says it may be old', () => {
+test('a lock held elsewhere never blinds a clone: news and show read the store, the prompt names the holder', () => {
   const { repos } = team(['web-app', 'sofia@example.com'], ['booking-svc', 'ayse@example.com']);
   const a = repos['booking-svc'];
   hook(a, 'session-start', { session_id: 'a1' });
@@ -615,9 +615,9 @@ test('a lock held elsewhere never blinds a clone: news and show read the store, 
   const id = approved(repos['web-app'], '--kind', 'product', '--rule', 'Cancelled bookings are refunded to the card');
   const said = hook(a, 'prompt', { session_id: 'a1' });
   assert.match(said, new RegExp(`DECISION NEWS[\\s\\S]*${id}`), 'the prompt hook stayed silent');
-  assert.match(said, /held by another dumen process \(pid 4242 on otherhost/);
+  assert.match(said, /another dumen process \(pid 4242 on otherhost[^)]*\) has held/);
   assert.match(dumen(a, 'show', id), /Cancelled bookings are refunded to the card/);
-  assert.match(dumen(a, 'list', '--all'), /held by another dumen process/);
+  assert.match(dumen(a, 'list', '--all'), new RegExp(id));
   assert.equal(fs.readFileSync(f, 'utf8'), '4242 otherhost/pid:[1] abc', 'a fresh lock from elsewhere was taken over');
   // The tool hook hears it too, in a session that saw the store before the decision (the
   // local copy, held, is still there).
@@ -625,4 +625,29 @@ test('a lock held elsewhere never blinds a clone: news and show read the store, 
   fs.writeFileSync(path.join(a, '.git', 'dumen', 'state', 'seen-a3'), `${before}\n`);
   fs.writeFileSync(path.join(a, '.git', 'dumen', 'state', 'shown-a3'), '1\n');
   assert.match(ctx(hook(a, 'tool', { session_id: 'a3', tool_name: 'Read' })) || '', new RegExp(id), 'the tool hook stayed silent');
+});
+
+test('whatever starts while the local copy is held is shown one commit, and marked as having seen that commit', () => {
+  const { repos } = team(['web-app', 'sofia@example.com'], ['booking-svc', 'ayse@example.com']);
+  const a = repos['booking-svc'];
+  dumen(a, 'list');
+  const st = path.join(a, '.git', 'dumen', 'store');
+  const f = path.join(a, '.git', 'dumen', 'state', 'lock');
+  // An ordinary second dumen command here holds the copy: a live pid, this machine, fresh.
+  fs.writeFileSync(f, `${process.pid} ${HERE} busy`);
+  const id = approved(repos['web-app'], '--kind', 'product', '--rule', 'Refunds go to the original card');
+  const start = hook(a, 'session-start', { session_id: 's1' });
+  assert.match(start, new RegExp(id), 'session start showed files older than what it marked as seen');
+  assert.match(ctx({ hookSpecificOutput: { additionalContext: hook(a, 'prompt', { session_id: 'p1' }) } }) || '', new RegExp(id), 'prompt first look');
+  assert.match(ctx(hook(a, 'tool', { session_id: 't1', tool_name: 'Read' })) || '', new RegExp(id), 'tool first look');
+  assert.match(ctx(hook(a, 'tool', { session_id: 's1', agent_id: 'sub1', tool_name: 'Read' })) || '', new RegExp(id), 'subagent first look');
+  // An approved record a holder has written but not committed is shown to no one.
+  fs.writeFileSync(path.join(st, 'decisions', 'D-FAKE22.md'), sh(st, 'git', ['show', `refs/remotes/origin/dumen:decisions/${id}.md`]).replace(id, 'D-FAKE22').replace('Refunds go to the original card', 'Refunds are never given'));
+  for (const out of [hook(a, 'session-start', { session_id: 's2' }), dumen(a, 'list', '--all'), dumen(a, 'search', 'refunds'), hook(a, 'prompt', { session_id: 'p2' })]) {
+    assert.doesNotMatch(String(out), /never given|D-FAKE22/);
+  }
+  fs.rmSync(path.join(st, 'decisions', 'D-FAKE22.md'), { force: true });
+  fs.rmSync(f, { force: true });
+  // Once the copy is free the same sessions are not told again, and nothing was lost.
+  assert.doesNotMatch(String(hook(a, 'prompt', { session_id: 's1' }) || ''), new RegExp(id));
 });

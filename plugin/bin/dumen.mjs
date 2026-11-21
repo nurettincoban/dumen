@@ -330,8 +330,8 @@ function fetchSoon(c) {
   } catch {}
 }
 
-// lockNote says when the local copy has been held by another dumen process for a while, so the
-// files there (and dumen list) may be older than the store.
+// lockNote says when the local copy has been held by another dumen process for a while: what
+// is shown is read from the store and current, but a change from here waits.
 function lockNote(c) {
   const f = state(c, 'lock');
   let age = 0;
@@ -339,7 +339,7 @@ function lockNote(c) {
   if (age < 30000) return '';
   const [pid, where] = readState(c, 'lock').split(' ');
   const who = pid ? `pid ${clean(pid, 12)}${where && where !== WHERE ? ` on ${clean(where, 80)}` : ''}` : 'a process';
-  return `dumen: the local copy of the store has been held by another dumen process (${who}) for ${ago(Date.now() - age)}; dumen list and the files there may be older than the store. News and dumen show read the store directly.`;
+  return `dumen: another dumen process (${who}) has held this clone's local copy of the store for ${ago(Date.now() - age)}. What dumen shows is current; a change from here waits until that process ends or is found gone.`;
 }
 
 function staleNote(c) {
@@ -376,6 +376,7 @@ function transact(c, message, change) {
       unlock.touch();
       reset(c);
       checkVersion(c);
+      c.at = null;
       c.wrote = new Set();
       unlock.touch();
       const done = change();
@@ -484,10 +485,64 @@ function checkId(id) {
   return id;
 }
 
+// --- reading: one commit -----------------------------------------------------------------------
+
+// Everything shown to an agent is read from one commit, the remote head as last fetched (c.at),
+// and a session's seen mark is that same commit. The files of the local copy are only the
+// workspace of a change, read inside a transaction (c.at null), so a reader never sees a
+// holder's uncommitted files, nor files older than what it marks as seen.
+function view(c) {
+  c.at = remoteHead(c) || '';
+  c.blobs = new Map();
+  // Pointers into the local copy are right only when its files are that commit.
+  c.fresh = Boolean(c.at) && tryGit(c.store, ['rev-parse', '-q', '--verify', 'HEAD']) === c.at && !tryGit(c.store, ['status', '--porcelain']);
+  return c.at;
+}
+
+// filesIn lists the .md files of a directory of the store, at c.at or in the local copy.
+function filesIn(c, dir) {
+  if (c.at == null) { try { return fs.readdirSync(path.join(c.store, dir)).filter((n) => n.endsWith('.md')).sort(); } catch { return []; } }
+  if (!c.at) return [];
+  const out = tryGit(c.store, ['ls-tree', '--name-only', '-z', `${c.at}:${dir}`]);
+  return out ? out.split('\0').filter((n) => n.endsWith('.md')).sort() : [];
+}
+
+// readAll reads files of the store at c.at in one git process, or from the local copy.
+function readAll(c, rels) {
+  const res = new Map();
+  if (c.at == null) { for (const f of rels) { try { res.set(f, fs.readFileSync(path.join(c.store, f), 'utf8')); } catch {} } return res; }
+  const want = rels.filter((f) => !c.blobs.has(f));
+  if (c.at && want.length) {
+    let buf = Buffer.alloc(0);
+    try {
+      buf = execFileSync('git', ['-C', c.store, 'cat-file', '--batch'], {
+        input: want.map((f) => `${c.at}:${f}\n`).join(''), stdio: ['pipe', 'pipe', 'pipe'], env, windowsHide: true, maxBuffer: 256 * 1024 * 1024,
+      });
+    } catch {}
+    let i = 0;
+    for (const f of want) {
+      const nl = buf.indexOf(10, i);
+      if (nl < 0) break;
+      const head = buf.subarray(i, nl).toString().split(' ');
+      i = nl + 1;
+      if (head[1] !== 'blob') { c.blobs.set(f, null); continue; }
+      const size = Number(head[2]);
+      c.blobs.set(f, buf.subarray(i, i + size).toString('utf8'));
+      i += size + 1;
+    }
+  }
+  for (const f of rels) { const t = c.blobs.get(f); if (t != null) res.set(f, t); }
+  return res;
+}
+const readOne = (c, f) => readAll(c, [f]).get(f);
+
+// blobOf is the id of a record as it is at c.at, or in the local copy's last commit.
+function blobOf(c, id) { return tryGit(c.store, ['rev-parse', '-q', '--verify', `${c.at == null ? 'HEAD' : c.at}:decisions/${id}.md`]); }
+
 function load(c, id) {
   checkId(id);
-  let text;
-  try { text = fs.readFileSync(recordPath(c, id), 'utf8'); } catch { throw new Fail(`no decision ${id} in the store`); }
+  const text = readOne(c, `decisions/${id}.md`);
+  if (text == null) throw new Fail(`no decision ${id} in the store`);
   const d = parse(text);
   if (d.meta.id !== id) throw new Fail(`${id}.md does not hold ${id}`);
   return d;
@@ -508,10 +563,9 @@ function write(c, f, text) {
 }
 
 function all(c) {
-  let files = [];
-  try { files = fs.readdirSync(c.dir); } catch {}
-  return files.filter((n) => n.endsWith('.md') && ID_RE.test(n.slice(0, -3))).sort()
-    .map((n) => parse(fs.readFileSync(path.join(c.dir, n), 'utf8'))).filter((d) => d.meta.id && ID_RE.test(d.meta.id));
+  const rels = filesIn(c, 'decisions').filter((n) => ID_RE.test(n.slice(0, -3))).map((n) => `decisions/${n}`);
+  const texts = readAll(c, rels);
+  return rels.filter((f) => texts.has(f)).map((f) => parse(texts.get(f))).filter((d) => d.meta.id && ID_RE.test(d.meta.id));
 }
 
 function newId(c) {
@@ -630,7 +684,7 @@ function useTicket(c, sub, a) {
 
 function expectUnchanged(c, ticket, id) {
   if (!ticket.blob) return;
-  const now = tryGit(c.store, ['hash-object', '--', recordPath(c, id)]);
+  const now = blobOf(c, id);
   if (now !== ticket.blob) throw new Fail(`${id} changed after your human was asked; show it to them again and ask again. Nothing was changed`);
 }
 
@@ -839,11 +893,11 @@ const commands = {
 
   list(c, a) {
     refresh(c, 15000);
+    view(c);
     const want = given(a.status) || 'approved';
     const ds = all(c).filter((d) => (want === 'all' || d.meta.status === want) && (a.all || concerns(c, d)));
-    const held = lockNote(c);
-    if (!ds.length) return [held, `No ${want === 'all' ? '' : want + ' '}decisions${a.all ? '' : ` for ${c.service}`}.`].filter(Boolean).join('\n');
-    return [held, ...ds.map(brief)].filter(Boolean).join('\n');
+    if (!ds.length) return `No ${want === 'all' ? '' : want + ' '}decisions${a.all ? '' : ` for ${c.service}`}.`;
+    return ds.map(brief).join('\n');
   },
 
   // show reads the store as last fetched, not the local copy's files, so it is current even
@@ -853,23 +907,23 @@ const commands = {
     const what = String(given(a._[0]) || '');
     const part = what.match(/^(spec|sources)\/([a-z0-9][a-z0-9-]{0,59})(\.md)?$/);
     const f = part ? `${part[1]}/${part[2]}.md` : `decisions/${checkId(what)}.md`;
-    const head = remoteHead(c);
-    const text = head ? tryGit(c.store, ['show', `${head}:${f}`]) : null;
+    view(c);
+    const text = readOne(c, f);
     if (text == null) throw new Fail(part ? `there is no ${f} in the store` : `there is no decision ${what} in the store`);
     return text.trim();
   },
 
   search(c, a) {
     refresh(c, 15000);
+    view(c);
     const words = a._.join(' ').toLowerCase().split(/[^\p{L}\p{N}-]+/u).filter((w) => w.length > 2);
     if (!words.length) throw new Fail('search needs words');
     const hits = all(c).filter((d) => ['approved', 'proposed', 'open'].includes(d.meta.status)).map((d) => {
       const text = `${d.meta.title} ${d.body} ${(d.meta.topics || []).join(' ')} ${(d.meta.services || []).join(' ')}`.toLowerCase();
       return { d, n: words.filter((w) => text.includes(w)).length };
     }).filter((h) => h.n > 0).sort((x, y) => y.n - x.n || (x.d.meta.status === 'approved' ? -1 : 1));
-    const held = lockNote(c);
-    if (!hits.length) return [held, 'No decision mentions these words. If nothing in force answers the question, ask your human.'].filter(Boolean).join('\n');
-    return [held, ...hits.slice(0, 15).map((h) => brief(h.d))].filter(Boolean).join('\n');
+    if (!hits.length) return 'No decision mentions these words. If nothing in force answers the question, ask your human.';
+    return hits.slice(0, 15).map((h) => brief(h.d)).join('\n');
   },
 
   log(c, a) {
@@ -887,7 +941,8 @@ const commands = {
 // left out. The caller moves the session's mark on (commit) only once the text is handed out,
 // so a failure can repeat news but never lose it.
 function news(c, agentId) {
-  const to = remoteHead(c);
+  if (c.at === undefined) view(c);
+  const to = c.at;
   if (!to) return null;
   const mark = `seen-${c.session || 'none'}${agentId ? '-' + safeSession(agentId) : ''}`;
   const from = readState(c, mark);
@@ -906,15 +961,13 @@ function news(c, agentId) {
   const ds = [];
   // The files in the local copy are the store's only when it is up to date; otherwise point at
   // dumen show, which reads the store directly.
-  const fresh = tryGit(c.store, ['rev-parse', '-q', '--verify', 'HEAD']) === to;
-  const at = (f) => (fresh ? `${c.shown}/${f}` : `dumen show ${f.slice(0, -3)}`);
   for (const f of [...files].sort()) {
-    const text = tryGit(c.store, ['show', `${to}:${f}`]);
+    const text = readOne(c, f);
     if (text == null) continue;
-    if (f.startsWith('spec/')) { items.push(`- The spec part ${f.slice(5, -3)} changed. Read ${at(f)} before you go on.`); continue; }
+    if (f.startsWith('spec/')) { items.push(`- The spec part ${f.slice(5, -3)} changed. Read ${pointer(c, f)} before you go on.`); continue; }
     if (f.startsWith('sources/')) {
       const s = parse(text);
-      items.push(`- The source "${clean(s.meta.title || f, 120)}" <${clean(s.meta.url, 300)}> was updated. Its summary: ${at(f)}`);
+      items.push(`- The source "${clean(s.meta.title || f, 120)}" <${clean(s.meta.url, 300)}> was updated. Its summary: ${pointer(c, f)}`);
       continue;
     }
     const d = parse(text);
@@ -1119,6 +1172,7 @@ function guard(c, input) {
 function confirm(c, { sub, a }, ti) {
   try { ensureClone(c); } catch (e) { return deny(`dumen: ${e.message}`); }
   refresh(c, HOOK_FETCH_MS);
+  view(c);
   const id = a._[0];
   if (!ID_RE.test(String(id || ''))) return deny(`dumen: "${clean(id, 40)}" is not a decision id.`);
   let d;
@@ -1141,7 +1195,7 @@ function confirm(c, { sub, a }, ti) {
     for (const n of a.needs) msg += ` It asks ${clean(n)}.`;
   }
   const ticket = crypto.randomBytes(16).toString('hex');
-  const blob = tryGit(c.store, ['hash-object', '--', recordPath(c, id)]);
+  const blob = blobOf(c, id);
   writeState(c, `tickets/${ticketName(ticket)}.json`, JSON.stringify({ at: Date.now(), key: argsKey(sub, a), session: c.session, blob }));
   pruneTickets(c);
   const command = `${String(ti.command).replace(/\s+$/, '')} --ticket ${ticket}`;
@@ -1163,6 +1217,10 @@ function pruneTickets(c) {
 
 const BUDGET = Number(process.env.DUMEN_BUDGET || 8000);
 
+// pointer names where an agent reads a spec part or a source: the file in the local copy when
+// it is exactly the commit shown, otherwise dumen show, which reads that commit.
+function pointer(c, f) { return c.fresh ? `${c.shown}/${f}` : `dumen show ${f.slice(0, -3)}`; }
+
 // livingSpec is the whole living spec in reading order, within a budget of characters, so
 // that Claude Code never cuts it silently. For a subagent it is the decisions alone.
 function livingSpec(c, subagent) {
@@ -1172,20 +1230,19 @@ function livingSpec(c, subagent) {
   add(`dumen: this product has a living spec, shared by the team through git (use the dumen skill). This repository is the service ${c.service}.`);
   let step = 0;
   if (!subagent) {
-    let parts = [];
-    try { parts = fs.readdirSync(path.join(c.store, 'spec')).filter((x) => x.endsWith('.md') && SLUG_RE.test(x.slice(0, -3))).sort(); } catch {}
-    if (parts.length) add(`${++step}. The spec, written up front. Read the parts your task touches: ${parts.map((x) => `${c.shown}/spec/${x}`).join(', ')}`);
-    let srcs = [];
-    try { srcs = fs.readdirSync(path.join(c.store, 'sources')).filter((x) => x.endsWith('.md') && SLUG_RE.test(x.slice(0, -3))).sort(); } catch {}
+    const parts = filesIn(c, 'spec').filter((x) => SLUG_RE.test(x.slice(0, -3)));
+    if (parts.length) add(`${++step}. The spec, written up front. Read the parts your task touches: ${parts.map((x) => pointer(c, `spec/${x}`)).join(', ')}`);
+    const srcs = filesIn(c, 'sources').filter((x) => SLUG_RE.test(x.slice(0, -3)));
+    const texts = readAll(c, srcs.map((x) => `sources/${x}`));
     if (srcs.length) {
       add(`${++step}. Sources of truth. A summary is in git; open the link with your connectors when you need more:`);
       let n = 0;
       for (const x of srcs) {
-        const src = parse(fs.readFileSync(path.join(c.store, 'sources', x), 'utf8'));
-        if (used > BUDGET / 2 || !add(`   - ${x.slice(0, -3)}: ${clean(src.meta.title, 120)} <${clean(src.meta.url, 300)}>${src.meta.about ? ` (${clean(src.meta.about, 200)})` : ''}, summary of ${clean(src.meta.seen, 40)}: ${c.shown}/sources/${x}`)) break;
+        const src = parse(texts.get(`sources/${x}`) || '');
+        if (used > BUDGET / 2 || !add(`   - ${x.slice(0, -3)}: ${clean(src.meta.title, 120)} <${clean(src.meta.url, 300)}>${src.meta.about ? ` (${clean(src.meta.about, 200)})` : ''}, summary of ${clean(src.meta.seen, 40)}: ${pointer(c, `sources/${x}`)}`)) break;
         n++;
       }
-      if (n < srcs.length) { const t = `   ... and ${srcs.length - n} more in ${c.shown}/sources/`; out.push(t); used += t.length + 1; }
+      if (n < srcs.length) { const t = `   ... and ${srcs.length - n} more: dumen show sources/<name>`; out.push(t); used += t.length + 1; }
     }
   }
   const ds = all(c);
@@ -1232,7 +1289,7 @@ function sessionStart(c, input) {
   out.push(livingSpec(c, Boolean(input.agent_id)).text);
   const key = markKey(c, input.agent_id);
   if (n) n.commit();
-  else if (!readState(c, `seen-${key}`)) { const h = remoteHead(c); if (h) writeState(c, `seen-${key}`, h); }
+  else if (!readState(c, `seen-${key}`)) { if (c.at) writeState(c, `seen-${key}`, c.at); }
   writeState(c, `shown-${key}`, '1');
   return out.join('\n');
 }
@@ -1242,8 +1299,9 @@ function sessionStart(c, input) {
 function firstLook(c, input) {
   const key = markKey(c, input.agent_id);
   if (readState(c, `shown-${key}`)) return null;
+  if (c.at === undefined) view(c);
   const spec = livingSpec(c, Boolean(input.agent_id));
-  const h = remoteHead(c);
+  const h = c.at;
   return { text: spec.text, inForce: spec.inForce, commit: () => { if (h) writeState(c, `seen-${key}`, h); writeState(c, `shown-${key}`, '1'); } };
 }
 
