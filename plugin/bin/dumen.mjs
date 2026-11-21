@@ -306,7 +306,9 @@ function reset(c) {
 // refresh brings the local copy up to date, unless another dumen process is using it.
 function refresh(c, timeout) {
   const unlock = lock(c, 0);
-  if (!unlock) return true;
+  // Reading never waits for the lock: the fetch only moves the remote ref, which news and
+  // dumen show read from. Only the local copy's files wait for the holder (see lockNote).
+  if (!unlock) return fetch(c, timeout);
   try {
     writeState(c, 'fetched', String(Date.now()));
     const ok = fetch(c, timeout);
@@ -326,6 +328,18 @@ function fetchSoon(c) {
     p.on('error', () => {});
     p.unref();
   } catch {}
+}
+
+// lockNote says when the local copy has been held by another dumen process for a while, so the
+// files there (and dumen list) may be older than the store.
+function lockNote(c) {
+  const f = state(c, 'lock');
+  let age = 0;
+  try { age = Date.now() - fs.statSync(f).mtimeMs; } catch { return ''; }
+  if (age < 30000) return '';
+  const [pid, where] = readState(c, 'lock').split(' ');
+  const who = pid ? `pid ${clean(pid, 12)}${where && where !== WHERE ? ` on ${clean(where, 80)}` : ''}` : 'a process';
+  return `dumen: the local copy of the store has been held by another dumen process (${who}) for ${ago(Date.now() - age)}; dumen list and the files there may be older than the store. News and dumen show read the store directly.`;
 }
 
 function staleNote(c) {
@@ -348,12 +362,18 @@ function transact(c, message, change) {
   if (!EMAIL_RE.test(c.email)) throw new Fail('git user.email is not set in this repository, and every change in the store is recorded with it. Ask your human to set it (git config user.email), then run the command again');
   ensureClone(c);
   const unlock = lock(c, Number(process.env.DUMEN_LOCK_WAIT_MS) || 60000);
-  if (!unlock) throw new Fail('the store is busy (another dumen command is running here); try again');
+  if (!unlock) {
+    const [pid, where] = readState(c, 'lock').split(' ');
+    const who = pid ? ` (pid ${clean(pid, 12)}${where && where !== WHERE ? ` on ${clean(where, 80)}` : ' on this machine'})` : '';
+    throw new Fail(`the store is busy: another dumen command${who} holds this clone's local copy; try again`);
+  }
   try {
     let last = '';
     for (let attempt = 1; attempt <= 8; attempt++) {
       last = '';
+      unlock.touch();
       if (!fetch(c, 30000)) throw new Fail(`could not reach the store ${c.url}. Nothing was changed, and nobody else sees it`);
+      unlock.touch();
       reset(c);
       checkVersion(c);
       c.wrote = new Set();
@@ -389,13 +409,15 @@ function transact(c, message, change) {
       // Then look: done only when the remote branch holds the commit. If the remote cannot be
       // read right after a push that succeeded, the push is the proof.
       const read = fetch(c, 30000);
+      unlock.touch();
       if (read ? tryGit(c.store, ['merge-base', '--is-ancestor', mine, remoteRef(c)]) !== null : pushed) return done;
       if (!read && !/rejected|non-fast-forward|fetch first/i.test(last)) throw new Fail(`the store could not be reached to confirm "${clean(message, 80)}", so it is not known whether the team sees it. Run dumen log when the remote is back; run the command again only if it is not there`);
       reset(c);
       if (last && !/rejected|fetch first|non-fast-forward|cannot lock|stale info|failed to update ref/i.test(last)) break;
       sleep(100 * attempt + crypto.randomInt(200));
     }
-    throw new Fail(`could not push to the store, so nothing was changed and nobody else sees it. git said: ${clean(last.split('\n').pop(), 200)}`);
+    const why = /^the change was /.test(last) ? last : `git said: ${clean(last.split('\n').pop(), 200)}`;
+    throw new Fail(`could not push to the store, so nothing was changed and nobody else sees it. ${why}`);
   } finally { unlock(); }
 }
 
@@ -819,13 +841,22 @@ const commands = {
     refresh(c, 15000);
     const want = given(a.status) || 'approved';
     const ds = all(c).filter((d) => (want === 'all' || d.meta.status === want) && (a.all || concerns(c, d)));
-    if (!ds.length) return `No ${want === 'all' ? '' : want + ' '}decisions${a.all ? '' : ` for ${c.service}`}.`;
-    return ds.map(brief).join('\n');
+    const held = lockNote(c);
+    if (!ds.length) return [held, `No ${want === 'all' ? '' : want + ' '}decisions${a.all ? '' : ` for ${c.service}`}.`].filter(Boolean).join('\n');
+    return [held, ...ds.map(brief)].filter(Boolean).join('\n');
   },
 
+  // show reads the store as last fetched, not the local copy's files, so it is current even
+  // while another dumen process holds the local copy.
   show(c, a) {
     refresh(c, 15000);
-    return fs.readFileSync(recordPath(c, load(c, checkId(a._[0])).meta.id), 'utf8').trim();
+    const what = String(given(a._[0]) || '');
+    const part = what.match(/^(spec|sources)\/([a-z0-9][a-z0-9-]{0,59})(\.md)?$/);
+    const f = part ? `${part[1]}/${part[2]}.md` : `decisions/${checkId(what)}.md`;
+    const head = remoteHead(c);
+    const text = head ? tryGit(c.store, ['show', `${head}:${f}`]) : null;
+    if (text == null) throw new Fail(part ? `there is no ${f} in the store` : `there is no decision ${what} in the store`);
+    return text.trim();
   },
 
   search(c, a) {
@@ -836,8 +867,9 @@ const commands = {
       const text = `${d.meta.title} ${d.body} ${(d.meta.topics || []).join(' ')} ${(d.meta.services || []).join(' ')}`.toLowerCase();
       return { d, n: words.filter((w) => text.includes(w)).length };
     }).filter((h) => h.n > 0).sort((x, y) => y.n - x.n || (x.d.meta.status === 'approved' ? -1 : 1));
-    if (!hits.length) return 'No decision mentions these words. If nothing in force answers the question, ask your human.';
-    return hits.slice(0, 15).map((h) => brief(h.d)).join('\n');
+    const held = lockNote(c);
+    if (!hits.length) return [held, 'No decision mentions these words. If nothing in force answers the question, ask your human.'].filter(Boolean).join('\n');
+    return [held, ...hits.slice(0, 15).map((h) => brief(h.d))].filter(Boolean).join('\n');
   },
 
   log(c, a) {
@@ -872,13 +904,17 @@ function news(c, agentId) {
   }
   const items = [];
   const ds = [];
+  // The files in the local copy are the store's only when it is up to date; otherwise point at
+  // dumen show, which reads the store directly.
+  const fresh = tryGit(c.store, ['rev-parse', '-q', '--verify', 'HEAD']) === to;
+  const at = (f) => (fresh ? `${c.shown}/${f}` : `dumen show ${f.slice(0, -3)}`);
   for (const f of [...files].sort()) {
     const text = tryGit(c.store, ['show', `${to}:${f}`]);
     if (text == null) continue;
-    if (f.startsWith('spec/')) { items.push(`- The spec part ${f.slice(5, -3)} changed. Read ${c.shown}/${f} before you go on.`); continue; }
+    if (f.startsWith('spec/')) { items.push(`- The spec part ${f.slice(5, -3)} changed. Read ${at(f)} before you go on.`); continue; }
     if (f.startsWith('sources/')) {
       const s = parse(text);
-      items.push(`- The source "${clean(s.meta.title || f, 120)}" <${clean(s.meta.url, 300)}> was updated. Its summary: ${c.shown}/${f}`);
+      items.push(`- The source "${clean(s.meta.title || f, 120)}" <${clean(s.meta.url, 300)}> was updated. Its summary: ${at(f)}`);
       continue;
     }
     const d = parse(text);
@@ -1191,6 +1227,8 @@ function sessionStart(c, input) {
   const n = news(c, input.agent_id);
   if (n && n.text) out.push(n.text, '');
   if (!reached) out.push(staleNote(c) || 'dumen: the store could not be reached just now; this may be out of date.');
+  const held = lockNote(c);
+  if (held) out.push(held);
   out.push(livingSpec(c, Boolean(input.agent_id)).text);
   const key = markKey(c, input.agent_id);
   if (n) n.commit();
@@ -1242,7 +1280,7 @@ function hook(event) {
     const ok = refresh(c, HOOK_FETCH_MS);
     const stale = ok ? '' : staleNote(c);
     const n = firstLook(c, input) || news(c, input.agent_id);
-    const text = [stale, n && n.text].filter(Boolean).join('\n');
+    const text = [stale, lockNote(c), n && n.text].filter(Boolean).join('\n');
     if (text) emit(text);
     if (n) n.commit();
     return;
@@ -1250,7 +1288,7 @@ function hook(event) {
   if (!cloned(c)) return;
   if (event === 'tool') {
     fetchSoon(c);
-    if (!current(c)) return;
+    current(c);
     const n = firstLook(c, input) || news(c, input.agent_id);
     if (n) { if (n.text) emit({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: n.text } }); n.commit(); }
     return;

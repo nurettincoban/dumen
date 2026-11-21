@@ -603,3 +603,26 @@ test('a commit holds exactly the files its change wrote', shimmed, () => {
   assert.ok(files.includes(`decisions/${id}.md`));
   assert.ok(!files.includes('D-STRAY22'), 'a file the change did not write was committed with it');
 });
+
+test('a lock held elsewhere never blinds a clone: news and show read the store, list says it may be old', () => {
+  const { repos } = team(['web-app', 'sofia@example.com'], ['booking-svc', 'ayse@example.com']);
+  const a = repos['booking-svc'];
+  hook(a, 'session-start', { session_id: 'a1' });
+  const f = path.join(a, '.git', 'dumen', 'state', 'lock');
+  fs.writeFileSync(f, '4242 otherhost/pid:[1] abc');
+  const old = new Date(Date.now() - 2 * 60 * 1000);
+  fs.utimesSync(f, old, old);
+  const id = approved(repos['web-app'], '--kind', 'product', '--rule', 'Cancelled bookings are refunded to the card');
+  const said = hook(a, 'prompt', { session_id: 'a1' });
+  assert.match(said, new RegExp(`DECISION NEWS[\\s\\S]*${id}`), 'the prompt hook stayed silent');
+  assert.match(said, /held by another dumen process \(pid 4242 on otherhost/);
+  assert.match(dumen(a, 'show', id), /Cancelled bookings are refunded to the card/);
+  assert.match(dumen(a, 'list', '--all'), /held by another dumen process/);
+  assert.equal(fs.readFileSync(f, 'utf8'), '4242 otherhost/pid:[1] abc', 'a fresh lock from elsewhere was taken over');
+  // The tool hook hears it too, in a session that saw the store before the decision (the
+  // local copy, held, is still there).
+  const before = sh(path.join(a, '.git', 'dumen', 'store'), 'git', ['rev-parse', 'HEAD']);
+  fs.writeFileSync(path.join(a, '.git', 'dumen', 'state', 'seen-a3'), `${before}\n`);
+  fs.writeFileSync(path.join(a, '.git', 'dumen', 'state', 'shown-a3'), '1\n');
+  assert.match(ctx(hook(a, 'tool', { session_id: 'a3', tool_name: 'Read' })) || '', new RegExp(id), 'the tool hook stayed silent');
+});

@@ -123,7 +123,8 @@ your human, ask them when it fits and record the answer with
 ## Looking things up
 
 - `dumen list` (in force here), `dumen list --status proposed`, `dumen list --status all --all`
-- `dumen show <id>`: the whole decision, with its reasons
+- `dumen show <id>`: the whole decision, with its reasons; `dumen show spec/<name>` or
+  `dumen show sources/<name>` for a spec part or a source's summary, as the store has it now
 - `dumen log --since "1 week"`: what changed
 - the files in `.git/dumen/store/spec/` and `.git/dumen/store/sources/`
 
