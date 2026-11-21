@@ -196,7 +196,13 @@ elsewhere (a dev container or WSL sharing the clone with the host) only when the
 been touched for 5 minutes, and a holder touches it at every step of a change. A takeover runs
 under a file of its own and removes the lock only if it is still the one judged dead. Before
 committing, the staged files must be exactly the ones the change wrote; otherwise the change
-was mixed with another and goes back to step 1. A process killed in the middle leaves at most an
+was mixed with another and goes back to step 1. Reading never waits for the lock: hooks
+fetch without it. **Everything shown to an agent is read from one commit**, the remote branch
+as last fetched (session start, news, `list`, `search`, `show`, the approval prompt), and a
+session's seen mark is that same commit. The local copy's files are only the workspace of a
+change; they are pointed at only when they are exactly that commit, otherwise `dumen show
+spec/<name>` or `sources/<name>` is. When the lock has been held for more than 30 seconds,
+the prompt hook and session start name its holder. A process killed in the middle leaves at most an
 unpushed commit or loose files, which the next transaction's step 1 throws away.
 
 **Commits** are authored with the person's git `user.email` and `user.name`. The subject names
