@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>dumen · team decisions for your Claude Code agents</title>
-<meta name="description" content="Your Claude Code agents ask A or B while they work. dumen turns the answers into team decisions that every agent follows, and sends every change to the others as news. Runs on the git remote you already have.">
-<meta property="og:title" content="dumen">
-<meta property="og:description" content="Your agents ask A or B. dumen remembers the answer, for every agent on the team.">
+<title>dumen · live spec-driven development for Claude Code teams</title>
+<meta name="description" content="The spec you write up front and every decision made along the way, in one living spec in git. Every Claude Code agent on the team works from its latest version, and hears a change while it is still working.">
+<meta property="og:title" content="dumen · live spec-driven development">
+<meta property="og:description" content="One living spec in git for every Claude Code agent on the team: the spec, its sources, and the decisions made along the way.">
 <meta property="og:image" content="assets/og.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d1117'/%3E%3Ccircle cx='32' cy='32' r='16' fill='none' stroke='%23e8a54b' stroke-width='5'/%3E%3Cpath d='M32 8v48M8 32h48M15 15l34 34M49 15 15 49' stroke='%23e8a54b' stroke-width='4' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='32' r='6' fill='%23e8a54b'/%3E%3C/svg%3E">
@@ -17,8 +17,9 @@
   <div class="wrap nav-in">
     <a class="logo" href="#top">d<b>u</b>men</a>
     <nav>
-      <a href="#roles">Who does what</a>
+      <a href="#living">Living spec</a>
       <a href="#live">Real sessions</a>
+      <a href="#how">How it works</a>
       <a href="#setup">Install</a>
       <a href="#limits">Limits</a>
       <a class="gh" href="https://github.com/nurettincoban/dumen">GitHub</a>
@@ -28,228 +29,199 @@
 
 <main id="top">
 <section class="hero wrap">
-  <p class="eyebrow">Open source · Apache-2.0 · early, not released yet</p>
-  <h1>Your agents ask "A or B?".<br>dumen remembers the answer, for every agent.</h1>
-  <p class="lead">Several developers run Claude Code at the same time, each on a different part of one product. dumen turns the answers they give their agents into team decisions of every kind: product, UX, UI, architecture and technical. Decisions are binding but changeable: any team member puts one in force with one "Yes", anyone can change it, and every change reaches the other agents as news.</p>
+  <p class="eyebrow">Open source · Apache-2.0 · a Claude Code plugin</p>
+  <h1>Live spec-driven development<br>for teams on Claude Code.</h1>
+  <p class="lead">Write the spec up front, then let the work ask its questions. dumen keeps every answer in the spec, in git, so the next agent on the next laptop already knows it, and the agents that are running hear it while they work.</p>
+  <div class="install"><span class="dim">claude ›</span> /plugin marketplace add nurettincoban/dumen <span class="dim">&amp;&amp;</span> /plugin install dumen@dumen <button class="copy" data-copy="/plugin marketplace add nurettincoban/dumen">Copy</button></div>
   <div class="cta">
-    <a class="btn primary" href="#setup">Install the plugin</a>
-    <a class="btn" href="#live">Real sessions</a>
-    <a class="btn" href="https://github.com/nurettincoban/dumen">View on GitHub</a>
+    <a class="btn primary" href="#live">See real sessions</a>
+    <a class="btn" href="https://github.com/nurettincoban/dumen/blob/main/docs/protocol.md">Read the protocol</a>
   </div>
 </section>
 
-<section class="wrap" id="roles">
-  <h2>Who does what</h2>
-  <p class="sub">Once dumen is installed, nobody on the team has to learn a new command. People talk to Claude as usual. The agent uses dumen's tools by itself, and asks its human whenever a person has to decide.</p>
-  <div class="roles">
-    <div class="role agent">
-      <div class="role-h"><span class="chip agent">Agent</span><h3>Does it on its own</h3></div>
-      <ul>
-        <li><b>Sees the decisions</b> for its service and the product-wide ones when the session starts, with what changed since the last session.</li>
-        <li><b>Looks before it asks.</b> Decisions on the topics of the prompt and of its plan are shown to it, and it can ask <code>decisions_for_topic</code>.</li>
-        <li><b>Is held back once</b> when it is about to ask a question an approved decision already answers.</li>
-        <li><b>Saves your answer</b> as a decision, with the question and the option you picked.</li>
-        <li><b>Gets news</b> on its next step when a teammate approves or replaces a decision anywhere in the product.</li>
-        <li><b>Reports</b> when it is blocked, when it waits for its human, and what it finished.</li>
-      </ul>
-    </div>
-    <div class="role human">
-      <div class="role-h"><span class="chip human">Human</span><h3>Decides</h3></div>
-      <ul>
-        <li><b>Answers the agent's question</b>, as you already do.</li>
-        <li><b>Puts the answer in force</b> with one "Yes". From then on it binds every agent.</li>
-        <li><b>Changes a decision</b> when the team learns more. The change is news for everyone.</li>
-        <li><b>Publishes a directive</b> (PM or lead) for something short-lived: "Freeze billing auth for release week".</li>
-        <li><b>Asks for setup</b>: "set up dumen for our team", "add Ayşe as a dev". The agent runs it.</li>
-      </ul>
-      <div class="prompt" aria-label="Illustration of Claude Code's permission prompt">
-        <div class="prompt-t">Claude Code permission prompt</div>
-        <div class="prompt-q">Allow <b>dumen · approve</b>? It puts in force D-7K2P [product] "Cancelled bookings are refunded as store credit".</div>
-        <div class="prompt-a"><span class="yes">Yes</span><span>No</span></div>
-      </div>
-      <p class="note">Agents can never approve on their own. Every human action (approve, reject, supersede, directives, roles, the product, links, privacy) goes through this prompt, and agents only ever receive decisions a person approved. The prompt says exactly what will happen.</p>
-    </div>
+<section class="wrap" id="living">
+  <div class="pillars">
+    <article>
+      <h3>The spec, up front</h3>
+      <p>The product, its services, its words and the plan, written before the work starts, as in spec-driven development. Kept in git with everything else.</p>
+    </article>
+    <article>
+      <h3>Its sources of truth</h3>
+      <p>A Claude Design file, an Artifact, a Confluence page: kept in git as a link and a summary of what matters, so every agent has the context, even without a connector.</p>
+    </article>
+    <article>
+      <h3>Decisions, made live</h3>
+      <p>When your agent asks "A or B?" and you answer, the answer becomes a decision every agent follows. You confirm it once. Running agents hear it on their next step.</p>
+    </article>
   </div>
+  <p class="caption">Together they are one <b>living spec</b>, on a branch of the git remote you already have. No server, nothing else to install.</p>
 </section>
 
 <section class="wrap" id="live">
-  <h2>Real sessions</h2>
-  <p class="sub">Recorded from real Claude Code sessions by dumen's end-to-end tests, shortened, with temporary paths removed. Full recordings: <a href="https://github.com/nurettincoban/dumen/tree/main/docs/transcripts">docs/transcripts</a>.</p>
-  <ol class="flow">
-    <li>
-      <div class="who"><span class="chip human">Sofia</span><span class="chip agent">Sofia's agent</span></div>
-      <div class="what"><h4>web-app: a UI decision that needs backend work</h4><p>Sofia answered her agent: slot buttons show how many tables are left. The backend does not return that yet. The agent saves the answer with what it needs from booking-svc, and Sofia confirms.</p></div>
-<pre class="term"><span class="tool">⏺ dumen · record_answer</span>({"question":"How should the time picker show availability?",
-  "answer":"Slot buttons show how many tables are left",
-  "rule":"Time picker slot buttons show how many tables are left for that slot.",
-  "kind":"ui","services":["web-app"],"topics":["booking-flow"],
-  "needs":{"booking-svc":"Return remaining tables per slot in GET /slots"}})
-  <span class="dim">⎿</span> <span class="ok">Saved as D-DW4S (proposed, ui). ...</span>
-<span class="tool">⏺ dumen · approve</span>({"id":"D-DW4S"})  <span class="hk">▸ Yes</span>
-  <span class="dim">⎿</span> <span class="ok">D-DW4S is now approved.
-    note: D-DW4S asks booking-svc to: Return remaining tables per slot in GET /slots</span></pre>
-    </li>
-    <li>
-      <div class="who"><span class="chip agent">Ayşe's agent</span></div>
-      <div class="what"><h4>booking-svc: the backend agent hears it in the session it is running</h4><p>It was in the middle of a 35-second check. On its next step dumen handed it the news. Its answer to Ayşe:</p></div>
-<pre class="term">⏺ Team changes: Yes. A teammate (sofia@example.com) approved decision D-DW4S during this session. It is a UI decision: time picker slot buttons show how many tables are left for each slot. It is binding now. For this service it means `GET /slots` must return the remaining tables per slot. Right now `slots.List()` returns nothing, so that work is not started.</pre>
-    </li>
-    <li>
-      <div class="who"><span class="chip agent">An agent</span></div>
-      <div class="what"><h4>The agent looks before it asks</h4><p>"Check before you ask me card or store credit." The team had decided it already, so the agent asks only what is still open.</p></div>
-<pre class="term"><span class="tool">⏺ dumen · decisions_for_topic</span>({"topic":"payments"})
-  <span class="dim">⎿</span> <span class="hk">Approved decisions on topic payments (1):
-    - D-7TCH [product] Cancelled bookings are refunded as store credit</span>
-⏺ The team already decided this. Decision D-7TCH ... So I won't ask whether the refund goes to the card or to store credit. ...
-  One thing the decision doesn't settle is the amount of store credit. ... Do you want a different amount, such as a cancellation fee?</pre>
-    </li>
-    <li>
-      <div class="who"><span class="chip human">Maya</span><span class="chip agent">Maya's agent</span></div>
-      <div class="what"><h4>Setup is a sentence</h4><p>The agent runs dumen from its shell; adding a teammate goes through the permission prompt.</p></div>
-<pre class="term"><span class="usr">&gt; Set up dumen for our team in this repository. The team store is ... and the project is called shop.</span>
-<span class="tool">⏺ Bash</span>(dumen init -project shop -store …#dumen; dumen status)
-  <span class="dim">⎿</span> <span class="ok">Created branch "dumen" on … with you (maya@example.com) as lead.
-    This repository is "booking-svc" in project "shop". ...</span>
-<span class="usr">&gt; Add ayse@example.com to the dumen team as a dev.</span>
-<span class="tool">⏺ dumen · set_role</span>({"email":"ayse@example.com","role":"dev"})  <span class="hk">▸ Yes</span>
-  <span class="dim">⎿</span> <span class="ok">ayse@example.com now has the role dev.</span></pre>
-    </li>
-  </ol>
-</section>
-
-<section class="wrap" id="flow">
-  <h2>Two backends, one question</h2>
-  <p class="sub">A table-reservation product. Ayşe works on <code>booking-svc</code>, Mehmet on <code>billing-svc</code>, Sofia on <code>web-app</code>, each with Claude Code, all with one dumen store. An illustration of the full loop, built from dumen's messages and shortened; the real recordings are above.</p>
-  <div class="legend"><span class="chip human">Human</span> a person types or approves <span class="chip agent">Agent</span> Claude Code acts on its own <span class="chip auto">dumen</span> happens automatically</div>
+  <h2>Real sessions, at the same time</h2>
+  <p class="sub">Headless Claude Code with the plugin, several sessions at once on real git repositories, recorded by <a href="https://github.com/nurettincoban/dumen/blob/main/test/live.mjs">test/live.mjs</a>. Shortened; temporary paths replaced. Full recordings in <a href="https://github.com/nurettincoban/dumen/tree/main/docs/transcripts">docs/transcripts</a>.</p>
 
   <ol class="flow">
     <li>
-      <div class="who"><span class="chip agent">Ayşe's agent</span><span class="chip human">Ayşe</span></div>
-      <div class="what"><h4>Ayşe's agent asks a question nobody wrote down</h4><p>It is building cancellation and needs to know what happens to the money. It asks with Claude Code's question tool, and Ayşe picks an option.</p></div>
-<pre class="term"><span class="tool">⏺ AskUserQuestion</span>("What happens to the money when a guest cancels?")
-  ○ Refund to the card   <span class="ok">● Store credit</span></pre>
+      <div class="who"><span class="chip human">Sofia · web-app</span></div>
+      <div><h4>She answers her agent's question</h4><p>Slot buttons that show how many tables are left. The backend does not return that yet. She says: save it for the team and put it in force.</p></div>
+<pre class="term"><span class="tool">⏺ Bash</span>(dumen propose --kind ui --rule "Slot buttons show how many tables are left"
+    --services web-app --needs "booking-svc: Return remaining tables per slot in GET /slots" ...)
+  <span class="dim">⎿</span> Proposed D-9NWW: Slot buttons show how many tables are left
+<span class="tool">⏺ Bash</span>(dumen approve D-9NWW)
+  <span class="dim">⎿</span> <span class="hk">Claude Code asks the person:</span> dumen: it puts D-9NWW "Slot buttons show how many tables are left" [ui] for web-app in force for every agent on the team. It asks booking-svc to: Return remaining tables per slot in GET /slots ...
+  <span class="dim">⎿</span> <span class="ok">✔ The person answers Yes.</span></pre>
     </li>
     <li>
-      <div class="who"><span class="chip agent">Ayşe's agent</span><span class="chip human">Ayşe</span></div>
-      <div class="what"><h4>The answer becomes a decision</h4><p>The agent saves the answer and offers to put it in force. Ayşe says yes in the permission prompt, which shows exactly what she is approving.</p></div>
-<pre class="term"><span class="tool">⏺ dumen · record_answer</span>(kind product, topics payments,
-    rule "Cancelled bookings are refunded as store credit")
-  <span class="dim">⎿</span> <span class="ok">Saved as D-7K2P (proposed, product). Your human can put it in force now ...</span>
-<span class="tool">⏺ dumen · approve</span>(D-7K2P)
-  <span class="hk">Claude Code: It puts in force D-7K2P [product] "Cancelled bookings are
-  refunded as store credit". Allow?  ▸ Yes</span></pre>
+      <div class="who"><span class="chip agent">Ayşe's agent · booking-svc</span></div>
+      <div><h4>Mid-task, another laptop, it hears it</h4><p>Ayşe's agent was already running its checks. On its next step, dumen hands it the decision and the work it asks of this service.</p></div>
+<pre class="term"><span class="tool">⏺ Bash</span>(sh check.sh)
+  <span class="dim">⎿</span> go vet: ok
+<span class="tool">⏺ Read</span>(src/slots.go)
+  <span class="dim">⎿</span> <span class="hk">[dumen] DECISION NEWS:</span> teammates changed the living spec while you worked ...
+    - D-9NWW [ui · web-app] Slot buttons show how many tables are left (approved by sofia@example.com)
+      <span class="hk">NEEDS FROM booking-svc:</span> Return remaining tables per slot in GET /slots
+<span class="usr">⏺</span> Something changed while I worked ... List() []string only carries slot names, so it can't hold a remaining-tables count. The decision is binding now, so I'll build GET /slots to include that count rather than ask you again.</pre>
     </li>
     <li>
-      <div class="who"><span class="chip auto">dumen</span></div>
-      <div class="what"><h4>The decision travels through git</h4><p>It is a small commit on the <code>dumen</code> branch. Every running session checks for changes about every 10 seconds, and nobody restarts anything.</p></div>
-<pre class="term"><span class="dim">git push → branch dumen → each session's dumen mcp fetches it</span></pre>
+      <div class="who"><span class="chip agent">Ayşe's agent · booking-svc</span></div>
+      <div><h4>It looks before it asks</h4><p>Building the cancel endpoint, it finds the refund rule in the living spec instead of asking Ayşe again.</p></div>
+<pre class="term">  <span class="dim">⎿</span> <span class="hk">dumen:</span> this product has a living spec ... This repository is the service booking-svc.
+    1. Decisions in force for booking-svc and the whole product ...
+       - D-MWEU [product] Cancelled bookings are refunded as store credit
+<span class="usr">⏺</span> The team already decided this: D-MWEU. I'll follow that for the cancel endpoint, so I won't ask you. Running the tests now.</pre>
     </li>
     <li>
-      <div class="who"><span class="chip agent">Mehmet's agent</span></div>
-      <div class="what"><h4>Mehmet's agent gets the news mid-task</h4><p>It is writing a refund endpoint in billing-svc. Its next tool call carries the decision, with who made it and where.</p></div>
-<pre class="term"><span class="hk">[dumen] DECISION NEWS (1): approved by a teammate since this session
-started; binding from now on
-- D-7K2P [product] Cancelled bookings are refunded as store credit
-  (approved by ayse@example.com; in booking-svc)</span></pre>
+      <div class="who"><span class="chip human">Deniz · billing-svc</span></div>
+      <div><h4>Meanwhile the rule changes</h4><p>Accounting wants refunds back on the card. Deniz tells his agent to change the decision, and confirms the prompt.</p></div>
+<pre class="term"><span class="tool">⏺ Bash</span>(dumen supersede D-MWEU --kind product
+    --rule "Cancelled bookings are refunded to the original card, not as store credit" ...)
+  <span class="dim">⎿</span> <span class="hk">Claude Code asks the person:</span> dumen: it retires D-MWEU "Cancelled bookings are refunded as store credit" and puts in force "Cancelled bookings are refunded to the original card, not as store credit" [product] for the whole product ...
+  <span class="dim">⎿</span> <span class="ok">✔ The person answers Yes.</span></pre>
     </li>
     <li>
-      <div class="who"><span class="chip agent">Sofia's agent</span></div>
-      <div class="what"><h4>A week later, nobody asks again</h4><p>Sofia's agent is building the cancel screen and is about to ask her the same question. dumen holds it back once and shows the answer the team already gave.</p></div>
-<pre class="term"><span class="tool">⏺ AskUserQuestion</span>("Refund to the card, or store credit?")
-<span class="no">dumen: the team may already have decided this. This approved decision
-looks related:
-- D-7K2P [product] Cancelled bookings are refunded as store credit
-If one of them answers your question, follow it and tell your human which
-decision you followed; do not ask.</span></pre>
-    </li>
-    <li>
-      <div class="who"><span class="chip human">Mehmet</span><span class="chip agent">Mehmet's agent</span></div>
-      <div class="what"><h4>Mehmet changes it, and that is news too</h4><p>Store credit breaks the accounting rules in one country. Mehmet asks his Claude to supersede the decision and confirms. Every agent working on payments, Ayşe's and Sofia's included, gets the change on its next step.</p></div>
-<pre class="term"><span class="usr">&gt; Supersede D-7K2P: refunds go back to the card. Accounting needs it.</span>
-<span class="tool">⏺ dumen · supersede</span>(D-7K2P, "Cancelled bookings are refunded to the card")
-  <span class="hk">Claude Code: It retires D-7K2P [product] ... Allow?  ▸ Yes</span>
-<span class="hk">[dumen] DECISION NEWS (1) ...
-- D-9QXA [product] Cancelled bookings are refunded to the card
-  (approved by mehmet@example.com; in billing-svc; replaces D-7K2P)</span></pre>
+      <div class="who"><span class="chip agent">Ayşe's agent · booking-svc</span></div>
+      <div><h4>About to stop, it is held back once</h4><p>It was about to report "nothing changed". dumen stops it once with the news, and it corrects itself before Ayşe reads a word.</p></div>
+<pre class="term"><span class="usr">⏺</span> sh test.sh finished with PASS. Nothing changed for the cancel endpoint ...
+  <span class="dim">⎿</span> <span class="hk">[dumen, before stopping] DECISION NEWS:</span>
+    - D-PEEZ [product] Cancelled bookings are refunded to the original card, not as store credit (approved by deniz@example.com)
+      It replaces D-MWEU, which is no longer in force.
+<span class="usr">⏺</span> Correction to my last message: the decision I said I was following is out of date. Deniz approved D-PEEZ while the tests ran ... Cancelled bookings in src/cancel.go are now refunded to the original card. I haven't written any cancel code yet, so nothing needs undoing.</pre>
     </li>
   </ol>
-  <p class="more">Three people answered one question once. Every agent on the product follows the same answer, and when it changed, every agent heard about it.</p>
-</section>
-
-<section class="wrap" id="kinds">
-  <h2>Decisions of every kind</h2>
-  <p class="sub">A decision is one sentence that agents follow, with a body that says why, what is allowed and not, and which options were not taken.</p>
-  <ul class="facts cols">
-    <li><b>Product.</b> A booking is held for 10 minutes while the guest pays.</li>
-    <li><b>UX.</b> A guest can cancel without signing in, from the link in the confirmation email.</li>
-    <li><b>UI.</b> Guests pick a time from slot buttons grouped by part of day.</li>
-    <li><b>Architecture.</b> Only billing-svc talks to the payment provider.</li>
-    <li><b>Technical.</b> Creating a booking is idempotent with an Idempotency-Key header.</li>
-    <li><b>Your own.</b> Teams add kinds such as pricing or legal, and can limit who approves a kind.</li>
-  </ul>
 </section>
 
 <section class="wrap" id="how">
-  <h2>How it works</h2>
-  <p class="sub">One static Go binary that shells out to your system <code>git</code>. There is no server and no account. If <code>git push</code> works, dumen works, on GitHub, GitLab, Gitea, Bitbucket or a bare repository on a server.</p>
-  <div class="diagram" role="img" aria-label="A teammate's Claude Code pushes decisions to a dumen branch on the git remote; developers' Claude Code sessions check it about every 10 seconds and hooks read a local cache.">
-    <div class="box"><b>Anyone on the team</b><span>answers, approves, changes<br>in Claude Code or the CLI</span></div>
-    <div class="arrow"><span>push</span><span>fetch</span></div>
-    <div class="box mid"><b>Your git remote</b><span>branch <code>dumen</code><br>records only, never code</span></div>
-    <div class="arrow"><span>checked every 10 s</span><span>push events</span></div>
-    <div class="box"><b>Every developer's agents</b><span>MCP tools + hooks<br>local cache, ~4 ms</span></div>
+  <h2>You talk. Your agent runs dumen.</h2>
+  <p class="sub">You never type a dumen command. You answer your agent, and you confirm Claude Code's prompt when something is put in force.</p>
+  <div class="roles">
+    <div class="role human">
+      <div class="role-h"><span class="chip human">You</span><h3>Answer and confirm</h3></div>
+      <ul>
+        <li><b>"Set up dumen for this project."</b> One sentence. The living spec goes to a branch of your repository's own origin.</li>
+        <li><b>Answer its "A or B?"</b> as you always do. It saves the answer for the team.</li>
+        <li><b>Say yes and confirm the prompt.</b> It shows the decision's exact words, as they are in the store.</li>
+        <li><b>"Change it."</b> The new decision replaces the old one, and everyone hears "replaces".</li>
+        <li><b>"This design is the truth for checkout."</b> It becomes a source, with a summary in git.</li>
+      </ul>
+      <div class="prompt">
+        <div class="prompt-t">Claude Code asks</div>
+        <div class="prompt-q">dumen: it puts D-9NWW "Slot buttons show how many tables are left" [ui] for web-app in force for every agent on the team. It asks booking-svc to: Return remaining tables per slot in GET /slots.</div>
+        <div class="prompt-a"><span class="yes">Yes</span><span>No</span></div>
+      </div>
+    </div>
+    <div class="role agent">
+      <div class="role-h"><span class="chip agent">Your agent</span><h3>Keeps the spec living</h3></div>
+      <ul>
+        <li><b>Reads the living spec</b> at session start: the spec parts, the sources' summaries, the decisions in force for its service.</li>
+        <li><b>Looks before it asks.</b> What a decision settles, it does not ask you again.</li>
+        <li><b>Records your answer</b> with <code>dumen propose</code>, with the work it needs from other services.</li>
+        <li><b>Puts it in force</b> with <code>dumen approve</code>, only after your yes in the prompt. The command needs a one-use ticket that only the prompt gives out.</li>
+        <li><b>Hears news</b> on every step: decisions, replacements, updated sources, questions for you.</li>
+      </ul>
+    </div>
   </div>
+</section>
+
+<section class="wrap" id="sources">
+  <h2>Designs, Artifacts and docs, in the spec</h2>
+  <p class="sub">Point your agent at the design or document that is the truth for part of the product. It keeps the link and a summary of what matters in git, marked as read from the link or told by you, and proposes the decisions it implies, each pointing at the source. When the design changes, the summary is updated and everyone hears it.</p>
+<pre class="term"><span class="usr">&gt;</span> This Claude Design file is the source of truth for the checkout screens: https://claude.ai/design/p/9f3c-checkout
+  (I cannot connect it here, so here is what it says: ...) Keep it for the team as a source, and propose the decisions it implies.
+
+<span class="tool">⏺ Bash</span>(dumen source --title "Checkout design" --url https://claude.ai/design/p/9f3c-checkout --about "checkout screens" --from person --file /tmp/checkout-design.md)
+  <span class="dim">⎿</span> Added the source checkout-design: Checkout design &lt;https://claude.ai/design/p/9f3c-checkout&gt;.
+<span class="tool">⏺ Bash</span>(dumen propose --kind ux --rule "Checkout has three steps in this order: Time, Details, Pay" --source checkout-design ...)
+  <span class="dim">⎿</span> Proposed D-3HY4: Checkout has three steps in this order: Time, Details, Pay
+<span class="tool">⏺ Bash</span>(dumen propose --kind product --rule "The Pay step shows a 10 minute hold timer for the chosen slot"
+       --needs "booking-svc: Hold the chosen slot for 10 minutes and expose when the hold expires" --source checkout-design ...)
+  <span class="dim">⎿</span> Proposed D-WGG2: The Pay step shows a 10 minute hold timer for the chosen slot
+<span class="usr">⏺</span> The design is saved as a source for the team, and I've proposed four decisions from it. None is in force yet.
+  I marked it --from person because I couldn't open the design. Other agents will see that it's your description and not something I read.</pre>
+</section>
+
+<section class="wrap" id="guarantees">
+  <h2>Built to be trusted by a whole team</h2>
+  <p class="sub">Git is the only transport, so dumen does the careful part: every change is fetched, checked against the latest state, committed once and pushed fast-forward, or not made at all.</p>
   <ul class="facts cols">
-    <li><b>Hooks</b> show decisions at session start, hand over news, note the decisions on a prompt's or a plan's topics, hold back a question the team already answered, and block edits under frozen paths. They read a local cache, so they add a few milliseconds, and if anything goes wrong they let the tool call through.</li>
-    <li><b>MCP tools</b> are how the agent finds decisions, saves answers, drafts, and reports. The human actions among them always go through the permission prompt.</li>
-    <li><b>A skill</b> tells the agent when to use which tool: look before asking, save lasting answers, follow decisions and news, never approve.</li>
-    <li><b>Storage</b> is an orphan branch of small YAML, Markdown and JSON Lines files. Writes never merge text, and every record is a git commit you can audit.</li>
+    <li><b>Nothing is lost when people write at once.</b> Tested with twelve writers in three clones at the same moment.</li>
+    <li><b>Exactly one wins a race.</b> Two people replacing the same decision: one push wins, the other is told who won.</li>
+    <li><b>Shared, or not done.</b> No "approved on my laptop". Offline, the person is told nothing changed.</li>
+    <li><b>Your code is never touched.</b> The store lives in <code>.git/dumen/</code>, apart from your work tree, even when a hook sets <code>GIT_DIR</code>.</li>
+    <li><b>News is never lost.</b> A session's mark moves only after the news was handed out; after a compaction it comes first.</li>
+    <li><b>The prompt is the approval.</b> No ticket, no change. Chained, wrapped or hand-written approvals are refused.</li>
+    <li><b>Team data stays data.</b> Shown labelled, cleaned and bounded, never as instructions. Proposals never look settled.</li>
+    <li><b>A protocol, not a black box.</b> Markdown with a strict frontmatter on a branch. Read it on GitHub, diff it, review it.</li>
   </ul>
 </section>
 
 <section class="wrap" id="setup">
   <h2>Install: a Claude Code plugin</h2>
-  <p class="sub">You need <code>git</code> and Claude Code. After this, people only talk to Claude; the commands are the agent's.</p>
+  <p class="sub">Needs git and Node.js 18 or newer. dumen uses the SSH keys or credential helper your git already has, and stays silent in repositories that are not part of a dumen project.</p>
   <div class="setup">
-    <div><span class="n">1</span><h4>The plugin (inside Claude Code)</h4>
-<pre class="term">/plugin marketplace add nurettincoban/dumen
-/plugin install dumen@dumen</pre>
-      <p class="note">Hooks, MCP tools and the skill, in one install.</p></div>
-    <div><span class="n">2</span><h4>The binary comes with it</h4>
-<pre class="term"><span class="dim"># downloaded from the latest release on first start,
-# checked against its checksums; restart Claude Code once</span></pre>
-      <p class="note">A <code>dumen</code> on PATH is used instead. Until the first release: <code>go install github.com/nurettincoban/dumen/cmd/dumen@latest</code>.</p></div>
-    <div><span class="n">3</span><h4>Ask your agent</h4>
-<pre class="term"><span class="usr">&gt; Set up dumen for our team. The store is
-  git@git.example.com:team/dumen-store.git#dumen.</span>
-<span class="usr">&gt; Add ayse@example.com as a dev.</span></pre>
-      <p class="note">The agent runs <code>dumen init</code> and calls <code>set_role</code>; you confirm the prompt.</p></div>
-    <div><span class="n">4</span><h4>Teammates</h4>
-<pre class="term"><span class="usr">&gt; Join our dumen project.</span></pre>
-      <p class="note">Their agent runs <code>dumen join</code>. Keep the store in a private repository.</p></div>
+    <div>
+      <span class="n">1</span><h4>Each developer, once</h4>
+<pre class="term"><span class="dim">claude ›</span> /plugin marketplace add nurettincoban/dumen
+<span class="dim">claude ›</span> /plugin install dumen@dumen</pre>
+      <p class="note">The plugin brings a skill, a few hooks and one dependency-free script. Nothing to download later.</p>
+    </div>
+    <div>
+      <span class="n">2</span><h4>One of you tells the agent</h4>
+<pre class="term"><span class="usr">&gt;</span> Set up dumen for this project.
+
+<span class="tool">⏺ Bash</span>(dumen init)
+  <span class="dim">⎿</span> dumen is set up: this repository is the service shop, and the living
+    spec is on the branch dumen of this repository's origin. Teammates join
+    by installing the plugin ...</pre>
+      <p class="note">Several repositories? Name one private store repository and each repository's service. The store holds teammates' emails and plans: keep it where only the team can read it.</p>
+    </div>
   </div>
 </section>
 
 <section class="wrap" id="limits">
   <h2>Honest limits</h2>
-  <p class="sub">dumen is a guard rail, not a security boundary. It guards against agents, not against colleagues.</p>
   <ul class="limits">
-    <li><b>About 10 seconds, then the next step.</b> News reaches a working agent on its next tool call or prompt, or before it stops. An idle agent hears it with the next message.</li>
-    <li><b>Keyword matching.</b> Decisions are matched to prompts, plans and questions by their topic words, not by meaning. A match can be missed or wrong; asking again always goes through.</li>
-    <li><b><code>deny</code> covers Claude Code's file tools.</b> Edit, Write, MultiEdit and NotebookEdit are blocked. A shell command or code generator can still change files. Use branch protection and review for hard guarantees.</li>
-    <li><b>Anyone who can push to the store can write any record.</b> There is no server to check identities. Protect the <code>dumen</code> branch and keep the store private.</li>
-    <li><b>Linux only, so far.</b> It compiles for macOS and Windows, and nothing more has been checked.</li>
-    <li><b>Small teams.</b> Designed for about 2 to 20 people. Every write is a git push.</li>
-    <li><b>Claude Code only.</b> Other tools can read the store, but nothing is enforced there.</li>
+    <li><b>A guard rail, not a security boundary.</b> It stops an agent from deciding on its own, not a person with a shell. Git records who pushed what.</li>
+    <li><b>Anyone with push access can approve.</b> No roles yet. Every change reaches everyone as news, with a name on it.</li>
+    <li><b>Matching is done by the agent.</b> It reads the decisions in force and searches by words; a very differently phrased decision can be missed.</li>
+    <li><b>News waits for a hook.</b> An agent inside one long tool call hears it when the call returns, or before it stops.</li>
+    <li><b>Needs Node.js 18+.</b> The plugin cannot install it; the agent tells you if it is missing.</li>
+    <li><b>Questions for people outside Claude Code</b> are in the protocol; the Slack or email adapter is not built yet.</li>
   </ul>
-  <p class="more">The full list, the security model and the design notes are in the <a href="https://github.com/nurettincoban/dumen#honest-limits">README</a>.</p>
+  <p class="more">The whole design is in <a href="https://github.com/nurettincoban/dumen/blob/main/docs/protocol.md">docs/protocol.md</a>. Every change runs an adversarial review, <a href="https://github.com/nurettincoban/dumen/blob/main/docs/gauntlet.md">the gauntlet</a>.</p>
 </section>
 </main>
 
 <footer class="wrap foot">
-  <span class="logo small">d<b>u</b>men</span>
-  <span>The name comes from <i>dümen</i>, the Turkish word for rudder.</span>
-  <span><a href="https://github.com/nurettincoban/dumen">GitHub</a> · <a href="https://github.com/nurettincoban/dumen/blob/main/LICENSE">Apache-2.0</a></span>
+  <a class="logo small" href="#top">d<b>u</b>men</a>
+  <span>Apache-2.0 · <a href="https://github.com/nurettincoban/dumen">github.com/nurettincoban/dumen</a></span>
 </footer>
+<script>
+document.querySelectorAll('.copy').forEach(b => b.addEventListener('click', () => {
+  navigator.clipboard && navigator.clipboard.writeText('/plugin marketplace add nurettincoban/dumen\n/plugin install dumen@dumen');
+  b.textContent = 'Copied';
+  setTimeout(() => (b.textContent = 'Copy'), 1500);
+}));
+</script>
 </body>
 </html>

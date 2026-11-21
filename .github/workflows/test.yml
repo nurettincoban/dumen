@@ -1,0 +1,23 @@
+# The tests of the bundled dumen.mjs on the three systems Claude Code runs on. No secrets,
+# no API key: the live sessions with Claude Code run locally (node test/live.mjs).
+name: test
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['18', '22']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: git config --global user.email ci@example.com && git config --global user.name ci
+      - run: node --test test/dumen.test.mjs

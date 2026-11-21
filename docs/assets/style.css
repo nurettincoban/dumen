@@ -153,3 +153,10 @@ h2{font-size:clamp(28px,3.5vw,38px);letter-spacing:-.8px;margin:80px 0 8px}
   .flow .who{flex-direction:row;align-items:center}
 }
 .flow .term,.setup .term{white-space:pre-wrap;word-break:break-word}
+
+/* living spec site */
+.flow li{grid-template-columns:200px minmax(0,3fr) minmax(0,7fr)}
+.flow .chip{white-space:normal;text-align:left;line-height:1.35}
+.flow .term{font-size:12.5px}
+.caption b{color:var(--fg)}
+@media (max-width:860px){.flow li{grid-template-columns:1fr}}

@@ -1,11 +1,11 @@
 {
   "name": "dumen",
   "displayName": "dumen",
-  "version": "0.1.0",
-  "description": "Team directives, shared decisions and an activity log for every Claude Code agent on the team, synced through your own git remote. Downloads the dumen binary from the latest release, or uses one on PATH.",
+  "version": "0.2.0",
+  "description": "Shared product, UX, UI, architecture and technical decisions for every Claude Code agent on the team, kept as markdown in your own git repository. Everything is inside the plugin.",
   "author": { "name": "Nurettin Coban" },
   "homepage": "https://github.com/nurettincoban/dumen",
   "repository": "https://github.com/nurettincoban/dumen",
   "license": "Apache-2.0",
-  "keywords": ["team", "directives", "decisions", "monitoring", "git"]
+  "keywords": ["team", "decisions", "coordination", "git"]
 }

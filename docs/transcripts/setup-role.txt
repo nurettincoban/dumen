@@ -1,5 +1,0 @@
-⏺ ToolSearch({"query":"select:mcp__plugin_dumen_dumen__set_role","max_results":1})
-  ⎿ 
-⏺ dumen · set_role({"email":"ayse@example.com","role":"dev"})
-  ⎿ ayse@example.com now has the role dev.
-⏺ ayse@example.com now has the dev role on the dumen team.

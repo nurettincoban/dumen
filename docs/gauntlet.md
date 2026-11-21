@@ -8,10 +8,10 @@ is open. The builder and the critic are different people or different agent sess
 
 | # | Lens | Passes when |
 | --- | --- | --- |
-| 1 | Correctness and concurrency | `go vet ./...`, `go test -race -short ./...` and the 1,000-operation concurrency test pass. Every error branch on the write path either queues the operation or rejects it, never both. |
+| 1 | Correctness and concurrency | `node --test test/dumen.test.mjs` passes, three runs in a row, including the parallel-writer and same-decision race tests. Every error branch on the write path either reaches the remote or leaves nothing changed, and says which. |
 | 2 | Security and agent bypass | For every guard the change touches, at least one bypass was attempted in a sandbox store. Text written by an agent never reaches another agent's context before a human has seen it. |
-| 3 | Claude Code conformance | Hook inputs and outputs were checked against the current [hooks reference](https://code.claude.com/docs/en/hooks). `claude plugin validate .` passes. A change to hooks or the MCP server ran the local end-to-end suite (`go test -tags e2e ./test/e2e`). |
-| 4 | Cross-platform and host independence | Builds for linux, darwin and windows. No behavior depends on the name of a git host. Changes to paths, locks or renames were reviewed for Windows semantics. |
+| 3 | Claude Code conformance | Hook inputs and outputs were checked against the current [hooks reference](https://code.claude.com/docs/en/hooks). `claude plugin validate .` passes. A change to hooks, the skill or the guard ran the live sessions (`node test/live.mjs`). |
+| 4 | Cross-platform and host independence | The tests pass on linux, macOS and windows in CI. No behavior depends on the name of a git host. Changes to paths, locks or renames were reviewed for Windows semantics. |
 | 5 | Open source and data model | A change to the store layout or to a record field comes with a version gate and a migration note. Every claim in the README is true of the code. |
 | 6 | README and first run | See [README criteria](#readme-criteria). Runs when the change touches the README, a command, a flag, an install step or any output the README quotes. |
 
@@ -21,22 +21,22 @@ The README is the product page of an open source tool. Stage 6 passes when all o
 
 1. **Ten-second pitch.** The first screen says what dumen is, who it is for and why they
    would want it, with one real example of input and output. No badges or history first.
-2. **Copy-paste setup.** A reviewer follows "Five-minute setup" literally, on a clean
-   machine or container with a fresh `DUMEN_HOME` and a new bare remote, and reaches a
-   working `dumen status` without reading the source. Every command in the README was run.
-3. **True output.** Quoted command output matches what the current binary prints.
+2. **One-sentence setup.** A reviewer installs the plugin in a clean container with a new
+   bare remote, says what the README says to the agent, and reaches a working living spec
+   without reading the source. No step asks a person to type a command.
+3. **True output.** Every quoted session is a real recording from `test/live.mjs`.
 4. **Honest limits.** Each known limit and each open Medium or higher finding that a user
    can hit is in "Honest limits" or "Security model". The README never claims more than
    the code does.
 5. **No personal data.** Examples, tests and fixtures use `example.com` addresses and
    invented names only. No real email address, token, internal host name or private
    repository URL appears anywhere in the repository.
-6. **Complete reference.** Every command, flag and environment variable the binary
-   accepts is in the command reference, and nothing listed there is missing from the binary.
+6. **Complete reference.** Every command and flag of `dumen help` is in the protocol or the
+   skill, and nothing described there is missing from `dumen.mjs`.
 7. **Links work.** Every relative link and anchor resolves; install commands point at the
    current repository and module path.
 8. **Reads well.** Plain language, short sentences, one idea per paragraph, consistent
-   terms (directive, decision, ref, store). A newcomer to Claude Code hooks can follow it.
+   terms (living spec, decision, source, spec part, store). A newcomer to Claude Code hooks can follow it.
 
 A broken setup step or a false claim is High. Personal data in the repository is Critical.
 
@@ -63,21 +63,18 @@ A broken setup step or a false claim is High. Personal data in the repository is
 ## A sandbox store in one minute
 
 ```sh
-export DUMEN_HOME=$(mktemp -d) && cd "$(mktemp -d)"
-git init -q --bare remote.git
-git init -q code && cd code && git remote add origin "$OLDPWD/remote.git"
-env -u CLAUDECODE dumen init
-env -u CLAUDECODE dumen direct --deny --paths 'src/auth/**' "frozen"
-# drive a hook by hand
-echo '{"session_id":"s1","cwd":"'$PWD'","tool_name":"Edit","tool_input":{"file_path":"'$PWD'/src/auth/x.go"}}' \
-  | CLAUDE_PROJECT_DIR=$PWD dumen hook pre-tool-use
+cd "$(mktemp -d)" && git init -q --bare store.git && git init -q code && cd code
+git commit -q --allow-empty -m init
+D=/path/to/dumen/plugin/bin/dumen.mjs
+node $D init --store "$OLDPWD/store.git" --service web-app
+node $D propose --kind ui --rule "Slot buttons show how many tables are left"
+# drive a hook by hand, as Claude Code would
+echo '{"session_id":"s1","cwd":"'$PWD'","tool_name":"Bash","tool_input":{"command":"dumen approve D-XXXX"}}' \
+  | node $D hook guard
 ```
-
-`env -u CLAUDECODE` makes a command act as a human when it is run from inside a Claude
-Code session.
 
 ## Running it
 
 In Claude Code, `/gauntlet <pull request number or branch>` runs the six stages and
-reports findings by severity. Until continuous integration is set up, the automated
-parts of stages 1 and 4 are run locally by the reviewer.
+reports findings by severity. Continuous integration runs the automated parts of stages
+1 and 4 on every push; the live sessions of stage 3 need an account and run locally.

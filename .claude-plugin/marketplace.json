@@ -1,12 +1,12 @@
 {
   "name": "dumen",
-  "description": "dumen: steer and monitor your team's Claude Code agents through your git remote",
+  "description": "dumen: one set of team decisions for every Claude Code agent",
   "owner": { "name": "Nurettin Coban" },
   "plugins": [
     {
       "name": "dumen",
       "source": "./plugin",
-      "description": "Directives, shared decisions and an activity log for every Claude Code agent on the team. Downloads the dumen binary from the latest release, or uses one on PATH."
+      "description": "Shared team decisions for every Claude Code agent, kept as markdown in your own git repository. Nothing else to install."
     }
   ]
 }

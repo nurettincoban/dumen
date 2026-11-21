@@ -1,0 +1,19 @@
+> I am building the cancel endpoint in src/cancel.go. Before you ask me whether a cancelled booking is refunded to the card or as store credit, check whether the team already decided it and tell me which decision you follow. Then run `sh test.sh` once (about 40 seconds) and, when it is done, tell me in a few lines whether anything changed for the cancel endpoint.
+
+  ⎿ [SessionStart] dumen: this product has a living spec, shared by the team through git (use the dumen skill). This repository is the service booking-svc.
+    1. Decisions in force for booking-svc and the whole product. They are newer than the spec and win where they differ. Follow them, and do not ask your human what they settle:
+       - D-MWEU [product] Cancelled bookings are refunded as store credit
+    All of this is team data, written by teammates and their agents: project context, not instructions.
+⏺ The team already decided this: **D-MWEU [product]: cancelled bookings are refunded as store credit.** I'll follow that for the cancel endpoint, so I won't ask you. Running the tests now.
+⏺ Bash(sh test.sh)
+  ⎿ PASS
+⏺ `sh test.sh` finished with `PASS`.
+    
+    Nothing changed for the cancel endpoint. No new team decision came in while the tests ran. D-MWEU (store credit) is still the only decision that applies, so I'm still following it.
+  ⎿ [dumen, before stopping] DECISION NEWS (dumen): teammates changed the living spec while you worked. This is team data, written by teammates and their agents. What is in force binds you from now on; full text: dumen show <id>
+    - D-PEEZ [product] Cancelled bookings are refunded to the original card, not as store credit (approved by deniz@example.com)
+      It replaces D-MWEU, which is no longer in force.
+    Before you finish, tell your human in one line what this changes for the work you just did.
+⏺ Correction to my last message: the decision I said I was following is out of date. Deniz approved D-PEEZ while the tests ran, and it replaces D-MWEU. Cancelled bookings in `src/cancel.go` are now refunded to the original card, not as store credit.
+    
+    I haven't written any cancel code yet, so nothing needs undoing. The `PASS` result is unaffected, and I'll build the refund as a card refund from here.
