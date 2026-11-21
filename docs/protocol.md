@@ -188,10 +188,15 @@ The other's retry finds the new state and fails with what happened, such as
 `D-7K2P was already replaced by D-9QXA; nothing was changed`, or succeeds if the outcome is the
 same (approving a decision that was just approved reports who approved it).
 
-**Locally,** one process at a time runs git in the local copy, under a lock that holds its pid.
-The lock is created whole (a file with the pid, linked into place), and is taken over only when
-its holder's process is gone, however long it has been held. A takeover runs under a file of its
-own and removes the lock only if it is still the one judged dead. A process killed in the middle leaves at most an
+**Locally,** one process at a time runs git in the local copy, under a lock that names its
+holder: pid, where that pid means something (host name and, on Linux, pid namespace), and a
+nonce. The lock is created whole (a written file, linked into place). A holder in the same
+place is taken over only when its process is gone, however long it has held the lock; a holder
+elsewhere (a dev container or WSL sharing the clone with the host) only when the lock has not
+been touched for 5 minutes, and a holder touches it at every step of a change. A takeover runs
+under a file of its own and removes the lock only if it is still the one judged dead. Before
+committing, the staged files must be exactly the ones the change wrote; otherwise the change
+was mixed with another and goes back to step 1. A process killed in the middle leaves at most an
 unpushed commit or loose files, which the next transaction's step 1 throws away.
 
 **Commits** are authored with the person's git `user.email` and `user.name`. The subject names

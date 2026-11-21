@@ -68,6 +68,8 @@ function unquote(words) {
   return out;
 }
 
+// Where a pid means something, as dumen writes it in a lock: host name and pid namespace.
+const HERE = (() => { let ns = ''; try { ns = fs.readlinkSync('/proc/self/ns/pid'); } catch {} return `${os.hostname()}${ns ? `/${ns}` : ''}`.replace(/\s+/g, '_'); })();
 const idOf = (out) => out.match(/D-[A-HJ-NP-Z2-9]{4}/)[0];
 const ctx = (h) => h?.hookSpecificOutput?.additionalContext ?? null;
 
@@ -282,7 +284,7 @@ test('offline: nothing is changed and the person is told; hooks stay quiet and f
 test('a lock left by a killed process is taken over', () => {
   const { repos } = team(['web-app', 'sofia@example.com']);
   const r = repos['web-app'];
-  fs.writeFileSync(path.join(r, '.git', 'dumen', 'state', 'lock'), '999999 dead');
+  fs.writeFileSync(path.join(r, '.git', 'dumen', 'state', 'lock'), `999999 ${HERE} dead`);
   assert.match(dumen(r, 'propose', ...slotRule), /Proposed D-/);
   // dumen never leaves an empty lock (it links a written file into place), so an empty one is
   // junk: it is taken over, but not at once.
@@ -554,12 +556,12 @@ test('a lock is never taken from a live process, however old; of three racing fo
   const { tmp, repos } = team(['web-app', 'sofia@example.com']);
   const r = repos['web-app'];
   const f = path.join(r, '.git', 'dumen', 'state', 'lock');
-  fs.writeFileSync(f, `${process.pid} alive`);
+  fs.writeFileSync(f, `${process.pid} ${HERE} alive`);
   const old = new Date(Date.now() - 60 * 60 * 1000);
   fs.utimesSync(f, old, old);
   assert.match((() => { try { dumenEnv(r, { DUMEN_LOCK_WAIT_MS: '1500' }, 'propose', ...slotRule); } catch (e) { return String(e.stderr); } return 'taken'; })(), /busy/);
-  assert.equal(fs.readFileSync(f, 'utf8'), `${process.pid} alive`);
-  fs.writeFileSync(f, '999999 dead');
+  assert.equal(fs.readFileSync(f, 'utf8'), `${process.pid} ${HERE} alive`);
+  fs.writeFileSync(f, `999999 ${HERE} dead`);
   const log = path.join(tmp, 'holds.log');
   const res = await Promise.all([0, 1, 2].map((i) => run(r, ['propose', '--kind', 'ui', '--rule', `Racing rule ${i}`], { DUMEN_LOCK_LOG: log })));
   for (const x of res) assert.equal(x.code, 0, x.err);
@@ -567,4 +569,37 @@ test('a lock is never taken from a live process, however old; of three racing fo
   assert.equal(holds.length, 3);
   for (let i = 1; i < holds.length; i++) assert.ok(holds[i][1] >= holds[i - 1][2], `two holders at once: ${JSON.stringify(holds)}`);
   assert.equal(dumen(r, 'list', '--status', 'proposed').split('\n').length, 3);
+});
+
+test('a lock held on another machine or pid namespace is judged by age, and a live holder keeps it fresh', async () => {
+  const { tmp, repos } = team(['web-app', 'sofia@example.com']);
+  const r = repos['web-app'];
+  const f = path.join(r, '.git', 'dumen', 'state', 'lock');
+  // Pid 1 runs everywhere; elsewhere it may be anything, so it says nothing here.
+  fs.writeFileSync(f, '1 devcontainer/pid:[4026531836] x');
+  const busy = (() => { try { dumenEnv(r, { DUMEN_LOCK_WAIT_MS: '1500' }, 'propose', ...slotRule); } catch (e) { return String(e.stderr); } return 'taken'; })();
+  assert.match(busy, /busy/, 'a fresh lock from elsewhere was taken over');
+  const old = new Date(Date.now() - 6 * 60 * 1000);
+  fs.utimesSync(f, old, old);
+  assert.match(dumen(r, 'propose', ...slotRule), /Proposed D-/, 'an untouched lock from elsewhere was never taken over');
+  // A dead pid here, written the old way with no place, is a lock from elsewhere: it waits for age.
+  fs.writeFileSync(f, '999999');
+  fs.utimesSync(f, old, old);
+  assert.match(dumen(r, 'propose', '--kind', 'ui', '--rule', 'Old lock rule'), /Proposed D-/);
+});
+
+test('a commit holds exactly the files its change wrote', shimmed, () => {
+  const { tmp, store, repos } = team(['web-app', 'sofia@example.com']);
+  const r = repos['web-app'];
+  const st = path.join(r, '.git', 'dumen', 'store');
+  const real = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
+  const dir = fs.mkdtempSync(path.join(tmp, 'shim-'));
+  const once = path.join(tmp, 'strayed');
+  // Before the first add, another writer's file lands in the work tree, as with a shared lock.
+  fs.writeFileSync(path.join(dir, 'git'), `#!/bin/sh\ncase " $* " in *" add "*) [ -e "${once}" ] || { touch "${once}"; printf 'stray\\n' > "${st}/decisions/D-STRAY22.md"; };; esac\nexec "${real}" "$@"\n`, { mode: 0o755 });
+  const id = idOf(dumenEnv(r, { PATH: `${dir}${path.delimiter}${process.env.PATH}` }, 'propose', ...slotRule));
+  assert.ok(fs.existsSync(once), 'the shim did not run');
+  const files = execFileSync('git', ['--git-dir', store, 'ls-tree', '-r', '--name-only', 'dumen'], { encoding: 'utf8' });
+  assert.ok(files.includes(`decisions/${id}.md`));
+  assert.ok(!files.includes('D-STRAY22'), 'a file the change did not write was committed with it');
 });
