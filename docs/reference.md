@@ -44,6 +44,8 @@ Every command accepts `--help`. Ids look like `Y-2APW` (directive), `D-PG18` (de
 | `dumen decide --title T --rule R --kind K [--services a,b] [--topics a,b] [--owner EMAIL] [-m BODY \| --file F] [--paths a,b] [--sources R-1,R-2] [--approve]` | Record a decision. The rule is the one sentence agents see first; the kind is `product`, `ux`, `ui`, `architecture`, `technical` or a kind from `dumen.yml`. Without `--services` it applies to the whole product. It is proposed unless `--approve` is given by someone who may approve. |
 | `dumen decisions [PATH] [--service S] [--topic T] [--kind K] [--proposed] [--all]` | List approved decisions by rule, optionally filtered by path, service, topic or kind. |
 | `dumen show ID` | Show a decision, directive or link in full. |
+| `dumen questions [--all]` | List proposed decisions waiting for you: answers agents saved and decisions they drafted, in the kinds your role may approve, with the question that was asked and the option that was picked. |
+| `dumen product [--name TEXT] [--service NAME=DESCRIPTION]... [--topic NAME=KEYWORD,KEYWORD]... [--kind NAME=ROLE]...` | Without flags, show the product, services, topics and decision kinds. With flags, change one entry each (publishers only); an empty value removes the entry. |
 | `dumen approve ID`, `dumen reject ID` | Approve or reject a proposed decision. Publishers (`pm`, `lead`) may approve any kind; otherwise the role that owns the kind does (`designer` for `ux` and `ui` by default). |
 | `dumen supersede ID --title T [-m BODY \| --file F]` | Replace an approved decision with a new one. |
 | `dumen ref add URL [--kind design\|artifact\|mr\|doc] --title T [--governs TEXT] [--paths a,b] [--area AREA]` | Record a link to a source of truth. |
@@ -93,6 +95,7 @@ Claude Code starts `dumen mcp` for each session. Through the plugin the tools ar
 | `search_decisions` | Search decisions by words in the title, area or paths. | nobody |
 | `get_decision` | Get one decision in full. Given a link id (`R-...`), it returns that link, once a person has confirmed it. | nobody |
 | `decisions_for_path` | Approved decisions, blocking directives and links for a file path. | nobody |
+| `record_answer` | Save the human's answer to a question the agent asked as a proposed team decision, with the question, the options and the pick. Lists similar decisions instead of saving unless `new` is set. Never approves. | nobody |
 | `draft_decision` | Record a proposed decision for a lasting choice of any kind, with its rule, kind, services and topics. | nobody |
 | `approve` | Approve a proposed decision. | **the person** |
 | `supersede` | Replace an approved decision with a new approved one. | **the person** |
@@ -110,7 +113,8 @@ refused. See [Security model](security.md).
 | --- | --- |
 | `SessionStart` | Injects the block of team records, kept under 8,000 characters: active directives first, then the approved decisions that apply, links and the role. Logs `started`. |
 | `UserPromptSubmit` | Injects directives that arrived since the last prompt. |
-| `PreToolUse` (every tool) | Hands over new directives, blocks `Edit`, `Write`, `MultiEdit`, `NotebookEdit` and, on a best effort, the file-writing tools of other MCP servers under a `deny` directive, sends human actions to the permission prompt, and blocks shell commands that would take a human action. Reminds the agent once about an unacknowledged directive. |
+| `PreToolUse` (every tool) | Hands over new directives, blocks `Edit`, `Write`, `MultiEdit`, `NotebookEdit` and, on a best effort, the file-writing tools of other MCP servers under a `deny` directive, sends human actions to the permission prompt, and blocks shell commands that would take a human action. Reminds the agent once about an unacknowledged directive. Holds back an `AskUserQuestion` once when an approved decision may already answer it (two topic keywords, or one keyword of a decision made for this service); asking again goes through. |
+| `PostToolUse` (`AskUserQuestion`) | Keeps the question, its options and what Claude Code returned, so that `record_answer` can tell an answer the human picked from one the agent only reports, and reminds the agent to save lasting choices. |
 | `Stop` | Logs `progress` with a one-line summary of the agent's last message. When a deny directive is active, also looks at the work tree and at the commits made since the session began that are on no remote yet (`git status` and `git log`, cut off after 2 seconds together) and logs a `violation` for changes made under the directive. |
 | `SessionEnd` | Logs `finished`. |
 

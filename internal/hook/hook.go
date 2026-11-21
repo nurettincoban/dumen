@@ -43,8 +43,10 @@ type Input struct {
 	Source string `json:"source"` // SessionStart
 	Reason string `json:"reason"` // SessionEnd
 
-	ToolName  string          `json:"tool_name"` // PreToolUse
-	ToolInput json.RawMessage `json:"tool_input"`
+	ToolName     string          `json:"tool_name"` // PreToolUse, PostToolUse
+	ToolInput    json.RawMessage `json:"tool_input"`
+	ToolResponse json.RawMessage `json:"tool_response"` // PostToolUse
+	ToolUseID    string          `json:"tool_use_id"`
 
 	LastAssistantMessage string `json:"last_assistant_message"` // Stop
 }
@@ -84,6 +86,7 @@ const (
 	SessionStart     = "session-start"
 	UserPromptSubmit = "user-prompt-submit"
 	PreToolUse       = "pre-tool-use"
+	PostToolUse      = "post-tool-use"
 	Stop             = "stop"
 	SessionEnd       = "session-end"
 )
@@ -163,6 +166,8 @@ func handle(event string, stdin io.Reader, env Env) *Output {
 		return r.userPromptSubmit()
 	case PreToolUse:
 		return r.preToolUse()
+	case PostToolUse:
+		return r.postToolUse()
 	case Stop:
 		r.stop()
 	case SessionEnd:
@@ -444,7 +449,7 @@ func guardedMCP(name string) (action string, ok bool) {
 }
 
 var (
-	humanCmd = regexp.MustCompile(`(?i)(^|[\s;&|(` + "`" + `$/\\'"=])dumen(\.exe)?['"]?\s+(approve|reject|supersede|direct|withdraw|private|role\s+set|role\s+rm|ref\s+check|mcp|hook)(\s|$|[;&|)'"])`)
+	humanCmd = regexp.MustCompile(`(?i)(^|[\s;&|(` + "`" + `$/\\'"=])dumen(\.exe)?['"]?\s+(approve|reject|supersede|direct|withdraw|private|product|role\s+set|role\s+rm|ref\s+check|mcp|hook)(\s|$|[;&|)'"])`)
 	storeRef = regexp.MustCompile(`(?i)(~|\$HOME|\$\{HOME\}|%USERPROFILE%|\$env:USERPROFILE|\$\{env:USERPROFILE\})[/\\]+\.dumen\b|DUMEN_HOME`)
 )
 
@@ -611,6 +616,10 @@ func (r *runCtx) preToolUse() *Output {
 		}
 	}
 	switch r.in.ToolName {
+	case QuestionTool:
+		if reason := r.holdBack(); reason != "" {
+			return deny(reason)
+		}
 	case "Bash", "PowerShell":
 		cmd := ti.Command
 		if humanCmd.MatchString(cmd) {
@@ -625,7 +634,7 @@ func (r *runCtx) preToolUse() *Output {
 			if ti.ID != "" {
 				target = " (" + render.Label(ti.ID, 12) + ")"
 			}
-			reason := fmt.Sprintf("dumen: %s%s is a human action. Confirm only if you, the human, want this.", action, target)
+			reason := fmt.Sprintf("dumen: %s%s is a human action.%s Confirm only if you, the human, want this.", action, target, r.whatIsDecided(r.in.ToolName))
 			session.RevokeTicket(r.proj.Store.SessionsDir(), r.in.ToolName, r.in.ToolInput)
 			// Ask only in the modes where a person is known to answer the prompt. Every
 			// other mode (auto, dontAsk, bypassPermissions, anything added later) may

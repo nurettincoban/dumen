@@ -33,8 +33,11 @@ func Hooks(binary string) map[string][]group {
 		// One handler for every tool: it enforces deny directives on edits, guards the
 		// human-only dumen tools and shell commands, and delivers new directives.
 		"PreToolUse": {{Matcher: "*", Hooks: h("pre-tool-use", 5)}},
-		"Stop":       {{Hooks: h("stop", 5)}},
-		"SessionEnd": {{Hooks: h("session-end", 3)}},
+		// Keeps the questions the agent asked its human and the answers, so that an
+		// answer can be saved as a team decision.
+		"PostToolUse": {{Matcher: "AskUserQuestion", Hooks: h("post-tool-use", 5)}},
+		"Stop":        {{Hooks: h("stop", 5)}},
+		"SessionEnd":  {{Hooks: h("session-end", 3)}},
 	}
 }
 
@@ -60,7 +63,7 @@ func isDumen(g any) bool {
 // AgentTools are the MCP tools an agent may call without asking its human.
 var AgentTools = []string{
 	"directives", "ack_directive", "propose_directive",
-	"search_decisions", "get_decision", "decisions_for_path", "draft_decision",
+	"search_decisions", "get_decision", "decisions_for_path", "draft_decision", "record_answer",
 	"add_ref", "log_event", "activity",
 }
 

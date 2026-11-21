@@ -68,7 +68,7 @@ func TestDecisionScopeIsChecked(t *testing.T) {
 		t.Fatal("an invalid service name was accepted")
 	}
 	// Once dumen.yml names the services, a decision may only name those.
-	if _, err := a.Submit(ctx, testutil.Lead, &setServices{map[string]string{"booking-svc": "Bookings", "web-app": "Site"}}); err != nil {
+	if _, err := a.Submit(ctx, testutil.Lead, &SetProduct{Services: map[string]string{"booking-svc": "Bookings", "web-app": "Site"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := a.Submit(ctx, agent, decision("x", "r", model.KindProduct, "billing-svc")); err == nil || !strings.Contains(err.Error(), "unknown service") {
@@ -140,24 +140,6 @@ func TestVersion1StoreIsUpgraded(t *testing.T) {
 	if cfg, _ := store.ReadConfig(root); cfg.Version != model.SchemaVersion {
 		t.Fatalf("store version after a write: %d", cfg.Version)
 	}
-}
-
-// setServices edits dumen.yml the way a lead would by hand.
-type setServices struct {
-	Services map[string]string `json:"services"`
-}
-
-func init() { register(func() Op { return &setServices{} }) }
-
-func (o *setServices) Kind() string { return "test.services" }
-func (o *setServices) Check() error { return nil }
-func (o *setServices) Apply(tx *Tx) error {
-	cfg, err := tx.Config()
-	if err != nil {
-		return err
-	}
-	cfg.Services = o.Services
-	return store.WriteConfig(tx.Root, cfg)
 }
 
 // Gauntlet A1: approving a decision also retires what it supersedes, so the approver
