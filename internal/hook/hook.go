@@ -357,7 +357,7 @@ func (r *runCtx) sessionStart() *Output {
 		}
 		fmt.Fprintf(&b, "\nProposed decisions awaiting approval: %d\n", r.c.Drafts)
 		if r.c.UnverifiedRefs > 0 {
-			fmt.Fprintf(&b, "Links added by agents, awaiting a human check (`dumen ref check`): %d\n", r.c.UnverifiedRefs)
+			fmt.Fprintf(&b, "Links added by agents, awaiting a human check (check_ref): %d\n", r.c.UnverifiedRefs)
 		}
 		role := r.role
 		if role == "" {
