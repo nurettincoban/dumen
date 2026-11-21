@@ -54,6 +54,9 @@ type Input struct {
 
 // Output is the JSON object a hook prints.
 type Output struct {
+	// Decision "block" with a Reason keeps a stopping agent going (Stop hook).
+	Decision           string    `json:"decision,omitempty"`
+	Reason             string    `json:"reason,omitempty"`
 	SystemMessage      string    `json:"systemMessage,omitempty"`
 	HookSpecificOutput *Specific `json:"hookSpecificOutput,omitempty"`
 }
@@ -170,7 +173,7 @@ func handle(event string, stdin io.Reader, env Env) *Output {
 	case PostToolUse:
 		return r.postToolUse()
 	case Stop:
-		r.stop()
+		return r.stop()
 	case SessionEnd:
 		r.sessionEnd()
 	}
@@ -842,7 +845,15 @@ func mentionsPath(cmd, dir string) bool {
 
 // ---- Stop and SessionEnd ----
 
-func (r *runCtx) stop() {
+func (r *runCtx) stop() *Output {
+	// News that arrived while the agent finished its turn is handed over before it
+	// stops, so it does not report "done" on work a teammate's decision just changed.
+	// Each decision is given once, so this cannot keep an agent going forever.
+	if news := r.newsBlock(); news != "" {
+		r.sess.Save()
+		return &Output{Decision: "block", Reason: header + "\n" + news +
+			"\nBefore you stop: check whether this changes the work of this turn, and tell your human in one line."}
+	}
 	summary := render.Summary(r.in.LastAssistantMessage, model.MaxEventText-1)
 	if secrets.Scan(summary) != nil {
 		summary = ""
@@ -860,6 +871,7 @@ func (r *runCtx) stop() {
 	if due && !r.sess.Finished && !r.sess.Asking {
 		r.log(model.EventProgress, summary)
 	}
+	return nil
 }
 
 // reportViolations logs a violation event when the work tree holds changes, made since

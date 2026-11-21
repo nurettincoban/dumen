@@ -125,6 +125,9 @@ func (o *CreateDecision) Check() error {
 		return fmt.Errorf("decision: title is required")
 	}
 	texts := []string{d.Title, d.Rule, o.Body, d.Area, strings.Join(d.Paths, "\n")}
+	for _, ask := range d.Needs {
+		texts = append(texts, ask)
+	}
 	if d.Origin != nil {
 		texts = append(texts, d.Origin.Question, d.Origin.Answer, strings.Join(d.Origin.Options, "\n"))
 	}
@@ -222,7 +225,7 @@ func checkScope(cfg model.Config, d model.Decision) error {
 			strings.Join(model.SortedKeys(cfg.KindsOrDefault()), ", "))
 	}
 	if len(cfg.Services) > 0 {
-		for _, s := range d.AppliesTo.Services {
+		for _, s := range append(append([]string{}, d.AppliesTo.Services...), model.SortedKeys(d.Needs)...) {
 			if _, ok := cfg.Services[s]; !ok && s != "*" {
 				return fmt.Errorf("decision: unknown service %q (known: %s)", s,
 					strings.Join(model.SortedKeys(cfg.Services), ", "))

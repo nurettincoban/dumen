@@ -23,10 +23,39 @@ any kind (product, UX, UI, architecture, technical). A decision is binding but c
 team member puts one in force, anyone can change it, and every change reaches the other agents
 as news. It runs on the git remote you already have, with no server.
 
-## An example: a table-reservation product
+## Two everyday problems, solved
 
-Ayşe works on `booking-svc`, Mehmet on `billing-svc`, both with Claude Code. One dumen store
-serves both repositories.
+A table-reservation product: Sofia works on the site (`web-app`), Ayşe on `booking-svc`,
+Mehmet on `billing-svc`, each in their own Claude Code session. One dumen store serves all
+three repositories. The plan was made up front, but new questions come up every day.
+
+### The frontend changes something, and the backend hears it at once
+
+Sofia's agent reworks the time picker. Sofia decides that slot buttons show how many tables
+are left, which the backend does not return yet. The decision says what it needs:
+
+```text
+⏺ dumen · record_answer(kind ui, services web-app,
+    rule "Slot buttons show how many tables are left",
+    needs {"booking-svc": "Return remaining tables per slot in GET /slots"})
+⏺ dumen · approve(D-3MWE)   ▸ Yes
+```
+
+Ayşe's agent is in the middle of other work in `booking-svc`. Within about ten seconds, on
+its next step and in the same session, it gets:
+
+```text
+[dumen] DECISION NEWS (1): approved by a teammate since this session started; binding from now on
+- D-3MWE [ui] Slot buttons show how many tables are left (approved by sofia@example.com; in web-app)
+  NEEDS FROM booking-svc: Return remaining tables per slot in GET /slots
+```
+
+It tells Ayşe in one line and offers to do it. If the agent was about to end its turn, dumen
+holds it once so the news is read before it says "done".
+
+### Two backend developers, one question
+
+Ayşe works on `booking-svc`, Mehmet on `billing-svc`.
 
 **1. Ayşe's agent asks, Ayşe answers, the answer becomes a decision.** Her agent is building
 cancellation and needs to know what happens to the money. It asks with Claude Code's question
@@ -111,7 +140,7 @@ flowchart LR
     S[("<b>2. git carries it</b><br/>branch dumen<br/>on your own remote")]
     A["<b>3. Every agent follows it</b><br/>every Claude Code session<br/>on every laptop"]
     H -- "git push" --> S
-    S -- "fetch, every 30 s" --> A
+    S -- "checked every 10 s" --> A
     A -. "answers, drafts, activity" .-> S
 ```
 
@@ -119,7 +148,8 @@ flowchart LR
 2. **git carries it.** Records live on a branch named `dumen` of a repository your team can
    already push to. GitHub, GitLab, Gitea, Bitbucket or a bare repository all work the same:
    if `git push` works, dumen works. No server, no account, no token.
-3. **Every agent follows it.** Each Claude Code session checks the branch every 30 seconds.
+3. **Every agent follows it, in the session it is running.** Each Claude Code session checks the
+   branch about every 10 seconds; no restart is needed.
    Hooks read a local cache in a few milliseconds: they show the decisions at session start,
    hand over news, note the decisions on a prompt's or a plan's topics, and hold back a
    question the team already answered.
@@ -221,7 +251,9 @@ the real `claude` CLI; it compiles for macOS and Windows and has not been run th
 - **`deny` blocks Claude Code's file tools.** An agent that runs `sed -i` through Bash can still
   change a frozen file. Agents are told not to, and nearly always comply. dumen does not undo
   such a change; it reports it in `dumen activity`, and `dumen check` fails on it in CI.
-- **About 30 seconds to arrive.** News and new directives are not instant.
+- **About 10 seconds, then the next step.** News reaches a working agent on its next tool
+  call or prompt, or before it stops. An agent waiting for its human hears it with the next
+  message.
 - **Topic matching is by keywords.** It finds decisions whose topic words appear in a
   prompt, plan or question. It does not understand meaning, so it can miss a decision or
   show an unrelated one; asking again always goes through.

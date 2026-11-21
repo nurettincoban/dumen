@@ -34,7 +34,7 @@ internal/secrets/          regex secret scanner run on every write
 internal/render/           deterministic DECISIONS.md and ACTIVITY.md; sanitizer for injected text
                            (120 chars, control and invisible characters stripped)
 internal/hook/             hook input and output types and the handler for each event
-internal/mcp/              stdio MCP server, the 13 tools, and the 30 s ls-remote sync loop
+internal/mcp/              stdio MCP server, the 13 tools, and the 10 s ls-remote sync loop
 internal/activity/         event queries, summaries, watch, gc compaction
 internal/install/          writes .claude/settings.json, .mcp.json and the skill; PM/designer
                            workspace for `join`
@@ -443,3 +443,15 @@ These were decided during the build, each at the owner's request or forced by a 
     "DECISION NEWS (1): D-7K2P [product] Cancelled bookings are refunded as store credit
     (approved by ayse@example.com; in booking-svc)" on its next tool call. If Mehmet
     disagrees, he supersedes it and Ayşe's agent gets that change the same way.
+18. **Frontend and backend: needs, and news inside the running session (owner, 2026-11-21).**
+    Two pains the owner named: the frontend changes a design and the backend does not know,
+    and two backend developers on different parts of the product do not know each other's
+    decisions, because many questions only come up during the work. A decision can name
+    `needs`: work it depends on from another service, one line per service ("booking-svc:
+    return remaining tables per slot"). A service named there is in the decision's scope,
+    so its agents get the decision as news with `NEEDS FROM booking-svc: ...`. News reaches
+    the agent inside the session it is running, with no restart: the session's dumen
+    server checks the store every 10 seconds (it was 30), and the news is handed over on
+    the next tool call, the next prompt, or, if the agent is about to end its turn, by the
+    `Stop` hook, which keeps it going once so it does not report "done" on work a
+    teammate's decision just changed.

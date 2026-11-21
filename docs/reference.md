@@ -41,7 +41,7 @@ Every command accepts `--help`. Ids look like `Y-2APW` (directive), `D-PG18` (de
 
 | Command | What it does |
 | --- | --- |
-| `dumen decide --title T --rule R --kind K [--services a,b] [--topics a,b] [--owner EMAIL] [-m BODY \| --file F] [--paths a,b] [--sources R-1,R-2] [--approve]` | Record a decision. The rule is the one sentence agents see first; the kind is `product`, `ux`, `ui`, `architecture`, `technical` or a kind from `dumen.yml`. Without `--services` it applies to the whole product. It is proposed unless `--approve` is given by someone who may approve. |
+| `dumen decide --title T --rule R --kind K [--services a,b] [--topics a,b] [--owner EMAIL] [-m BODY \| --file F] [--paths a,b] [--sources R-1,R-2] [--needs SERVICE=WORK]... [--approve]` | Record a decision. `--needs` asks another service for work the decision depends on; that service's agents get it as news. The rule is the one sentence agents see first; the kind is `product`, `ux`, `ui`, `architecture`, `technical` or a kind from `dumen.yml`. Without `--services` it applies to the whole product. It is proposed unless `--approve` is given by someone who may approve. |
 | `dumen decisions [PATH] [--service S] [--topic T] [--kind K] [--proposed] [--all]` | List approved decisions by rule, optionally filtered by path, service, topic or kind. |
 | `dumen show ID` | Show a decision, directive or link in full. |
 | `dumen questions [--all]` | List proposed decisions you may approve: answers agents saved and decisions they drafted, with the question that was asked and the option that was picked. |
@@ -76,7 +76,7 @@ Human actions (`approve`, `reject`, `supersede`, `direct`, `withdraw`, `private`
 | Variable | Effect |
 | --- | --- |
 | `DUMEN_HOME` | Where local state lives. Default `~/.dumen`. |
-| `DUMEN_POLL_INTERVAL` | How often a session checks the remote, for example `10s`. Default 30 seconds, minimum 1 second. |
+| `DUMEN_POLL_INTERVAL` | How often a session checks the remote, for example `10s`. Default 10 seconds, minimum 1 second. |
 | `DUMEN_WORKSPACES` | Where `dumen join URL` creates a workspace. Default `~/dumen`. |
 
 dumen also reads two variables that Claude Code sets: `CLAUDECODE` (the command runs inside a
@@ -117,7 +117,7 @@ refused. See [Security model](security.md).
 | `UserPromptSubmit` | Injects directives that arrived since the last prompt and `DECISION NEWS` (decisions approved by a teammate since the session started, with who, where and what they replaced; also given on the next `PreToolUse`), and names up to three approved decisions on the topics of the prompt that the session has not been shown. The prompt is never stored. |
 | `PreToolUse` (every tool) | Hands over new directives, blocks `Edit`, `Write`, `MultiEdit`, `NotebookEdit` and, on a best effort, the file-writing tools of other MCP servers under a `deny` directive, sends human actions to the permission prompt, and blocks shell commands that would take a human action. Reminds the agent once about an unacknowledged directive. Holds back an `AskUserQuestion` once when an approved decision may already answer it (two topic keywords, or one keyword of a decision made for this service); asking again goes through. On `ExitPlanMode`, adds the approved decisions on the plan's topics as context, without blocking. |
 | `PostToolUse` (`AskUserQuestion`) | Keeps the question, its options and what Claude Code returned, so that `record_answer` can tell an answer the human picked from one the agent only reports, and reminds the agent to save lasting choices. |
-| `Stop` | Logs `progress` with a one-line summary of the agent's last message. When a deny directive is active, also looks at the work tree and at the commits made since the session began that are on no remote yet (`git status` and `git log`, cut off after 2 seconds together) and logs a `violation` for changes made under the directive. |
+| `Stop` | Hands over `DECISION NEWS` that arrived during the turn before the agent stops (once per decision, with `decision: block`). Logs `progress` with a one-line summary of the agent's last message. When a deny directive is active, also looks at the work tree and at the commits made since the session began that are on no remote yet (`git status` and `git log`, cut off after 2 seconds together) and logs a `violation` for changes made under the directive. |
 | `SessionEnd` | Logs `finished`. |
 
 Hooks answer with `hookSpecificOutput`. A blocked edit looks like this:

@@ -2,8 +2,10 @@
 
 Everything dumen does not do, or does not do yet. dumen is early and has not been released.
 
-- **30-second sync window.** A new directive reaches running sessions within about 30 seconds, not
-  instantly. An agent can start an edit in that window.
+- **About 10 seconds to arrive, then the next step.** A running session checks the store about
+  every 10 seconds; news and new directives reach the agent on its next tool call, its next
+  prompt, or when it is about to stop. An agent that is idle, waiting for its human, hears
+  about it with the next message. An agent can start an edit in that window.
 - **`deny` covers Claude Code's file tools, not everything.** The hook blocks `Edit`, `Write`,
   `MultiEdit` and `NotebookEdit` under a denied path, following symlinks. An agent that runs
   `sed -i`, a build script or a code generator through Bash can still change those files. File

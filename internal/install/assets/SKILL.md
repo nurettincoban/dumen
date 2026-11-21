@@ -40,7 +40,10 @@ Your role is on the `Your role:` line of the session-start block. Everyone follo
    tell your human which one, or ask again unchanged if it does not apply. After your
    human answers, call `record_answer` once per question: the question, the picked
    answer, a one-sentence `rule`, its `kind`, and the `services` and `topics` it applies
-   to. Then offer your human to put it in force: if they agree, call `approve` with the id
+   to. When the choice needs work from another service (a UI choice that needs a new API
+   field, an API change other services call), add `needs`, such as
+   `{"booking-svc": "return remaining tables per slot"}`: that service's agents get it as
+   news. Then offer your human to put it in force: if they agree, call `approve` with the id
    (they confirm the prompt). From then on it binds every agent, and the agents on the
    services it concerns get it as news. If dumen lists approved decisions that cover it,
    follow them; if your human wants one changed, that is `supersede`. If it lists proposed
@@ -49,8 +52,9 @@ Your role is on the `Your role:` line of the session-start block. Everyone follo
    or anything a reader gets from the diff.
 5. **News is binding.** A `DECISION NEWS` note, or `CHANGED SINCE THE LAST SESSION HERE`
    at session start, means a teammate put a decision in force or replaced one. Follow it
-   from now on. If it changes what you are doing, tell your human in one line; a replaced
-   decision is no longer in force.
+   from now on, in this session. If it changes what you are doing, tell your human in one
+   line; a replaced decision is no longer in force. `NEEDS FROM <this service>` is work a
+   teammate's decision asks of your service: tell your human, and do it if they agree.
 6. **Directives come first.** Read ACTIVE DIRECTIVES first; while a directive is active
    it wins over a decision. Acknowledge each new one once with `ack_directive`, at
    session start and when a NEW DIRECTIVES note appears. Acknowledging only records that

@@ -51,10 +51,14 @@ func Anchor(root string) string {
 
 type decisionFlags struct {
 	title, rule, kind, services, topics, owner, body, file, area, paths, sources *string
+	needs                                                                        pairs
 }
 
 func addDecisionFlags(fs *flag.FlagSet) decisionFlags {
+	needs := pairs{}
+	fs.Var(needs, "needs", "SERVICE=WORK: work this decision needs from another service, which hears about it; repeatable")
 	return decisionFlags{
+		needs:    needs,
 		title:    fs.String("title", "", "one-line title"),
 		rule:     fs.String("rule", "", "the rule agents see first, one sentence (at most 300 characters)"),
 		kind:     fs.String("kind", "", "product, ux, ui, architecture, technical, or a kind from dumen.yml"),
@@ -99,6 +103,14 @@ func (f decisionFlags) build(a *app, p *project.Project) (model.Decision, string
 		AppliesTo: model.AppliesTo{Services: splitList(strings.ToLower(*f.services)), Topics: splitList(strings.ToLower(*f.topics))},
 		Owner:     strings.ToLower(strings.TrimSpace(*f.owner)), Area: *f.area,
 		Sources: splitList(strings.ToUpper(*f.sources)), AnchoredAt: Anchor(root)}
+	for svc, ask := range f.needs {
+		if ask = strings.Join(strings.Fields(ask), " "); ask != "" {
+			if d.Needs == nil {
+				d.Needs = map[string]string{}
+			}
+			d.Needs[svc] = ask
+		}
+	}
 	for _, x := range splitList(*f.paths) {
 		d.Paths = append(d.Paths, policy.Qualify(p.Repo, x)) // paths typed inside a repository belong to it
 	}
