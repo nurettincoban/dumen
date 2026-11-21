@@ -10,10 +10,8 @@ severity scale and the rules. Then review the pull request or branch given as th
 argument (default: the current branch against `main`).
 
 1. Read the whole diff and the code it touches. Do not rely on the description.
-2. Run stage 1 and the build part of stage 4 for real:
-   `go vet ./...`, `go test -race -short ./...`,
-   `GOOS=windows go build ./... && GOOS=darwin go build ./...`.
-3. For stage 2, build the binary and try to defeat each guard the change touches in a
+2. Run stage 1 for real: `node --test test/dumen.test.mjs`, three times.
+3. For stage 2, try to defeat each guard the change touches in a
    sandbox store (see "A sandbox store in one minute" in `docs/gauntlet.md`). Think like
    an agent that wants to get its edit through: another path to the same file, another
    tool, another process, a declined prompt, a stale cache.

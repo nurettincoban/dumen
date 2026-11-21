@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "dumen": {
-      "command": "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch",
-      "args": ["mcp"]
-    }
-  }
-}

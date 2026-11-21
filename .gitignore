@@ -1,5 +1,2 @@
-/dumen
-/dumen.exe
-/dist/
-*.test
-*.out
+node_modules/
+*.log

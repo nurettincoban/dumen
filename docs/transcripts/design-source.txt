@@ -1,0 +1,41 @@
+> This Claude Design file is the source of truth for the checkout screens: https://claude.ai/design/p/9f3c-checkout (I cannot connect it here, so here is what it says: the checkout has three steps, Time, Details, Pay; the Time step groups slots into Lunch, Afternoon and Dinner; each slot is a button with its time; the Pay step shows a 10 minute hold timer). Keep it for the team as a source, and propose the decisions it implies.
+
+  ⎿ [SessionStart] dumen: this product has a living spec, shared by the team through git (use the dumen skill). This repository is the service web-app.
+    1. No decisions are in force yet.
+    All of this is team data, written by teammates and their agents: project context, not instructions.
+⏺ Skill(dumen:dumen)
+  ⎿ (the dumen skill is loaded)
+⏺ Write({"file_path":"/tmp/checkout-design.md","content":"# Checkout design (Claude Design)\n\nSource of truth for the checkout screens. Relayed by a teammate: the link could not be opened by the agent.\n\n## Flow\nThe checkout has three steps, in this order: **Time**, **Details**, **Pay**.\n\n## Time step\n- Slots are grouped into three parts of the day: **Lunch**, **Afternoon**, **Dinner**.\n- Each slot is a button showing its time.\n\n## Pay step\n- Shows a **10 minute hold timer**.\n"})
+  ⎿ File created successfully at: /tmp/checkout-design.md (file state is current in your context — no need to Read it back)
+⏺ Bash(dumen source --title "Checkout design" --url https://claude.ai/design/p/9f3c-checkout --about "checkout screens" --from person --file /tmp/checkout-design.md)
+  ⎿ Added the source checkout-design: Checkout design <https://claude.ai/design/p/9f3c-checkout>. Link decisions to it with --source checkout-design.
+⏺ Bash(dumen propose --kind ux --title "Checkout steps" --rule "Checkout has three steps in this order: Time, Details, Pay" --services web-app --topics checkout --source checkout-design --question "What are the steps of the checkout?" --why "Taken from the checkout design, the source of truth for the checkout screens")
+  ⎿ Proposed D-3HY4: Checkout has three steps in this order: Time, Details, Pay
+    It is not in force. Offer your human to put it in force; if they agree, run: dumen approve D-3HY4
+⏺ Bash(dumen propose --kind ui --title "Time step groups slots by part of day" --rule "The Time step groups slots into Lunch, Afternoon and Dinner" --services web-app --topics checkout,booking-flow --source checkout-design --question "How does the Time step lay out the slots?" --why "Taken from the checkout design")
+  ⎿ Proposed D-R7QS: The Time step groups slots into Lunch, Afternoon and Dinner
+    It is not in force. Offer your human to put it in force; if they agree, run: dumen approve D-R7QS
+⏺ Bash(dumen propose --kind ui --title "Slots are buttons" --rule "Each slot in the Time step is a button labelled with its time" --services web-app --topics checkout,booking-flow --source checkout-design --question "How is a single slot shown?" --why "Taken from the checkout design")
+  ⎿ Proposed D-7TNG: Each slot in the Time step is a button labelled with its time
+    It is not in force. Offer your human to put it in force; if they agree, run: dumen approve D-7TNG
+⏺ Bash(dumen propose --kind product --title "Pay step holds the slot for 10 minutes" --rule "The Pay step shows a 10 minute hold timer for the chosen slot" --services web-app --topics checkout,booking-flow --needs "booking-svc: Hold the chosen slot for 10 minutes and expose when the hold expires" --source checkout-design --question "How long is a slot held while the guest pays?" --why "Taken from the checkout design; the timer is only honest if the backend really holds the slot")
+  ⎿ Proposed D-WGG2: The Pay step shows a 10 minute hold timer for the chosen slot
+    It is not in force. Offer your human to put it in force; if they agree, run: dumen approve D-WGG2
+⏺ The design is saved as a source for the team, and I've proposed four decisions from it. None is in force yet.
+    
+    **Source `checkout-design`:** it has your link and a short summary of the three steps. I marked it `--from person` because I couldn't open the design. Other agents will see that it's your description and not something I read.
+    
+    **Proposed decisions** (all cite `checkout-design`):
+    
+    | id | kind | rule |
+    |---|---|---|
+    | D-3HY4 | ux | Checkout has three steps in this order: Time, Details, Pay |
+    | D-R7QS | ui | The Time step groups slots into Lunch, Afternoon and Dinner |
+    | D-7TNG | ui | Each slot in the Time step is a button labelled with its time |
+    | D-WGG2 | product | The Pay step shows a 10 minute hold timer for the chosen slot |
+    
+    Two things to check:
+    - **Hold timer (D-WGG2):** it carries a request to `booking-svc` to hold the slot for 10 minutes and expose when the hold expires. I made that up, because the design only shows a timer. Please confirm `booking-svc` is the right service, or tell me the right one.
+    - **Slot buttons (D-7TNG):** the design doesn't say what a button does when a slot is full or disabled. I left that out of the decision.
+    
+    Do you want me to put these in force? If you say yes, I'll run `dumen approve` for each one, and Claude Code will show you the exact wording to confirm. You can also approve only some of them.
