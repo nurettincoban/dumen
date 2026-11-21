@@ -18,11 +18,13 @@ import (
 // agent prepares the call, and the human-only ones go through the permission prompt.
 
 type roleIn struct {
+	sessionOpt
 	Email string `json:"email" jsonschema:"the teammate's git user.email"`
 	Role  string `json:"role,omitempty" jsonschema:"pm, lead, designer, dev or another short word; empty removes the person"`
 }
 
 type productIn struct {
+	sessionOpt
 	Name     string            `json:"name,omitempty" jsonschema:"one line: what the team builds"`
 	Services map[string]string `json:"services,omitempty" jsonschema:"service (repository name) -> one-line description; an empty description removes it"`
 	Topics   map[string]string `json:"topics,omitempty" jsonschema:"topic -> comma-separated keywords that bring its decisions to an agent's attention; empty removes it"`
@@ -30,6 +32,7 @@ type productIn struct {
 }
 
 type newsIn struct {
+	sessionOpt
 	Since string `json:"since,omitempty" jsonschema:"today, yesterday, 2h, 7d (default), a date"`
 	All   bool   `json:"all,omitempty" jsonschema:"every repository, not only this one"`
 }

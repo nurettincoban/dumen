@@ -466,3 +466,22 @@ func TestConfirmationShowsNeeds(t *testing.T) {
 		t.Fatalf("the prompt does not show the needs: %s", out)
 	}
 }
+
+// Agents pass the session id from the session-start block to any tool; no tool may
+// refuse it as an unknown argument.
+func TestEveryToolAcceptsSession(t *testing.T) {
+	w := setup(t)
+	for name, args := range map[string]map[string]any{
+		"decisions_for_topic": {"topic": "payments"},
+		"search_decisions":    {},
+		"decisions_for_path":  {"path": "src/a.go"},
+		"directives":          {},
+		"news":                {},
+		"activity":            {},
+	} {
+		args["session"] = "s-1"
+		if text, isErr := w.call(name, args); isErr && strings.Contains(text, "additional properties") {
+			t.Errorf("%s refused session: %s", name, text)
+		}
+	}
+}

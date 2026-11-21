@@ -686,12 +686,12 @@ func (r *runCtx) preToolUse() *Output {
 			switch r.in.PermissionMode {
 			case "default", "acceptEdits", "plan":
 			default:
-				return deny(fmt.Sprintf("dumen: %s%s is a human action, confirmed in Claude Code's permission prompt, and this session's permission mode (%s) does not show that prompt to a person. Tell your human: switch to a mode that asks (shift+tab, for example default or accept edits), then ask you again. As a last resort they can run the dumen command in their own terminal.", action, target, render.Label(r.in.PermissionMode, 30)))
+				return deny(fmt.Sprintf("dumen: %s%s is a human action, confirmed in Claude Code's permission prompt, and this session's permission mode (%s) does not show that prompt to a person. Tell your human: switch to a mode that asks (shift+tab, for example default or accept edits), then ask you again.", action, target, render.Label(r.in.PermissionMode, 30)))
 			}
 			// The MCP server only acts on a call that carries this proof of having been
 			// asked, and only the server Claude Code started for this session can spend it.
 			if err := session.GrantTicket(r.proj.Store.SessionsDir(), r.in.ToolName, r.in.ToolInput, r.env.ParentPID, r.sess.Session); err != nil {
-				return deny(fmt.Sprintf("dumen: %s%s is a human action, confirmed in Claude Code's permission prompt, and this session's dumen MCP server is not running, so the prompt cannot be offered. Tell your human: run /mcp and reconnect dumen, then ask you again. As a last resort they can run the dumen command in their own terminal.", action, target))
+				return deny(fmt.Sprintf("dumen: %s%s is a human action, confirmed in Claude Code's permission prompt, and this session's dumen MCP server is not running, so the prompt cannot be offered. Tell your human: run /mcp and reconnect dumen, then ask you again.", action, target))
 			}
 			spec.PermissionDecision, spec.PermissionDecisionReason = "ask", reason
 		}

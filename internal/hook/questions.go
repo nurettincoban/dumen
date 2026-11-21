@@ -160,10 +160,22 @@ func (r *runCtx) postToolUse() *Output {
 // one place a person reads before saying yes.
 func (r *runCtx) whatIsDecided(tool string) string {
 	var in struct {
-		ID    string            `json:"id"`
-		Rule  string            `json:"rule"`
-		Kind  string            `json:"kind"`
-		Needs map[string]string `json:"needs"`
+		ID       string            `json:"id"`
+		Rule     string            `json:"rule"`
+		Kind     string            `json:"kind"`
+		Needs    map[string]string `json:"needs"`
+		Email    string            `json:"email"`
+		Role     string            `json:"role"`
+		On       bool              `json:"on"`
+		Name     string            `json:"name"`
+		Services map[string]string `json:"services"`
+		Topics   map[string]string `json:"topics"`
+		Kinds    map[string]string `json:"kinds"`
+		Text     string            `json:"text"`
+		Days     float64           `json:"days"`
+		All      bool              `json:"all"`
+		Area     string            `json:"area"`
+		Paths    []string          `json:"paths"`
 	}
 	json.Unmarshal(r.in.ToolInput, &in)
 	root := r.proj.Store.Root()
@@ -199,6 +211,65 @@ func (r *runCtx) whatIsDecided(tool string) string {
 			out += fmt.Sprintf(" It asks %s to: %q.", render.Label(svc, 40), render.Label(in.Needs[svc], model.MaxNeed))
 		}
 		return out
+	case strings.HasSuffix(tool, "__reject") && in.ID != "":
+		return " It rejects " + describe(in.ID) + "."
+	case strings.HasSuffix(tool, "__withdraw_directive") && in.ID != "":
+		d, _, err := store.ReadDirective(root, strings.ToUpper(strings.TrimSpace(in.ID)))
+		if err != nil {
+			return " It ends directive " + render.Label(in.ID, 12) + " (not found)."
+		}
+		return fmt.Sprintf(" It ends directive %s [%s] %q for every agent.", d.ID, render.Label(d.Kind, 10), render.Label(d.Text, 200))
+	case strings.HasSuffix(tool, "__publish_directive"):
+		text := in.Text
+		if in.ID != "" {
+			if d, _, err := store.ReadDirective(root, strings.ToUpper(strings.TrimSpace(in.ID))); err == nil {
+				text, in.Kind = d.Text, d.Kind
+			}
+		}
+		scope := "every agent"
+		switch {
+		case in.Role != "":
+			scope = "agents of role " + render.Label(in.Role, 30)
+		case in.Area != "":
+			scope = "area " + render.Label(in.Area, 40)
+		case len(in.Paths) > 0:
+			scope = "paths " + render.Label(strings.Join(in.Paths, ", "), 120)
+		}
+		return fmt.Sprintf(" It tells %s [%s]: %q.", scope, render.Label(orDefault(in.Kind, "context"), 10), render.Label(text, 200))
+	case strings.HasSuffix(tool, "__set_role") && in.Email != "":
+		if strings.TrimSpace(in.Role) == "" {
+			return fmt.Sprintf(" It removes %s from the team.", render.Label(in.Email, 80))
+		}
+		return fmt.Sprintf(" It gives %s the role %q.", render.Label(in.Email, 80), render.Label(in.Role, 30))
+	case strings.HasSuffix(tool, "__set_private"):
+		if in.On {
+			return " It turns monitoring off for new sessions on this machine (activity is no longer logged)."
+		}
+		return " It turns monitoring back on for new sessions on this machine."
+	case strings.HasSuffix(tool, "__check_ref") && in.ID != "":
+		ref, err := store.ReadRef(root, strings.ToUpper(strings.TrimSpace(in.ID)))
+		if err != nil {
+			return " It confirms link " + render.Label(in.ID, 12) + " (not found)."
+		}
+		return fmt.Sprintf(" It confirms link %s %q (%s) as a source of truth.", ref.ID, render.Label(ref.Title, 120), render.Label(ref.URL, 200))
+	case strings.HasSuffix(tool, "__set_product"):
+		var b strings.Builder
+		if in.Name != "" {
+			fmt.Fprintf(&b, " It names the product %q.", render.Label(in.Name, 120))
+		}
+		change := func(what string, m map[string]string, max int) {
+			for _, k := range model.SortedKeys(m) {
+				if strings.TrimSpace(m[k]) == "" {
+					fmt.Fprintf(&b, " It removes %s %s.", what, render.Label(k, 40))
+				} else {
+					fmt.Fprintf(&b, " It sets %s %s to %q.", what, render.Label(k, 40), render.Label(m[k], max))
+				}
+			}
+		}
+		change("service", in.Services, 120)
+		change("topic", in.Topics, 120)
+		change("the approver role of kind", in.Kinds, 30)
+		return b.String()
 	}
 	return ""
 }

@@ -1,0 +1,69 @@
+⏺ Bash({"command":"which dumen; dumen --help 2>&1 | head -60; cd /work && git status --short | head; ls -la","description":"Locate dumen CLI and inspect the repo"})
+  ⎿ /work
+    dumen steers and monitors your team's Claude Code agents through your git remote.
+    
+    Commands:
+      init        create the dumen store for this repository
+      join        connect this machine to a dumen store; with a URL, create a no-code workspace (PM, designer)
+      status      show sync state, role and queued operations
+      direct      publish a directive
+      directives  list directives
+      withdraw    withdraw a directive
+      activity    what agents did: counts, sessions, who is stuck
+      check       fail when a change touches a path under a deny directive (work tree, or a commit range for CI)
+      watch       live tail of agent activity
+      private     stop or resume monitoring of your new sessions (the fact stays visible)
+      role        manage who is on the team and what they may do
+      gc          archive stale drafts and compact activity older than 30 days
+      sync        push queued operations and refresh the local cache
+      install     write the Claude Code hooks, MCP registration and skill into this repository
+      mcp         MCP stdio server for Claude Code (also runs the background sync)
+      hook        Claude Code hook entry point (reads JSON on stdin)
+      version     print the version
+      decide      record a decision (proposed unless --approve)
+      decisions   list approved decisions, optionally filtered
+      questions   list proposed decisions you may approve, such as answers agents saved
+      show        show a decision, directive or ref in full
+      approve     approve a proposed decision
+      reject      reject a proposed decision
+      supersede   replace an approved decision with a new one
+      ref         manage links to sources of truth
+      news        list decisions that came into force or were replaced recently, newest first
+      product     show or change the product, its services, topics and decision kinds (publishers; an empty value removes an entry)
+    total 16
+    drwxr-xr-x 4 root root 4096 Nov 21 14:12 .
+    drwxr-xr-x 4 root root 4096 Nov 21 14:12 ..
+    drwxr-xr-x 8 root root 4096 Nov 21 14:12 .git
+    drwxr-xr-x 2 root root 4096 Nov 21 14:12 src
+⏺ Bash({"command":"dumen init --help 2>&1; echo ---; dumen join --help 2>&1; echo ---; dumen status 2>&1","description":"Read init/join usage and check current dumen status"})
+  ⎿ Exit code 1
+    Usage of dumen init:
+      -project string
+        	project name (default: derived from the store remote)
+      -repo string
+        	this repository's name when several repositories share one store (default: derived from origin)
+      -store string
+        	where records live: <remote-url>#<branch> (default "origin#dumen")
+    ---
+    Usage of dumen join:
+    ---
+    dumen: not a dumen project (no .dumen file found; run `dumen init`)
+⏺ Bash({"command":"git remote -v; dumen init -project shop -store /srv/git/store.git#dumen 2>&1; echo \"exit=$?\"; echo ---; dumen status 2>&1; echo \"exit=$?\"","description":"Initialize dumen with shop project and team store"})
+  ⎿ This Bash command contains multiple operations. The following part requires approval: echo "exit=$?"
+⏺ Bash({"command":"git remote -v; dumen init -project shop -store /srv/git/store.git#dumen 2>&1; dumen status 2>&1","description":"Initialize dumen with shop project and team store"})
+  ⎿ origin	/work.git (fetch)
+    origin	/work.git (push)
+    Created branch "dumen" on /srv/git/store.git with you (maya@example.com) as lead.
+    Wrote .dumen. Commit it so teammates can run `dumen join`.
+    This repository is "booking-svc" in project "shop". Limit a path to it by writing booking-svc:src/...
+    Local state: /work (never inside your working tree).
+    warning: Protect the dumen branch on your git host: let team members push, forbid force pushes and deletion.
+    project   shop
+    store     /srv/git/store.git#dumen
+    repo      booking-svc
+    you       maya@example.com (agent, role: lead)
+    sync      up to date (e8e60bab)
+    active    0 directives, 0 approved decisions, 0 drafts, 0 proposed directives
+    outbox    0 queued, 0 rejected
+⏺ Dumen is set up for the shop project: `dumen init` created the `dumen` branch in the team store and wrote `.dumen` in booking-svc, with you as lead (maya@example.com), and `dumen status` reports sync up to date with 0 decisions and 0 directives.
+    `.dumen` is not committed yet, so commit it so teammates can run `dumen join`, and protect the `dumen` branch on your git host (no force pushes or deletion).

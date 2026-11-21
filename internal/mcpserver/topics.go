@@ -11,6 +11,7 @@ import (
 )
 
 type topicIn struct {
+	sessionOpt
 	Topic string `json:"topic,omitempty" jsonschema:"a topic name, such as payments or booking-flow"`
 	Text  string `json:"text,omitempty" jsonschema:"or: a plan, a question or a task; decisions on the topics it mentions are listed"`
 	All   bool   `json:"all,omitempty" jsonschema:"include decisions made for other services"`
