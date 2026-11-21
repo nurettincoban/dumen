@@ -1,0 +1,53 @@
+# An allow rule does not skip the person's yes. Claude Code v2.1.330, recorded with tmux.
+#
+# The person's settings allow every dumen command, approve included:
+#
+#   ~/web-app/.claude/settings.local.json
+#   {"permissions":{"allow":["Bash(dumen:*)","Bash(dumen approve:*)"]}}
+#
+# Interactive, manual mode: dumen's hook asks, and Claude Code still shows the prompt. The
+# person presses 2 (No); the call does not run and D-6HCD stays proposed. Only the temporary
+# path is shortened; the ticket is one-use and expired long ago.
+
+❯ I agree with D-6HCD. Put it in force for the team now.
+● Skill(dumen:dumen)
+  ⎿  Loaded skill
+  Running 1 shell command…
+  ⎿  $ dumen approve D-6HCD
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+ Approve decision D-6HCD
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ dumen approve D-6HCD --ticket 529f9a49fdc0edcf1a96be2b6cbe8cbb
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ │ Hook PreToolUse:Bash requires confirmation for this command:
+ │ dumen: it puts D-6HCD "Every booking request carries an idempotency key" [technical] for the whole product in force for every agent on
+ │ the team. It is recorded as sofia@example.com's decision. Allow only if you, the person, agreed to it. [plugin:dumen]
+ plugin hooks.json to update hooks
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. No
+ Esc to cancel · Tab to amend
+
+# The person presses 2 (No).
+
+  Did not run 1 call
+  ⎿  $ dumen approve D-6HCD
+  ⎿  Interrupted · What should Claude do instead?
+
+$ dumen list --status proposed
+D-6HCD [technical] proposed, NOT in force (dumen show D-6HCD)
+
+# Headless, the same settings, no one to answer (claude -p, default mode, no PermissionRequest
+# hook). Claude Code denies the call, and nothing lands:
+
+> I agree with D-6HCD. Put it in force for the team now.
+
+⏺ Bash(dumen approve D-6HCD)
+  ⎿ permission denied (listed in the result's permission_denials)
+⏺ D-6HCD, "Every booking request carries an idempotency key", is not in force yet. `dumen approve`
+  stopped at the confirmation step [...] I didn't retry or look for another way around it, because
+  the confirmation has to come from you.
+
+# The same headless case runs as the allowrule scenario of test/live.mjs, so a Claude Code
+# release that let an allow rule skip the ask would fail it (allow-rule-headless.txt).

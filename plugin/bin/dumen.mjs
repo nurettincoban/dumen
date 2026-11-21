@@ -967,7 +967,7 @@ function news(c, agentId) {
     if (f.startsWith('spec/')) { items.push(`- The spec part ${f.slice(5, -3)} changed. Read ${pointer(c, f)} before you go on.`); continue; }
     if (f.startsWith('sources/')) {
       const s = parse(text);
-      items.push(`- The source "${clean(s.meta.title || f, 120)}" <${clean(s.meta.url, 300)}> was updated. Its summary: ${pointer(c, f)}`);
+      items.push(`- The source "${clean(s.meta.title || f, 120)}" <${clean(s.meta.url, 300)}> was ${tryGit(c.store, ['cat-file', '-e', `${from}:${f}`]) === null ? 'added' : 'updated'}. Its summary: ${pointer(c, f)}`);
       continue;
     }
     const d = parse(text);
@@ -1392,6 +1392,16 @@ Setup
 
 kinds: ${KINDS.join(', ')}`;
 
+const DRAFT = ['kind', 'rule', 'title', 'services', 'topics', 'needs', 'source', 'context', 'why', 'allowed', 'not', 'question', 'answer', 'rejected'];
+const FLAGS = {
+  propose: [...DRAFT, 'supersedes'], supersede: DRAFT, approve: [], reject: [],
+  ask: ['kind', 'question', 'of', 'options', 'title', 'services', 'topics', 'why', 'id'],
+  answer: ['rule', 'why', 'answer'],
+  spec: ['name', 'file'], source: ['title', 'url', 'from', 'summary', 'file', 'about', 'seen', 'name'],
+  list: ['status', 'all'], show: [], search: [], log: ['since'],
+  init: ['store', 'service', 'share'],
+};
+
 function main(argv) {
   const a = parseArgs(argv);
   const sub = a._.shift();
@@ -1403,6 +1413,15 @@ function main(argv) {
   if (sub === 'version') { console.log(`dumen protocol ${VERSION}`); return 0; }
   const cmd = commands[sub];
   if (!cmd) { console.error(`dumen: unknown command ${clean(sub, 40)}\n\n${HELP}`); return 2; }
+  // An option a command does not know is refused, never dropped: --service on propose would
+  // otherwise make a decision for the whole product.
+  const known = new Set(['session', 'ticket', ...(FLAGS[sub] || [])]);
+  const unknown = Object.keys(a).filter((k) => k !== '_' && !known.has(k) && !((k === 'needs' || k === 'source') && !a[k].length));
+  if (unknown.length) {
+    const hint = unknown.includes('service') && known.has('services') ? ' (did you mean --services?)' : '';
+    console.error(`dumen: ${sub} does not take --${clean(unknown[0], 40)}${hint}; nothing was changed. See: dumen help`);
+    return 1;
+  }
   try {
     const c = context(process.cwd(), given(a.session));
     if (!c) throw new Fail('run it inside a git repository');

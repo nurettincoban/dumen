@@ -9,6 +9,7 @@ Claude Code's prompt and presses the key.
 | File | What it shows |
 | --- | --- |
 | [interactive-approve.txt](interactive-approve.txt) | The real permission prompt for `dumen approve`, with the decision's words, and the person's Yes |
+| [allow-rule.txt](allow-rule.txt) | With `Bash(dumen:*)` and `Bash(dumen approve:*)` allowed in the settings, the prompt still comes (the person says No), and headless the approval is refused |
 | [plan-mode.txt](plan-mode.txt) | A plan approved "with auto mode": dumen refuses to approve in a mode that may not ask, the person switches to manual mode, and is asked |
 
 **Headless, several at once,** recorded by [`test/live.mjs`](../../test/live.mjs), and one more

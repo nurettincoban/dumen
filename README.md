@@ -104,8 +104,8 @@ Before an agent asks you something, it looks in the living spec first. If a deci
 already answers it, the agent follows it and tells you which one, instead of asking again.
 
 **The prompt is the approval.** When your agent puts a decision in force, Claude Code shows you
-its exact words as they are in the store. This is the real prompt, from an interactive session
-([interactive-approve](docs/transcripts/interactive-approve.txt)):
+its exact words as they are in the store. This is the real prompt, shortened by two separator
+lines, from an interactive session ([interactive-approve](docs/transcripts/interactive-approve.txt)):
 
 ```text
  Bash command
@@ -126,6 +126,10 @@ gives out. An agent cannot approve on its own, chain the command behind another 
 the store's files by hand: dumen refuses all of those. In a permission mode that may not ask
 you, it refuses to approve at all, and the agent asks you to switch modes
 ([plan-mode](docs/transcripts/plan-mode.txt): a plan approved "with auto mode", then the switch).
+An allow rule does not skip it either: with `Bash(dumen:*)` or even `Bash(dumen approve:*)` in
+your settings, Claude Code (seen on v2.1.330) still asks you, and with no one to ask it refuses
+([allow-rule](docs/transcripts/allow-rule.txt)). To stop the prompts for reading, allow only
+`dumen show`, `list`, `search` and `log`.
 
 ## Real sessions
 
