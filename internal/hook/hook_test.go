@@ -663,3 +663,69 @@ func TestStopReportsCommittedChangesUnderADenyDirective(t *testing.T) {
 		t.Fatalf("want one violation for src/auth/token.go, got %+v", found)
 	}
 }
+
+// Gauntlet O6: a file tool of another MCP server changes files like Edit does, so the
+// same rules apply to it. Tools that only read are left alone.
+func TestDenyAppliesToOtherMCPFileTools(t *testing.T) {
+	f := newFixture(t)
+	f.run(SessionStart, map[string]any{"source": "startup"})
+	f.directive(model.DirectiveDeny, model.Scope{Paths: []string{"src/auth/**"}}, "Auth is frozen")
+	f.proj.Refresh(context.Background())
+	call := func(tool string, in map[string]any) string {
+		return decision(f.run(PreToolUse, map[string]any{"tool_name": tool, "permission_mode": "default", "tool_input": in}))
+	}
+	frozen := filepath.Join(f.proj.Root, "src", "auth", "login.go")
+	for _, c := range []struct {
+		tool string
+		in   map[string]any
+		want string
+	}{
+		{"mcp__filesystem__write_file", map[string]any{"path": frozen, "content": "x"}, "deny"},
+		{"mcp__filesystem__edit_file", map[string]any{"path": "src/auth/login.go"}, "deny"},
+		{"mcp__ide__createFile", map[string]any{"file_path": frozen}, "deny"},
+		{"mcp__filesystem__move_file", map[string]any{"path": filepath.Join(f.proj.Root, ".dumen")}, "deny"},
+		{"mcp__filesystem__write_file", map[string]any{"path": filepath.Join(f.proj.Root, "src", "api", "a.go")}, ""},
+		{"mcp__filesystem__read_file", map[string]any{"path": frozen}, ""},
+		{"mcp__filesystem__list_directory", map[string]any{"path": filepath.Dir(frozen)}, ""},
+		{"mcp__filesystem__write_file", map[string]any{"path": 42}, ""},
+	} {
+		if got := call(c.tool, c.in); got != c.want {
+			t.Errorf("%s %v: got %q, want %q", c.tool, c.in, got, c.want)
+		}
+	}
+}
+
+// Gauntlet O7: Claude Code gives an agent only a preview of hook output over 10,000
+// characters. The session-start block stays under 8,000: links go first, then decisions,
+// and directives are never dropped.
+func TestSessionStartBlockHasASizeBudget(t *testing.T) {
+	f := newFixture(t)
+	long := strings.Repeat("a long label that says a lot ", 6)
+	var dirs []string
+	for i := 0; i < 8; i++ {
+		dirs = append(dirs, f.directive(model.DirectiveContext, model.Scope{All: true}, fmt.Sprintf("Directive %d %s", i, long)))
+	}
+	for i := 0; i < 12; i++ {
+		f.submit(&op.AddRef{Ref: model.Ref{ID: model.NewID("R"), URL: "https://design.example.com/" + strings.Repeat("x", 280), Kind: "design",
+			Title: fmt.Sprintf("Ref %d %s", i, long), Governs: long}})
+		f.submit(&op.CreateDecision{Decision: model.Decision{ID: model.NewID("D"), Title: fmt.Sprintf("Decision %d %s", i, long),
+			Body: "Because."}, Body: "Because.", Approve: true})
+	}
+	f.proj.Refresh(context.Background())
+	out := f.run(SessionStart, map[string]any{"source": "startup"})
+	text := out.HookSpecificOutput.AdditionalContext
+	if len(text) > 8000 {
+		t.Fatalf("the block is %d characters", len(text))
+	}
+	for _, id := range dirs {
+		if !strings.Contains(text, id) {
+			t.Errorf("directive %s was dropped from the block", id)
+		}
+	}
+	if !strings.Contains(text, "APPROVED DECISIONS (") || !strings.Contains(text, "The lists above are shortened") {
+		t.Errorf("decisions should survive longer than links, and the cut should be announced (%d characters)", len(text))
+	}
+	if !strings.HasSuffix(text, "dumen session: sess-1") {
+		t.Errorf("the session id must stay the last line")
+	}
+}

@@ -359,3 +359,13 @@ These were decided during the build, each at the owner's request or forced by a 
     once per file and directive, for changes made after both the session and the directive
     began. It blocks nothing. The event kind is new; no version gate was added because no
     version of dumen has been released.
+
+12. **Medium findings of the first gauntlet (O4, O6, O7, O9).** (a) The local state of a
+    project lists the directories that joined it; a `.dumen` file elsewhere with the same
+    project name is not the project. Local state written before this lists none and
+    accepts every directory until the next `dumen init` or `dumen join`. (b) The deny rules
+    also apply to tools of other MCP servers whose name says they write files, looking at
+    the `path`, `file_path` and `notebook_path` inputs. (c) The session-start block has a
+    budget of 8,000 characters: links are dropped first, then decisions, never directives.
+    (d) Temporary files carry the process id; git is run with `GCM_INTERACTIVE=never`, and
+    network commands with ssh in batch mode unless the person configured an ssh command.

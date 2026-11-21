@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 
 	"github.com/nurettincoban/dumen/internal/gitx"
@@ -770,5 +772,52 @@ func TestTamperedLocalStateIsReportedAsSuch(t *testing.T) {
 	out, code := runErr("status")
 	if code == 0 || !strings.Contains(out, "refusing store remote") || strings.Contains(out, "has not joined") {
 		t.Fatalf("status with a tampered local.json (exit %d):\n%s", code, out)
+	}
+}
+
+// Gauntlet O4: an unrelated repository whose `.dumen` carries the name of a project this
+// machine has joined gets none of the team's records and sends nothing to the team's
+// store, until somebody runs `dumen join` there.
+func TestAnotherRepositoryWithTheSameProjectNameIsNotTheProject(t *testing.T) {
+	dir, p := repo(t)
+	run(t, "direct", "--all", "Team only: use the structured logger")
+	body, err := os.ReadFile(filepath.Join(dir, project.File))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	other := t.TempDir() // somebody else's repository, cloned from anywhere
+	if err := os.WriteFile(filepath.Join(other, project.File), body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := project.Find(other); !errors.Is(err, project.ErrNotJoinedHere) {
+		t.Fatalf("project.Find in the other repository: %v", err)
+	}
+	t.Chdir(other)
+	for _, args := range [][]string{{"status"}, {"directives"}, {"activity"}, {"decide", "--title", "x", "-m", "y"}} {
+		if out, code := runErr(args...); code == 0 || !strings.Contains(out, "has not joined project") || strings.Contains(out, "structured logger") {
+			t.Errorf("dumen %v in the other repository (exit %d):\n%s", args, code, out)
+		}
+	}
+	// A hook there injects nothing and logs nothing.
+	var out bytes.Buffer
+	in := fmt.Sprintf(`{"session_id":"s9","cwd":%q,"source":"startup"}`, other)
+	Main([]string{"hook", "session-start"}, strings.NewReader(in), &out, &out)
+	if strings.Contains(out.String(), "structured logger") || strings.Contains(out.String(), "ACTIVE DIRECTIVES") {
+		t.Fatalf("team records were injected into an unrelated repository:\n%s", out.String())
+	}
+	if entries, _ := os.ReadDir(p.Store.OutboxDir()); len(entries) != 0 {
+		t.Fatalf("the unrelated session queued %d operations for the team's store", len(entries))
+	}
+
+	// The first repository still works, also through a symlink to it.
+	t.Chdir(dir)
+	if out := run(t, "directives"); !strings.Contains(out, "structured logger") {
+		t.Fatalf("the joined repository lost its records:\n%s", out)
+	}
+	link := filepath.Join(t.TempDir(), "link")
+	if os.Symlink(dir, link) == nil {
+		t.Chdir(link)
+		run(t, "status")
 	}
 }

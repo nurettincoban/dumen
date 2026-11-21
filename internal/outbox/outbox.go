@@ -49,7 +49,7 @@ func (e *Entry) Save() error {
 	if err != nil {
 		return err
 	}
-	tmp := e.path + ".tmp"
+	tmp := fmt.Sprintf("%s.%d.tmp", e.path, os.Getpid()) // one name per process: two writers never share a temp file
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return err
 	}

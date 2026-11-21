@@ -5,6 +5,7 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"os"
@@ -73,6 +74,9 @@ func (s *Server) register(p *project.Project) {
 func (s *Server) project() (*project.Project, error) {
 	p, err := project.Find(s.Dir)
 	if err != nil {
+		if p != nil && errors.Is(err, project.ErrNotJoinedHere) {
+			return nil, fmt.Errorf("this directory has not joined dumen project %q on this machine; ask your human to run `dumen join` here if it belongs to the project", p.Name)
+		}
 		if p != nil {
 			return nil, fmt.Errorf("this machine has not joined dumen project %q yet; ask your human to run `dumen join`", p.Name)
 		}

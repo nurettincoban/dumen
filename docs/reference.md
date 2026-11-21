@@ -108,9 +108,9 @@ refused. See [Security model](security.md).
 
 | Claude Code event | What dumen does |
 | --- | --- |
-| `SessionStart` | Injects the block of team records: active directives first, then the approved decisions that apply, links and the role. Logs `started`. |
+| `SessionStart` | Injects the block of team records, kept under 8,000 characters: active directives first, then the approved decisions that apply, links and the role. Logs `started`. |
 | `UserPromptSubmit` | Injects directives that arrived since the last prompt. |
-| `PreToolUse` (every tool) | Hands over new directives, blocks `Edit`, `Write`, `MultiEdit` and `NotebookEdit` under a `deny` directive, sends human actions to the permission prompt, and blocks shell commands that would take a human action. Reminds the agent once about an unacknowledged directive. |
+| `PreToolUse` (every tool) | Hands over new directives, blocks `Edit`, `Write`, `MultiEdit`, `NotebookEdit` and, on a best effort, the file-writing tools of other MCP servers under a `deny` directive, sends human actions to the permission prompt, and blocks shell commands that would take a human action. Reminds the agent once about an unacknowledged directive. |
 | `Stop` | Logs `progress` with a one-line summary of the agent's last message. When a deny directive is active, also looks at the work tree and at the commits made since the session began that are on no remote yet (`git status` and `git log`, cut off after 2 seconds together) and logs a `violation` for changes made under the directive. |
 | `SessionEnd` | Logs `finished`. |
 
