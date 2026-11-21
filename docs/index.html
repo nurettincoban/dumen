@@ -19,6 +19,7 @@
     <nav>
       <a href="#living">Living spec</a>
       <a href="#live">Real sessions</a>
+      <a href="#demo">Field demo</a>
       <a href="#how">How it works</a>
       <a href="#setup">Install</a>
       <a href="#limits">Limits</a>
@@ -74,7 +75,7 @@
     </li>
     <li>
       <div class="who"><span class="chip agent">Ayşe's agent · booking-svc</span></div>
-      <div><h4>Mid-task, another laptop, it hears it</h4><p>Ayşe's agent was already running its checks. On its next step, dumen hands it the decision and the work it asks of this service.</p></div>
+      <div><h4>Mid-task, in another session, it hears it</h4><p>Ayşe's agent was already running its checks. On its next step, dumen hands it the decision and the work it asks of this service.</p></div>
 <pre class="term"><span class="tool">⏺ Bash</span>(sh check.sh)
   <span class="dim">⎿</span> go vet: ok
 <span class="tool">⏺ Read</span>(src/slots.go)
@@ -109,6 +110,83 @@
 <span class="usr">⏺</span> Correction to my last message: the decision I said I was following is out of date. Deniz approved D-PEEZ while the tests ran ... Cancelled bookings in src/cancel.go are now refunded to the original card. I haven't written any cancel code yet, so nothing needs undoing.</pre>
     </li>
   </ol>
+</section>
+
+<section class="wrap" id="demo">
+  <h2>From design to shipped behavior</h2>
+  <p class="sub">A field demo in Claude Code with the dumen plugin, where people answered the prompts themselves. <b>Table for Two</b> is a fictional reservation app built by five separate Claude Code sessions: a PM, a designer, two backend developers and a frontend developer. It was recorded on one Windows machine with one account, with the plugin built from <code>aa40640</code>, one commit before the v0.2.0 release.</p>
+
+  <ol class="demo">
+    <li>
+      <figure class="shot wide">
+        <img src="assets/demo/table-for-two-design.png" width="1608" height="812" loading="lazy" alt="The Table for Two design prototype: a card titled Table for two, with 18:00 and 19:00 marked Available, 18:30 greyed out and marked Fully booked, and a disabled Reserve table button. A handoff note beside it lists the choosing, selected and confirmed states and the slot rules.">
+      </figure>
+      <div>
+        <h4><span class="chip human">Designer</span> The design is the starting point</h4>
+        <p>The PM wrote the acceptance criteria in a Claude Artifact. The designer made a Claude Design prototype and handed off its states: 18:00 and 19:00 can be chosen, while 18:30 stays visible but disabled.</p>
+      </div>
+    </li>
+    <li>
+      <figure class="shot narrow">
+        <img src="assets/demo/table-for-two-approval.png" width="515" height="540" loading="lazy" alt="Claude Code asks: Allow Claude to run this command? The prompt quotes decision D-4P2V: when Reserve table returns 409, the web app refreshes availability, keeps party size two, clears the stale selection and announces That time just booked. The command's one-use ticket is redacted. The buttons are Deny and Allow once.">
+      </figure>
+      <div>
+        <h4><span class="chip human">PM</span> A person approves the decision</h4>
+        <p>Development was already under way when the PM added a rule for a time that someone else books first. The rule was proposed as <b>D-4P2V</b>. Claude Code then asked the PM with the decision's exact words, and the PM approved it once. dumen wrote the approved decision to the shared git branch.</p>
+      </div>
+    </li>
+    <li>
+      <figure class="shot">
+        <img src="assets/demo/table-for-two-hook.png" width="810" height="347" loading="lazy" alt="The frontend session says: A decision D-4P2V (ux, web-app) arrived through the dumen hook and is now in force, so I'm changing the 409 path in public/app.js. Its task list shows the browser test in progress and a new step: Apply D-4P2V to 409 path and tighten test.">
+      </figure>
+      <div>
+        <h4><span class="chip agent">Frontend session</span> A running session hears it</h4>
+        <p>The frontend session's first prompt held neither the decision nor the recovery rule. It was writing a two-page browser test when its normal dumen hook delivered D-4P2V on its next tool step. It added the new rule to its plan without being told.</p>
+      </div>
+    </li>
+    <li>
+      <div class="pair">
+        <figure class="shot">
+          <img src="assets/demo/table-for-two-conflict.png" width="680" height="909" loading="lazy" alt="The app after a conflict: 18:00 and 18:30 are now Fully booked, 19:00 is Available, nothing is selected, and the message That time just booked. Choose another time. is shown above a disabled Reserve table button.">
+        </figure>
+        <figure class="shot">
+          <img src="assets/demo/table-for-two-confirmed.png" width="680" height="709" loading="lazy" alt="The confirmation screen: Reservation confirmed. Your table is set. 19:00, party of 2.">
+        </figure>
+      </div>
+      <div>
+        <h4><span class="chip auto">The app</span> The behavior ships</h4>
+        <p>When a second page hits a 409, the app refreshes the times and clears the stale choice. It keeps the party of two, says "That time just booked. Choose another time." and moves focus to a time that is still free. If no time is left, focus moves to the message instead. In a live Chrome run, one page took 18:00 and the second page then booked 19:00.</p>
+        <ul class="stats">
+          <li><b>0/4</b> new browser checks passed on the app before the change</li>
+          <li><b>16/16</b> application tests passed after it, on desktop and mobile sizes</li>
+        </ul>
+      </div>
+    </li>
+  </ol>
+  <p class="note verify"><b>Verification note.</b> In one Desktop setup, the PM's approval first ran in a worktree that Claude Desktop had created automatically, and it did not find the decision record. Opening the existing worktree folder directly as a Local project fixed it, and approval and delivery then completed.</p>
+
+  <h3 class="demo-h">The shortest path: one sentence to another session</h3>
+  <div class="demo-alt">
+    <figure class="shot">
+      <img src="assets/demo/cedar-queue-delivery.png" width="768" height="478" loading="lazy" alt="A Claude Code session asked only to run three read-only README checks. After check 2 it reports: While it ran, the shared spec got a new teammate decision: D-A2LS sets the waitlist cool-down to 17 minutes. These checks only read files, so it doesn't affect them.">
+    </figure>
+    <div>
+      <p><b>Cedar Queue</b> started as a clean project with an empty local bare git store and two ordinary Claude Desktop worktrees. dumen was set up once. Then the PM wrote in plain words, with no dumen command:</p>
+      <blockquote>The default waitlist cool-down must be exactly 17 minutes, even if a slot becomes available sooner.</blockquote>
+      <p>The agent proposed <b>D-A2LS</b>, the PM approved it in the Claude Code prompt, and it was recorded as approved in the shared store. The other session's only task was three read-only README checks. During the third check it reported the decision and the 17 minutes on its own. It had been given no hint about the decision.</p>
+    </div>
+  </div>
+
+  <h3 class="demo-h">A second design</h3>
+  <div class="demo-alt">
+    <figure class="shot">
+      <img src="assets/demo/patchbay-board.png" width="1400" height="784" loading="lazy" alt="Patchbay, a fictional release readiness board for Aurora 2.4: unit tests, build and changelog passed, accessibility review pending with a Mark passed button, and the release decision Blocked with Mark release ready disabled.">
+    </figure>
+    <div>
+      <p><b>Patchbay</b> is a fictional release readiness board built from a Claude Design prototype and an acceptance-criteria Artifact. Its base flow passed 24 of 24 Playwright checks. It is shown here as a design example, not as a sync demo: when the PM later described a fifth check, the agent's proposal could not be recorded, so nothing was approved or delivered. That first-write problem is still under investigation (see <a href="#limits">limits</a>).</p>
+    </div>
+  </div>
+  <p class="more">The plugin itself is the same everywhere. Windows was only the machine these runs used. Stable release: <a href="https://github.com/nurettincoban/dumen/releases/tag/v0.2.0">v0.2.0</a>.</p>
 </section>
 
 <section class="wrap" id="how">
@@ -195,6 +273,11 @@
     by installing the plugin ...</pre>
       <p class="note">Several repositories? Name one private store repository and each repository's service. The store holds teammates' emails and plans: keep it where only the team can read it.</p>
     </div>
+    <div class="full">
+      <span class="n">3</span><h4>Then just describe the decision</h4>
+<pre class="term"><span class="usr">&gt;</span> The default waitlist cool-down must be exactly 17 minutes, even if a slot becomes available sooner.</pre>
+      <p class="note">You type no command. Your agent proposes the decision and Claude Code asks you to confirm it. Once you confirm, running sessions get it on their next tool step. This sentence is from the <a href="#demo">Cedar Queue field demo</a>.</p>
+    </div>
   </div>
 </section>
 
@@ -206,6 +289,7 @@
     <li><b>Matching is done by the agent.</b> It reads the decisions in force and searches by words; a very differently phrased decision can be missed.</li>
     <li><b>News waits for a hook.</b> An agent inside one long tool call hears it when the call returns, or before it stops.</li>
     <li><b>Needs Node.js 18+.</b> The plugin cannot install it; the agent tells you if it is missing.</li>
+    <li><b>A first write to a brand-new store branch</b> failed in one field test on a private GitHub store, and the reason is still being investigated. Before you rely on it, try dumen with a private test store.</li>
     <li><b>Questions for people outside Claude Code</b> are in the protocol; the Slack or email adapter is not built yet.</li>
   </ul>
   <p class="more">The whole design is in <a href="https://github.com/nurettincoban/dumen/blob/main/docs/protocol.md">docs/protocol.md</a>. Every change runs an adversarial review, <a href="https://github.com/nurettincoban/dumen/blob/main/docs/gauntlet.md">the gauntlet</a>.</p>

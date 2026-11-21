@@ -160,3 +160,33 @@ h2{font-size:clamp(28px,3.5vw,38px);letter-spacing:-.8px;margin:80px 0 8px}
 .flow .term{font-size:12.5px}
 .caption b{color:var(--fg)}
 @media (max-width:860px){.flow li{grid-template-columns:1fr}}
+
+/* field demo */
+.setup>div.full{grid-column:1/-1}
+.demo{list-style:none;padding:0;margin:0;counter-reset:d}
+.demo>li{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:28px;align-items:center;padding:28px 0;border-top:1px solid var(--line);counter-increment:d}
+.demo h4{margin:0 0 8px;font-size:19px;display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.demo h4::before{content:counter(d);font-size:13px;font-weight:700;color:var(--dim)}
+.demo p{margin:0;color:var(--dim);font-size:16px}
+.demo p b{color:var(--fg)}
+.shot{margin:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--bg2);box-shadow:0 12px 32px rgba(0,0,0,.12)}
+.shot img{display:block;width:100%;height:auto}
+.demo .shot:not(.wide){max-width:560px;justify-self:center;width:100%}
+.demo .shot.narrow{max-width:400px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.stats{list-style:none;padding:0;margin:16px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.stats li{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--bg2);color:var(--dim);font-size:14px;line-height:1.4}
+.stats b{display:block;font-size:26px;color:var(--fg);letter-spacing:-.5px}
+.verify{border-left:3px solid var(--accent);padding:4px 0 4px 14px;max-width:820px}
+.verify b{color:var(--fg)}
+.demo-h{font-size:24px;margin:56px 0 18px}
+.demo-alt{display:grid;grid-template-columns:minmax(0,6fr) minmax(0,6fr);gap:28px;align-items:center}
+.demo-alt p{color:var(--dim);margin:0 0 12px}
+.demo-alt p b{color:var(--fg)}
+.demo-alt blockquote{margin:0 0 12px;padding:10px 14px;border-left:3px solid var(--human);background:var(--human-bg);border-radius:0 10px 10px 0;color:var(--fg)}
+@media (max-width:860px){
+  .demo>li,.demo-alt{grid-template-columns:1fr;gap:16px}
+}
+@media (max-width:480px){
+  .pair,.stats{grid-template-columns:1fr}
+}

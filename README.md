@@ -8,7 +8,7 @@ The spec you write up front, and every decision made along the way, in one livin
 git. Every agent on the team works from its latest version, and hears a change while it is
 still working.
 
-[Install](#install) · [Real sessions](#real-sessions) · [How it works](#how-it-works) · [Protocol](docs/protocol.md) · [Site](https://nurettincoban.github.io/dumen/)
+[Install](#install) · [Live demo](#live-demo) · [Real sessions](#real-sessions) · [How it works](#how-it-works) · [Protocol](docs/protocol.md) · [Site](https://nurettincoban.github.io/dumen/)
 
 </div>
 
@@ -32,8 +32,8 @@ install besides the plugin.
 
 ## A real session
 
-Ayşe's agent is building the cancel endpoint in `booking-svc`. While its tests run, Deniz, on
-another laptop and in another service, changes the refund rule. Ayşe's agent is about to tell
+Ayşe's agent is building the cancel endpoint in `booking-svc`. While its tests run, Deniz, in
+another session and another service, changes the refund rule. Ayşe's agent is about to tell
 her nothing changed when dumen holds it back with the news. This is a real recording,
 shortened, from [`test/live.mjs`](test/live.mjs):
 
@@ -62,6 +62,34 @@ shortened, from [`test/live.mjs`](test/live.mjs):
 ```
 
 More real sessions are [below](#real-sessions) and in [docs/transcripts](docs/transcripts).
+
+## Live demo
+
+These are field demos in Claude Code with the plugin, where a person answered the prompts.
+
+**Two sessions, one sentence.** Cedar Queue started as a clean project with an empty local
+bare git store and two ordinary Claude Desktop worktrees. dumen was set up once. Then the PM
+said, in plain words and with no dumen command:
+
+> The default waitlist cool-down must be exactly 17 minutes, even if a slot becomes available sooner.
+
+The PM's agent proposed it as D-A2LS, and the PM approved it in the Claude Code prompt. The
+other session's only task was three read-only README checks, and it was given no hint about the
+decision. During the third check it reported the decision on its own:
+
+<img src="docs/assets/demo/cedar-queue-delivery.png" width="640" alt="A Claude Code session running read-only README checks reports: While it ran, the shared spec got a new teammate decision: D-A2LS sets the waitlist cool-down to 17 minutes. These checks only read files, so it doesn't affect them.">
+
+**From design to shipped behavior.** In Table for Two, a fictional reservation app, five
+Claude Code sessions worked from a Claude Design prototype: PM, designer, two backend developers
+and frontend. The PM approved a new rule for a time that someone else books first. It reached
+the frontend session, which was already running, on its next tool step. The new browser checks
+went from 0/4 on the old app to 16/16 application tests passing after the change. The full
+walkthrough, with screenshots and a verification note, is on the
+[site](https://nurettincoban.github.io/dumen/#demo).
+
+Both demos ran on one Windows machine with one account, using the plugin built from `aa40640`,
+one commit before the stable [v0.2.0](https://github.com/nurettincoban/dumen/releases/tag/v0.2.0)
+release.
 
 ## Install
 
@@ -252,6 +280,9 @@ it later without changing the protocol.
   missing.
 - **News waits for a hook.** An agent that is in the middle of one long tool call hears the news
   when that call returns.
+- **A first write to a brand-new store branch** failed in one field test on a private GitHub
+  store, and the reason is still being investigated. Before you rely on it, try dumen with a
+  private test store.
 - **A subagent's decisions** are not news to its own parent session; the subagent reports them.
 
 ## Protocol
