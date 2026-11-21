@@ -651,3 +651,16 @@ test('whatever starts while the local copy is held is shown one commit, and mark
   // Once the copy is free the same sessions are not told again, and nothing was lost.
   assert.doesNotMatch(String(hook(a, 'prompt', { session_id: 's1' }) || ''), new RegExp(id));
 });
+
+test('an option a command does not take is refused, never dropped; a new source is "added"', () => {
+  const { repos, tmp } = team(['web-app', 'sofia@example.com'], ['booking-svc', 'ayse@example.com']);
+  const r = repos['web-app'];
+  assert.match(fails(r, 'propose', '--kind', 'ui', '--rule', 'A rule', '--service', 'web-app'), /propose does not take --service \(did you mean --services\?\); nothing was changed/);
+  assert.match(fails(r, 'approve', 'D-AAAA', '--force'), /approve does not take --force/);
+  assert.equal(dumen(r, 'list', '--status', 'proposed', '--all'), 'No proposed decisions.');
+  hook(repos['booking-svc'], 'session-start', { session_id: 'b1' });
+  const f = path.join(tmp, 's.md');
+  fs.writeFileSync(f, 'Three steps.\n');
+  dumen(r, 'source', '--title', 'Checkout design', '--url', 'https://claude.ai/design/p/abc', '--from', 'link', '--file', f);
+  assert.match(hook(repos['booking-svc'], 'prompt', { session_id: 'b1' }), /The source "Checkout design" <https:\/\/claude\.ai\/design\/p\/abc> was added/);
+});
