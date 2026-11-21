@@ -70,6 +70,11 @@ func (r *runCtx) news() []cache.Decision {
 		if session.Has(r.sess.Known, d.ID) || (sub != "" && session.Has(r.sess.SubKnown[sub], d.ID)) || !r.c.Concerns(d, r.proj.Repo) {
 			continue
 		}
+		// The person approved it here: their own session already knows, so it is not news.
+		if sub == "" && strings.EqualFold(d.ApprovedBy, r.proj.Store.Email) && d.Repo == r.proj.Repo {
+			r.sess.Known = session.Add(r.sess.Known, d.ID)
+			continue
+		}
 		out = append(out, d)
 	}
 	return out

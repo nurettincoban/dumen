@@ -102,3 +102,24 @@ func TestSubagentDoesNotUseUpNews(t *testing.T) {
 		t.Fatalf("the main agent lost the news to its subagent: %s", got)
 	}
 }
+
+// A decision the person approved in this repository is not news to their own session:
+// the live run showed the Stop hook blocking to announce it "approved by you".
+func TestOwnApprovalIsNotNews(t *testing.T) {
+	f := newFixture(t)
+	f.now = f.now.Add(-time.Hour)
+	f.run(SessionStart, map[string]any{"source": "startup"})
+	f.now = f.now.Add(time.Hour)
+	mine := f.submit(&op.CreateDecision{Decision: model.Decision{ID: model.NewID("D"), Title: "Mine", Rule: "Cancelled bookings are refunded as store credit",
+		Kind: model.KindProduct}, Body: "Why.", Approve: true})
+	if _, err := f.proj.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := ctxOf(f.run(PreToolUse, map[string]any{"tool_name": "Read", "tool_input": map[string]any{"file_path": "x"}})); strings.Contains(got, mine) {
+		t.Errorf("own approval delivered as news:\n%s", got)
+	}
+	theirs := f.approved("Theirs", "Only billing-svc talks to the payment provider")
+	if got := ctxOf(f.run(PreToolUse, map[string]any{"tool_name": "Read", "tool_input": map[string]any{"file_path": "x"}})); !strings.Contains(got, theirs) {
+		t.Errorf("a decision approved in another repository must still be news:\n%s", got)
+	}
+}
