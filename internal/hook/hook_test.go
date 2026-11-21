@@ -41,6 +41,9 @@ func newFixture(t *testing.T) *fixture {
 	f := &fixture{t: t, now: time.Now().UTC()}
 	f.proj = &project.Project{Root: root, Name: "proj", Store: s}
 	f.eng = f.proj.Engine()
+	if _, err := f.eng.Submit(context.Background(), testutil.Lead, &op.SetRole{Email: testutil.PM.Email, Role: "pm"}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := f.proj.Refresh(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -57,8 +60,13 @@ func (f *fixture) submit(o op.Op) string {
 }
 
 func (f *fixture) directive(kind string, scope model.Scope, text string) string {
-	return f.submit(&op.CreateDirective{Directive: model.Directive{ID: model.NewID("Y"), Kind: kind, Scope: scope,
+	f.t.Helper()
+	out, err := f.eng.Submit(context.Background(), testutil.PM, &op.CreateDirective{Directive: model.Directive{ID: model.NewID("Y"), Kind: kind, Scope: scope,
 		Expires: model.FormatTime(time.Now().Add(48 * time.Hour))}, Text: text})
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return out.RecordID
 }
 
 func (f *fixture) run(event string, in map[string]any) *Output {

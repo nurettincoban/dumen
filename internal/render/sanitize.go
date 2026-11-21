@@ -4,6 +4,8 @@ package render
 import (
 	"strings"
 	"unicode"
+
+	"github.com/nurettincoban/dumen/internal/model"
 )
 
 // MaxLabel is the longest label injected into an agent's context.
@@ -100,4 +102,14 @@ func shortenCode(s string) string {
 	}
 	b.WriteString(s)
 	return b.String()
+}
+
+// Until formats an expiry time the same way everywhere a person or an agent sees it: in
+// the machine's local time zone, to the minute.
+func Until(ts string) string {
+	t, err := model.ParseTime(ts)
+	if err != nil {
+		return ts
+	}
+	return t.Local().Format("2006-01-02 15:04")
 }

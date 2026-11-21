@@ -209,10 +209,7 @@ func roundAge(d time.Duration) string {
 // ---- text blocks ----
 
 func directiveLine(d cache.Directive) string {
-	until := d.Expires
-	if len(until) >= 10 {
-		until = until[:10]
-	}
+	until := render.Until(d.Expires)
 	return fmt.Sprintf("- %s [%s] %s | until %s | %s", d.ID, d.Kind,
 		render.Label(d.Scope.String(), 80), until, render.Label(d.Text, render.MaxLabel))
 }
@@ -376,6 +373,13 @@ func orDefault(s, d string) string {
 // ---- UserPromptSubmit ----
 
 func (r *runCtx) userPromptSubmit() *Output {
+	if r.sess.Asking || r.sess.Finished {
+		// The human answered, or gave more work: the session is active again.
+		r.sess.Asking, r.sess.Finished = false, false
+		r.sess.LastProgress = model.FormatTime(r.now)
+		r.sess.Save()
+		r.log(model.EventProgress, "continuing after a new prompt")
+	}
 	ds := r.undelivered()
 	if len(ds) == 0 {
 		if r.stale != "" {
@@ -467,10 +471,7 @@ func (r *runCtx) preToolUse() *Output {
 		// In a project that spans several repositories, paths are matched as "<repo>:<path>".
 		q := policy.Qualify(tp.Repo, rel)
 		if d, blocked := tc.DenyFor(q, r.now); blocked {
-			until := d.Expires
-			if len(until) >= 10 {
-				until = until[:10]
-			}
+			until := render.Until(d.Expires)
 			r.log(model.EventBlocked, "edit blocked: "+q, d.ID)
 			return deny(denyReason(d, until))
 		}
@@ -640,10 +641,7 @@ func guardForeignEdit(r *runCtx) *Output {
 	if !blocked {
 		return nil
 	}
-	until := d.Expires
-	if len(until) >= 10 {
-		until = until[:10]
-	}
+	until := render.Until(d.Expires)
 	return &Output{HookSpecificOutput: &Specific{HookEventName: "PreToolUse", PermissionDecision: "deny", PermissionDecisionReason: denyReason(d, until)}}
 }
 
@@ -708,11 +706,13 @@ func (r *runCtx) stop() {
 	r.sess.LastSummary = summary
 	last, err := model.ParseTime(r.sess.LastProgress)
 	due := err != nil || r.now.Sub(last) >= progressEvery
-	if due {
+	if due && !r.sess.Finished && !r.sess.Asking {
 		r.sess.LastProgress = model.FormatTime(r.now)
 	}
 	r.sess.Save()
-	if due {
+	// When the agent itself said "finished" or "waiting for my human" in this turn, that
+	// is the session's state; a progress event now would wrongly make it active again.
+	if due && !r.sess.Finished && !r.sess.Asking {
 		r.log(model.EventProgress, summary)
 	}
 }
@@ -725,12 +725,16 @@ func (r *runCtx) unackedOnce() []string {
 	if r.sess.Private {
 		return nil
 	}
-	active := map[string]bool{}
+	active, mine := map[string]bool{}, map[string]bool{}
 	for _, d := range r.c.ActiveDirectives(r.role, r.proj.Repo, r.now) {
 		active[d.ID] = true
+		mine[d.ID] = strings.EqualFold(d.PublishedBy, r.proj.Store.Email)
 	}
 	var out []string
 	for _, id := range r.sess.Delivered {
+		if mine[id] {
+			continue // the publisher's own agent has nothing to acknowledge
+		}
 		if active[id] && !session.Has(r.sess.Acked, id) && !session.Has(r.sess.Nudged, id) {
 			out = append(out, id)
 			r.sess.Nudged = append(r.sess.Nudged, id)

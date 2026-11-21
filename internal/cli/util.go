@@ -26,6 +26,14 @@ func short(sha string) string {
 	return sha
 }
 
+// shortAnchor shortens the commit in an anchor, which is "<sha>" or "<repo>@<sha>".
+func shortAnchor(a string) string {
+	if i := strings.LastIndex(a, "@"); i >= 0 {
+		return a[:i+1] + short(a[i+1:])
+	}
+	return short(a)
+}
+
 func clip(s string, n int) string {
 	r := []rune(s)
 	if len(r) <= n {

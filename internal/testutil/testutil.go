@@ -28,6 +28,11 @@ func BareRemote(t testing.TB) string {
 
 // NewStore sets up a local store named project against remote. DUMEN_HOME must already
 // point at a temporary directory (see Home).
+// PM is a second publisher. Tests publish directives as PM so that the session under
+// test, which runs as Lead, is not the publisher's own agent. A fixture that uses PM
+// first gives it the "pm" role with op.SetRole.
+var PM = model.Actor{Email: "pm@example.com", Kind: model.KindHuman}
+
 func NewStore(t testing.TB, remote, project string) *store.Store {
 	t.Helper()
 	s, _, err := store.Setup(context.Background(), remote, store.DefaultBranch, project, true, Lead)

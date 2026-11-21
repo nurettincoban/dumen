@@ -228,7 +228,7 @@ type activityIn struct {
 
 func directiveText(d cache.Directive) string {
 	return fmt.Sprintf("- %s [%s] scope: %s | active until %s | published by %s\n  %s", d.ID, d.Kind,
-		render.Label(d.Scope.String(), 120), d.Expires, render.Label(d.PublishedBy, 60), render.Label(d.Text, 1000))
+		render.Label(d.Scope.String(), 120), render.Until(d.Expires), render.Label(d.PublishedBy, 60), render.Label(d.Text, 1000))
 }
 
 // Directives lists the directives in force for this session, with full text.
@@ -271,8 +271,10 @@ func (s *Server) AckDirective(ctx context.Context, in idIn) (string, error) {
 		return "", fmt.Errorf("no local data yet")
 	}
 	found := false
+	published := map[string]string{}
 	for _, d := range c.ActiveDirectives(c.Config.Role(p.Store.Email), p.Repo, s.now()) {
 		found = found || d.ID == id
+		published[d.ID] = d.PublishedBy
 	}
 	if !found {
 		return "", fmt.Errorf("%s is not an active directive for this session; call the directives tool to see the current list", id)
@@ -280,6 +282,12 @@ func (s *Server) AckDirective(ctx context.Context, in idIn) (string, error) {
 	sess := s.sessionOf(p, in.Session)
 	if session.Has(sess.Acked, id) {
 		return id + " was already acknowledged by this session.", nil
+	}
+	if strings.EqualFold(published[id], p.Store.Email) {
+		// The publisher's own agent: nothing to tell the team.
+		sess.Acked = append(sess.Acked, id)
+		sess.Save()
+		return id + " was published by your own human; no acknowledgement is needed.", nil
 	}
 	sess.Acked = append(sess.Acked, id)
 	sess.Delivered = session.Add(sess.Delivered, id)
@@ -359,7 +367,7 @@ func (s *Server) PublishDirective(ctx context.Context, in directiveIn) (string, 
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("Published %s [%s] %s, active until %s.%s", out.RecordID, d.Kind, d.Scope, d.Expires, note), nil
+	return fmt.Sprintf("Published %s [%s] %s, active until %s.%s", out.RecordID, d.Kind, d.Scope, render.Until(d.Expires), note), nil
 }
 
 // SearchDecisions lists decisions by id and title.
@@ -516,7 +524,7 @@ func (s *Server) DecisionsForPath(ctx context.Context, in pathIn) (string, error
 	fmt.Fprintf(&b, "%s\nLinked to %s:\n", notice, render.Label(rel, 200))
 	n := 0
 	if d, ok := c.DenyFor(rel, s.now()); ok {
-		fmt.Fprintf(&b, "- EDITS BLOCKED by %s until %s: %s\n", d.ID, d.Expires, render.Label(d.Text, render.MaxLabel))
+		fmt.Fprintf(&b, "- EDITS BLOCKED by %s until %s: %s\n", d.ID, render.Until(d.Expires), render.Label(d.Text, render.MaxLabel))
 		n++
 	}
 	for _, d := range c.DecisionsFor(rel) {
@@ -658,8 +666,10 @@ func (s *Server) LogEvent(ctx context.Context, in eventIn) (string, error) {
 	if _, err := p.Engine().Enqueue(s.agent(p), &op.AppendEvent{Event: ev}); err != nil {
 		return "", err
 	}
-	if in.Kind == model.EventFinished {
-		sess.Finished = true
+	// The Stop hook at the end of this turn must not report "progress" over these.
+	if in.Kind == model.EventFinished || in.Kind == model.EventAskingHuman {
+		sess.Finished = in.Kind == model.EventFinished
+		sess.Asking = in.Kind == model.EventAskingHuman
 		sess.Save()
 	}
 	s.flushSoon(p)

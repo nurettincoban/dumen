@@ -203,7 +203,10 @@ func TestDirectiveAckAndActivity(t *testing.T) {
 	if _, err := eng.Submit(ctx, testutil.Lead, &op.UpdateConfig{Config: cfg}); err != nil {
 		t.Fatal(err)
 	}
-	out, err := eng.Submit(ctx, testutil.Lead, &op.CreateDirective{Directive: model.Directive{ID: model.NewID("Y"), Kind: model.DirectiveContext,
+	if _, err := eng.Submit(ctx, testutil.Lead, &op.SetRole{Email: testutil.PM.Email, Role: "pm"}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := eng.Submit(ctx, testutil.PM, &op.CreateDirective{Directive: model.Directive{ID: model.NewID("Y"), Kind: model.DirectiveContext,
 		Scope: model.Scope{All: true}, Expires: model.FormatTime(time.Now().Add(time.Hour))}, Text: "All new endpoints use requireAuth"})
 	if err != nil {
 		t.Fatal(err)

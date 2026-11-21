@@ -23,6 +23,7 @@ type State struct {
 	LastSummary  string   `json:"last_summary,omitempty"`  // sanitized tail of the last assistant message
 	Private      bool     `json:"private,omitempty"`       // session is not monitored
 	Finished     bool     `json:"finished,omitempty"`
+	Asking       bool     `json:"asking,omitempty"` // the agent said it is waiting for its human
 
 	path string
 }

@@ -207,9 +207,11 @@ func TestSessionStartInjectsDirectivesFirst(t *testing.T) {
 	}
 }
 
-// join sets up a second machine (its own dumen home and clone of the code) for the same person.
+// secondMachine sets up a teammate's machine (its own dumen home and clone of the code).
+// The teammate may publish directives.
 func (w *world) secondMachine() *world {
 	w.t.Helper()
+	w.dumen("role", "set", "pm@example.com", "lead")
 	tmp := w.t.TempDir()
 	o := &world{t: w.t, bin: w.bin, repo: filepath.Join(tmp, "repo")}
 	for _, kv := range w.env {
@@ -223,8 +225,8 @@ func (w *world) secondMachine() *world {
 	w.sh(w.repo, "git", "push", "-q", "origin", "HEAD")
 	remote := strings.TrimSpace(w.sh(w.repo, "git", "remote", "get-url", "origin"))
 	o.sh(tmp, "git", "clone", "-q", remote, o.repo)
-	o.sh(o.repo, "git", "config", "user.email", "lead@example.com")
-	o.sh(o.repo, "git", "config", "user.name", "Lead")
+	o.sh(o.repo, "git", "config", "user.email", "pm@example.com")
+	o.sh(o.repo, "git", "config", "user.name", "PM")
 	o.dumen("join")
 	return o
 }
@@ -318,7 +320,10 @@ func TestPluginEnforcesAndAcknowledges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deny := firstID(w.dumen("direct", "--deny", "--paths", "src/auth/**", "--for", "1d", "Release week: do not touch src/auth"))
+	// A teammate publishes: a directive needs no acknowledgement from its own publisher.
+	pm := w.secondMachine()
+	deny := firstID(pm.dumen("direct", "--deny", "--paths", "src/auth/**", "--for", "1d", "Release week: do not touch src/auth"))
+	w.dumen("sync")
 	before := w.read("src/auth/login.ts")
 	// The order matters: an agent that acknowledges the freeze first usually declines to
 	// even try the edit, and then there is no hook decision to observe.

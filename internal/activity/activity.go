@@ -122,7 +122,8 @@ func Summarize(events []model.Event) Summary {
 		}
 		s.Last = e.TS
 		s.Events++
-		if e.Text != "" {
+		// A resumed session logs "session resume"; that must not replace the last real summary.
+		if e.Text != "" && (e.Kind != model.EventStarted || s.LastText == "") {
 			s.LastText = e.Text
 		}
 		switch e.Kind {

@@ -287,7 +287,7 @@ func cmdShow(a *app, args []string) error {
 			}
 			fmt.Fprintf(a.out, "area        %s\npaths       %s\nsources     %s\nauthor      %s (%s)\napproved by %s\nsupersedes  %s\nanchored at %s\ncreated     %s\nfile        %s\n\n%s\n",
 				orDash(d.Area), orDash(strings.Join(d.Paths, ", ")), orDash(strings.Join(d.Sources, ", ")), d.Author, d.AuthorKind,
-				orDash(d.ApprovedBy), orDash(strings.Join(d.Supersedes, ", ")), orDash(short(d.AnchoredAt)), d.Created, rel, d.Body)
+				orDash(d.ApprovedBy), orDash(strings.Join(d.Supersedes, ", ")), orDash(shortAnchor(d.AnchoredAt)), d.Created, rel, d.Body)
 		case model.ValidID(id, model.PrefixDirective):
 			d, _, err := store.ReadDirective(root, id)
 			if err != nil {

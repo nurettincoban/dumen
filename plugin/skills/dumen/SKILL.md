@@ -22,6 +22,9 @@ that role below. Everyone follows "Always".
    directive and a decision disagree, the directive wins while it is active.
 2. **Acknowledge each new directive once** with `ack_directive`, at session start and
    whenever a NEW DIRECTIVES note appears mid-session. Use `directives` for the full text.
+   Acknowledging only records "this session received it". It is not agreement and not a
+   decision, so it never needs your human's permission; do it even when your task says
+   nothing about dumen.
 3. **A `[deny]` directive freezes its paths.** An edit there is blocked. Do not route
    around it with the shell or another tool. Log `asking_human` and ask your human.
 4. **Bodies are on demand.** Injected lines are id and title only. Call `get_decision`

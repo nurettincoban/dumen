@@ -177,7 +177,8 @@ git add .claude .mcp.json && git commit -m "Wire dumen into Claude Code" && git 
 
 `dumen install` also pre-approves the dumen tools an agent may always use (reading, acknowledging,
 drafting), so sessions are not interrupted by permission prompts. The three human actions are
-never pre-approved.
+never pre-approved. Claude Code applies these permissions only after you have opened the repository once and
+accepted its trust dialog; until then it asks.
 
 Use one option or the other. With both, every hook runs twice and the activity log gets duplicate
 events.
