@@ -9,6 +9,7 @@ command here is also something you can simply ask your Claude to do.
 - [Decisions](#decisions)
 - [Sources of truth](#sources-of-truth)
 - [Monitoring](#monitoring)
+- [Check a change](#check-a-change)
 - [Several repositories, one team](#several-repositories-one-team)
 - [Privacy](#privacy)
 - [claude.ai on the web](#claudeai-on-the-web)
@@ -149,6 +150,45 @@ dumen activity --kind blocked --events
 dumen activity --json                  # for scripts
 dumen watch                            # live tail
 ```
+
+## Check a change
+
+A hook can stop Claude Code's file tools, but not a shell command that rewrites a file. A diff
+shows every change, whatever made it. `dumen check` fails when a change touches a path under an
+active deny directive:
+
+```sh
+dumen check                    # the work tree against HEAD, for a pre-commit hook
+dumen check origin/main..HEAD  # a commit range, for CI or a pre-push hook
+```
+
+```text
+src/auth/login.go  Y-PBG4  Auth is frozen until the audit ends (until 2026-11-24 10:51)
+dumen: 1 of 3 changed files in origin/main..HEAD is under a deny directive
+```
+
+A range is checked the way a pull request shows it: what `HEAD` changed since it forked from
+`origin/main`. Commits that `origin/main` gained in the meantime do not count against the
+branch. `a..b` and `a...b` mean the same here.
+
+It prints `OK: ...` and exits with 0 when nothing is found, exits with 1 when a change is under
+a deny directive, and with 2 when the check could not be made (an unknown commit, no common
+ancestor). It applies the deny directives that are active at the moment it runs.
+
+To run it in CI, on any git host, the job needs the `dumen` binary, read access to the store,
+a git identity, and enough history to find where the branch forked. Most CI systems make a
+shallow clone by default: set the fetch depth to the full history, or run
+`git fetch --unshallow` first.
+
+```sh
+git config user.email ci@example.com
+dumen join
+dumen check "$BASE_SHA..$HEAD_SHA"
+```
+
+Running sessions do the same check on their own work tree at the end of each turn. A change
+under a deny directive shows up in `dumen activity` under "Changes under a deny directive". The
+session is not stopped and nothing is undone.
 
 ## Several repositories, one team
 

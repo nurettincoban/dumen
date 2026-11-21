@@ -53,11 +53,14 @@ const (
 	EventProgress     = "progress"
 	EventFinished     = "finished"
 	EventPrivate      = "private" // session marked as not monitored; the fact itself is visible
+	// EventViolation records that a session left changes under a deny directive, whatever
+	// tool made them. Only the Stop hook writes it.
+	EventViolation = "violation"
 )
 
 // EventKinds lists every valid event kind.
 var EventKinds = []string{EventStarted, EventDirectiveAck, EventDecisionRead, EventDraftWritten,
-	EventBlocked, EventAskingHuman, EventProgress, EventFinished, EventPrivate}
+	EventBlocked, EventAskingHuman, EventProgress, EventFinished, EventPrivate, EventViolation}
 
 // MaxEventText is the maximum length of an event's text in characters.
 const MaxEventText = 200

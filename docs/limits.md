@@ -8,8 +8,14 @@ Everything dumen does not do, or does not do yet. dumen is early and has not bee
   `MultiEdit` and `NotebookEdit` under a denied path, following symlinks. An agent that runs
   `sed -i`, a build script or a code generator through Bash, or that writes through another MCP
   server's file tool, can still change those files. The directive text tells the agent not to,
-  and agents nearly always comply, but it is not a sandbox. Use branch protection and code review
-  for hard guarantees.
+  and agents nearly always comply, but it is not a sandbox. dumen does not prevent or undo such a
+  change. It makes it visible: at the end of a turn the session reports the change as a
+  `violation` in the activity log, and `dumen check` fails on it. Run `dumen check` in CI, with
+  branch protection and code review, for a hard guarantee.
+- **A `violation` says where, not who.** It means the work tree of a session held a change under
+  a deny directive, made after the session and the directive began. dumen cannot tell whether
+  the agent or the person at the keyboard made it. Changes the agent already committed are found
+  by `dumen check <base>..<head>`, not by the session.
 - **Not run on macOS or Windows yet.** It compiles for both, and nothing more has been checked.
   Expect rough edges there, for example a credential manager window opening during a background
   sync on Windows.

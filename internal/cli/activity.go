@@ -113,10 +113,10 @@ func cmdActivity(a *app, args []string) error {
 		return nil
 	}
 	fmt.Fprintf(a.out, "Since %s\n", from.Local().Format("2006-01-02 15:04"))
-	fmt.Fprintf(a.out, "started %d  finished %d  blocked %d  asking_human %d  progress %d  directive_ack %d  draft_written %d  decision_read %d  private %d\n",
+	fmt.Fprintf(a.out, "started %d  finished %d  blocked %d  asking_human %d  progress %d  directive_ack %d  draft_written %d  decision_read %d  private %d  violation %d\n",
 		sum.Counts[model.EventStarted], sum.Counts[model.EventFinished], sum.Counts[model.EventBlocked],
 		sum.Counts[model.EventAskingHuman], sum.Counts[model.EventProgress], sum.Counts[model.EventDirectiveAck],
-		sum.Counts[model.EventDraftWritten], sum.Counts[model.EventDecisionRead], sum.Counts[model.EventPrivate])
+		sum.Counts[model.EventDraftWritten], sum.Counts[model.EventDecisionRead], sum.Counts[model.EventPrivate], sum.Counts[model.EventViolation])
 	if len(sum.ByRepo) > 0 {
 		fmt.Fprint(a.out, "By repository:")
 		for _, r := range model.SortedKeys(sum.ByRepo) {
@@ -141,6 +141,12 @@ func cmdActivity(a *app, args []string) error {
 		fmt.Fprintf(a.out, "\nStuck (%d)\n", len(sum.Stuck))
 		for _, s := range sum.Stuck {
 			fmt.Fprintf(a.out, "  %-24s %-10s %-13s %s\n", clip(s.Person, 24), clip(s.Session, 10), s.State, clip(s.LastText, 100))
+		}
+	}
+	if len(sum.Violations) > 0 {
+		fmt.Fprintf(a.out, "\nChanges under a deny directive (%d)\n", len(sum.Violations))
+		for _, e := range sum.Violations {
+			fmt.Fprintf(a.out, "  %-24s %-10s %-8s %s\n", clip(e.Person, 24), clip(e.Session, 10), strings.Join(e.IDs, ","), clip(e.Text, 100))
 		}
 	}
 	if len(missing) > 0 {

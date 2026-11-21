@@ -99,7 +99,7 @@ func CleanRelKeepGlob(p string) string {
 
 func compileGlob(pattern string) *regexp.Regexp {
 	var b strings.Builder
-	b.WriteString("^")
+	b.WriteString("(?s)^") // (?s): a file name may contain a newline, and "." must match it
 	for i := 0; i < len(pattern); i++ {
 		c := pattern[i]
 		switch c {

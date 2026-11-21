@@ -750,6 +750,7 @@ func (s *Server) Activity(ctx context.Context, in activityIn) (string, error) {
 		"counts":     sum.Counts,
 		"sessions":   sum.Sessions,
 		"stuck":      sum.Stuck,
+		"violations": sum.Violations,
 		"directives": unacked,
 		"roster":     cfg.Roles,
 	}

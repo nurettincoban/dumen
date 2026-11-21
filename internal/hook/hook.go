@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/nurettincoban/dumen/internal/cache"
+	"github.com/nurettincoban/dumen/internal/check"
 	"github.com/nurettincoban/dumen/internal/model"
 	"github.com/nurettincoban/dumen/internal/op"
 	"github.com/nurettincoban/dumen/internal/policy"
@@ -704,6 +705,7 @@ func (r *runCtx) stop() {
 		summary = ""
 	}
 	r.sess.LastSummary = summary
+	r.reportViolations()
 	last, err := model.ParseTime(r.sess.LastProgress)
 	due := err != nil || r.now.Sub(last) >= progressEvery
 	if due && !r.sess.Finished && !r.sess.Asking {
@@ -714,6 +716,59 @@ func (r *runCtx) stop() {
 	// is the session's state; a progress event now would wrongly make it active again.
 	if due && !r.sess.Finished && !r.sess.Asking {
 		r.log(model.EventProgress, summary)
+	}
+}
+
+// reportViolations logs a violation event when the work tree holds changes, made since
+// this session started, under a deny directive. The hook on Edit and Write cannot see a
+// change made through a shell command or another tool; the work tree shows it whatever
+// made it. Nothing is blocked or undone: the event makes the change visible to the team.
+// Each file is reported once per session and directive.
+func (r *runCtx) reportViolations() {
+	if r.sess.Private || r.proj == nil || r.c == nil {
+		return
+	}
+	deny := false
+	for _, d := range r.c.Directives {
+		if d.Kind == model.DirectiveDeny && d.ActiveAt(r.now) {
+			deny = true
+			break
+		}
+	}
+	if !deny {
+		return // the usual case costs no git call
+	}
+	started, err := model.ParseTime(r.sess.Started)
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	files, err := check.WorktreeFiles(ctx, r.proj.Root)
+	if err != nil {
+		return
+	}
+	byDirective := map[string][]string{}
+	for _, v := range check.Violations(r.c, r.proj.Repo, files, r.now) {
+		since := started
+		if from, err := model.ParseTime(v.Directive.Starts); err == nil && from.After(since) {
+			since = from // a change made before the freeze began is not a violation
+		}
+		key := v.Directive.ID + " " + v.File
+		if session.Has(r.sess.Violated, key) || !check.ChangedSince(r.proj.Root, v.File, since) {
+			continue
+		}
+		r.sess.Violated = append(r.sess.Violated, key)
+		byDirective[v.Directive.ID] = append(byDirective[v.Directive.ID], v.File)
+	}
+	for _, id := range model.SortedKeys(byDirective) {
+		files := byDirective[id]
+		// The count comes first so that a long file name cannot cut it off.
+		text := "1 file changed under a deny directive: " + files[0]
+		if len(files) > 1 {
+			text = fmt.Sprintf("%d files changed under a deny directive: %s and %d more", len(files), files[0], len(files)-1)
+		}
+		r.log(model.EventViolation, text, id)
 	}
 }
 

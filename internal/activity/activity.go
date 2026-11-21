@@ -105,6 +105,8 @@ type Summary struct {
 	Sessions []Session           `json:"sessions"`          // ordered by first event, then session id
 	Stuck    []Session           `json:"stuck"`             // sessions whose current state is blocked or asking a human
 	Acks     map[string][]string `json:"acks"`              // directive id -> people whose agents acknowledged it
+	// Violations are the events that report changes left under a deny directive.
+	Violations []model.Event `json:"violations,omitempty"`
 }
 
 // Summarize computes the summary of events (which must be in time order).
@@ -124,6 +126,10 @@ func Summarize(events []model.Event) Summary {
 		s.Last = e.TS
 		s.Events++
 		// A resumed session logs "session resume"; that must not replace the last real summary.
+		if e.Kind == model.EventViolation {
+			sum.Violations = append(sum.Violations, e)
+			continue // a finding about the session, not a step of it
+		}
 		if e.Text != "" && (e.Kind != model.EventStarted || s.LastText == "") {
 			s.LastText = e.Text
 		}

@@ -645,3 +645,130 @@ func TestProjectNameCannotLeaveTheDumenHome(t *testing.T) {
 		t.Fatal("dumen removed a directory outside the dumen home")
 	}
 }
+
+// `dumen check` fails when a change, however it was made, touches a path under a deny
+// directive: in the work tree, or in a commit range for CI.
+func TestCheckFindsChangesUnderADenyDirective(t *testing.T) {
+	dir, _ := repo(t)
+	git := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	put := func(rel, body string) {
+		t.Helper()
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("src/auth/login.go", "one\n")
+	put("src/api/orders.go", "one\n")
+	git("add", "-A")
+	git("commit", "-q", "-m", "one")
+	base := git("rev-parse", "HEAD")
+	out := run(t, "direct", "--deny", "--paths", "src/auth/**", "Auth is frozen")
+	id := out[strings.Index(out, "Y-") : strings.Index(out, "Y-")+6]
+
+	put("src/api/orders.go", "two\n")
+	if out := run(t, "check"); !strings.Contains(out, "OK: 1 changed file in") {
+		t.Fatalf("a change outside the frozen path is fine:\n%s", out)
+	}
+	put("src/auth/login.go", "two\n") // as `sed -i` would
+	out, code := runErr("check")
+	if code != 1 || !strings.Contains(out, "src/auth/login.go") || !strings.Contains(out, id) {
+		t.Fatalf("check must fail and name the file and the directive (exit %d):\n%s", code, out)
+	}
+	git("add", "-A")
+	git("commit", "-q", "-m", "two")
+	if out := run(t, "check"); !strings.Contains(out, "OK: 0 changed files") {
+		t.Fatalf("a clean work tree passes:\n%s", out)
+	}
+	for _, args := range [][]string{{"check", base + "..HEAD"}, {"check", base + ".."}, {"check", base, "HEAD"}} {
+		out, code := runErr(args...)
+		if code != 1 || !strings.Contains(out, "src/auth/login.go") || !strings.Contains(out, "1 of 2 changed files") {
+			t.Errorf("dumen %v must fail on the committed change (exit %d):\n%s", args, code, out)
+		}
+	}
+	run(t, "withdraw", id)
+	if out := run(t, "check", base+"..HEAD"); !strings.Contains(out, "OK: 2 changed files") {
+		t.Fatalf("after the directive is withdrawn the range passes:\n%s", out)
+	}
+	// A check that could not be made exits with 2, so CI can tell it from a finding.
+	for _, args := range [][]string{{"check", "a", "b", "c"}, {"check", "nosuchrev..HEAD"}, {"check", "--output=x..HEAD"}} {
+		if out, code := runErr(args...); code != 2 {
+			t.Errorf("dumen %v: want exit 2, got %d:\n%s", args, code, out)
+		}
+	}
+}
+
+// Gauntlet F1: a range is checked as a pull request shows it, from the point where the
+// branch forked. A commit that the base gained under the frozen path afterwards is not
+// the branch's change.
+func TestCheckIgnoresWhatTheBaseGainedAfterTheFork(t *testing.T) {
+	dir, _ := repo(t)
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	put := func(rel, body string) {
+		t.Helper()
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("src/auth/login.go", "one\n")
+	put("src/web/app.go", "one\n")
+	git("add", "-A")
+	git("commit", "-q", "-m", "one")
+	git("branch", "-M", "main")
+	git("checkout", "-q", "-b", "feature")
+	put("src/web/app.go", "two\n")
+	git("commit", "-q", "-am", "feature work")
+	git("checkout", "-q", "main")
+	put("src/auth/login.go", "two\n") // somebody with the right to do so, before the freeze
+	git("commit", "-q", "-am", "auth work on main")
+	git("checkout", "-q", "feature")
+	run(t, "direct", "--deny", "--paths", "src/auth/**", "Auth is frozen")
+	for _, r := range []string{"main..HEAD", "main...HEAD", "main..feature"} {
+		if out, code := runErr("check", r); code != 0 || !strings.Contains(out, "OK: 1 changed file in") {
+			t.Errorf("dumen check %s must pass: the branch never touched src/auth (exit %d):\n%s", r, code, out)
+		}
+	}
+	put("src/auth/login.go", "feature\n")
+	git("commit", "-q", "-am", "touch auth")
+	if out, code := runErr("check", "main..HEAD"); code != 1 || !strings.Contains(out, "src/auth/login.go") {
+		t.Errorf("a branch that does touch src/auth must fail (exit %d):\n%s", code, out)
+	}
+	git("checkout", "-q", "--orphan", "island")
+	git("commit", "-q", "-m", "unrelated history")
+	if out, code := runErr("check", "main..HEAD"); code != 2 || !strings.Contains(out, "no common ancestor") {
+		t.Errorf("without a merge base the check must say so (exit %d):\n%s", code, out)
+	}
+}
+
+// A local state file that was tampered with is refused with the reason, not with the
+// advice to join.
+func TestTamperedLocalStateIsReportedAsSuch(t *testing.T) {
+	_, p := repo(t)
+	local := filepath.Join(p.Store.Home, "local.json")
+	if err := os.WriteFile(local, []byte(`{"project":"x","remote":"--upload-pack=x","branch":"dumen"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, code := runErr("status")
+	if code == 0 || !strings.Contains(out, "refusing store remote") || strings.Contains(out, "has not joined") {
+		t.Fatalf("status with a tampered local.json (exit %d):\n%s", code, out)
+	}
+}

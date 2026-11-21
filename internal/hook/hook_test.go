@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -539,5 +540,68 @@ func TestShellCannotStartDumenServerOrHook(t *testing.T) {
 		if decision(o) != "deny" {
 			t.Errorf("%q must be denied, got %+v", cmd, o)
 		}
+	}
+}
+
+// Gauntlet T1: a change made under a deny directive through a shell command never passes
+// the Edit hook. The Stop hook finds it in the work tree and logs a violation, once.
+func TestStopReportsChangesUnderADenyDirective(t *testing.T) {
+	f := newFixture(t)
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = f.proj.Root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	write := func(rel string, age time.Duration) {
+		t.Helper()
+		p := filepath.Join(f.proj.Root, filepath.FromSlash(rel))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		when := time.Now().Add(-age)
+		os.Chtimes(p, when, when)
+	}
+	git("init", "-q")
+	write("src/auth/old.go", 2*time.Hour) // left there before the session began
+	f.now = time.Now().UTC().Add(-time.Hour)
+	f.run(SessionStart, map[string]any{"source": "startup"})
+	id := f.directive(model.DirectiveDeny, model.Scope{Paths: []string{"src/auth/**"}}, "Auth is frozen")
+	if _, err := f.proj.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.now = time.Now().UTC().Add(time.Minute)
+	write("src/auth/login.go", 0) // as `sed -i` or a script would
+	write("src/auth/token.go", 0)
+	write("src/api/orders.go", 0) // not frozen
+	if o := f.run(Stop, map[string]any{"last_assistant_message": "Done."}); o != nil {
+		t.Fatalf("Stop must print nothing, got %+v", o)
+	}
+	f.run(Stop, map[string]any{"last_assistant_message": "Done again."}) // must not report twice
+	if _, err := f.eng.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var found []model.Event
+	days, _ := store.ListDays(f.proj.Store.Root())
+	for _, day := range days {
+		evs, _ := store.ReadEvents(f.proj.Store.Root(), day)
+		for _, e := range evs {
+			if e.Kind == model.EventViolation {
+				found = append(found, e)
+			}
+		}
+	}
+	if len(found) != 1 {
+		t.Fatalf("want one violation event, got %d: %+v", len(found), found)
+	}
+	e := found[0]
+	if len(e.IDs) != 1 || e.IDs[0] != id || !strings.Contains(e.Text, "2 files changed under a deny directive: src/auth/login.go and 1 more") {
+		t.Errorf("violation event: %+v", e)
+	}
+	if strings.Contains(e.Text, "old.go") || strings.Contains(e.Text, "orders.go") {
+		t.Errorf("only changes made under the freeze during the session count: %q", e.Text)
 	}
 }

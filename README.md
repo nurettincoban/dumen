@@ -133,6 +133,8 @@ watch `dumen activity`.
   Agents draft, people approve.
 - **Sources of truth.** Point at a Claude Design file, an Artifact, a pull request or a doc.
   dumen keeps the link and a one-line label, and never fetches a URL.
+- **A check on the diff.** `dumen check` fails when a change touches a frozen path, whatever
+  tool made it. Run it in CI or before a push.
 - **An activity log.** Who started, who finished, who is blocked, who waits for a human, and
   who has not acknowledged a directive yet.
 - **Many repositories, one team.** One store for all your services, with scopes such as
@@ -148,9 +150,9 @@ the real `claude` CLI; it compiles for macOS and Windows and has not been run th
 
 - **A guard rail, not a security boundary.** It guards against agents, not colleagues: anyone
   who can `git push` to the store can forge a record.
-- **`deny` covers Claude Code's file tools.** An agent that runs `sed -i` through Bash can still
-  change a frozen file. Agents are told not to, and nearly always comply. Use branch protection
-  and review for hard guarantees.
+- **`deny` blocks Claude Code's file tools.** An agent that runs `sed -i` through Bash can still
+  change a frozen file. Agents are told not to, and nearly always comply. dumen does not undo
+  such a change; it reports it in `dumen activity`, and `dumen check` fails on it in CI.
 - **About 30 seconds to arrive.** A new directive is not instant.
 - **Claude Code only, small teams.** Built for about 2 to 20 people.
 - **Everyone needs git access to the store**, including product managers.

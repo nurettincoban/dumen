@@ -349,3 +349,12 @@ These were decided during the build, each at the owner's request or forced by a 
     for this build; record ids may be 4 to 8 characters. (g) A push the host refuses for
     good is reported with the host's message and is not retried. dumen is documented as a
     guard rail, not a security boundary.
+
+11. **The deny check moved to the diff (gauntlet decision T1).** dumen stays a guard rail:
+    hooks fail open and no attempt is made to parse shell commands. What a hook cannot see
+    is checked where it cannot be hidden. `dumen check <base>..<head>` fails when a diff
+    touches a path under an active deny directive, and works the same in the CI of any git
+    host. The Stop hook runs the same check on the work tree and logs a `violation` event,
+    once per file and directive, for changes made after both the session and the directive
+    began. It blocks nothing. The event kind is new; no version gate was added because no
+    version of dumen has been released.
