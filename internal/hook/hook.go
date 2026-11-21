@@ -480,8 +480,8 @@ var (
 	// envMarker catches a command that names dumen and also touches CLAUDECODE, the
 	// variable by which the CLI knows it runs inside an agent's session.
 	envMarker = regexp.MustCompile(`(?i)CLAUDECODE`)
-	humanCmd = regexp.MustCompile(`(?i)(^|[\s;&|(` + "`" + `$/\\'"=])dumen(\.exe)?['"]?\s+(approve|reject|supersede|direct|withdraw|private|product|role\s+set|role\s+rm|ref\s+check|mcp|hook)(\s|$|[;&|)'"])`)
-	storeRef = regexp.MustCompile(`(?i)(~|\$HOME|\$\{HOME\}|%USERPROFILE%|\$env:USERPROFILE|\$\{env:USERPROFILE\})[/\\]+\.dumen\b|DUMEN_HOME`)
+	humanCmd  = regexp.MustCompile(`(?i)(^|[\s;&|(` + "`" + `$/\\'"=])dumen(\.exe)?['"]?\s+(approve|reject|supersede|direct|withdraw|private|product|role\s+set|role\s+rm|ref\s+check|mcp|hook)(\s|$|[;&|)'"])`)
+	storeRef  = regexp.MustCompile(`(?i)(~|\$HOME|\$\{HOME\}|%USERPROFILE%|\$env:USERPROFILE|\$\{env:USERPROFILE\})[/\\]+\.dumen\b|DUMEN_HOME`)
 )
 
 var (
