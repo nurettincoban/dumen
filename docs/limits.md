@@ -26,8 +26,10 @@ Everything dumen does not do, or does not do yet. dumen is early and has not bee
 - **Activity is one commit per event.** The store grows by roughly 1 KB per event. The local
   clone under `~/.dumen` is packed once a day by the background sync, but the branch itself only
   grows; `dumen gc` compacts activity older than 30 days. Keep the store in its own repository.
-- **A crashed dumen.** A lock left by a dumen or git process that was killed is taken over by
-  the next dumen command: at once when the process is gone, after two minutes otherwise.
+- **A crashed dumen.** The store lock is held by the operating system and ends with the process
+  that took it, so a killed dumen blocks nobody. Lock files a killed git left in the clone are
+  cleared by the next dumen command. Keep `~/.dumen` on a local disk: file locks on network
+  file systems are not reliable.
 - **Subagents share their parent's session.** A directive that arrives mid-session is shown to
   the main agent and to each subagent once, since each has its own context. Acknowledgement and
   the activity log are per session: a subagent's acknowledgement counts for the session.

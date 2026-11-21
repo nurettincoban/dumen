@@ -167,8 +167,9 @@ not, which records are unreadable, and what is still queued. Then run `dumen syn
 host refuses the push (a protected branch, a missing permission, a rule that commits must be
 signed), it prints the host's own message.
 
-A dumen or git process that was killed in the middle of a write leaves lock files behind. The
-next dumen command clears them; no manual step is needed.
+The `lock` file stays in place; what counts is the operating system lock on it, which ends with
+the process that holds it. A git process that was killed in the middle of a write leaves its own
+lock files behind. The next dumen command clears them; no manual step is needed.
 
 ## Development
 

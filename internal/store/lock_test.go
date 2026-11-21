@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nurettincoban/dumen/internal/model"
+	"github.com/nurettincoban/dumen/internal/store"
 	"github.com/nurettincoban/dumen/internal/testutil"
 )
 
@@ -21,25 +24,23 @@ func tryLock(t *testing.T, lock func(context.Context) (func(), error), wait time
 	return unlock, err == nil
 }
 
-// Gauntlet O2: a lock whose holder died is taken over at once, a lock a live process
-// keeps fresh is respected, and a git lock file left by a killed git is cleared.
-func TestLockTakeoverAndStaleGitLocks(t *testing.T) {
+// Gauntlet O2 and L1: the store lock is an operating system lock. A lock file left by a
+// process that died holds nothing, a held lock is never handed out twice, and a git lock
+// file left by a killed git is cleared.
+func TestLockIsHeldByTheKernelAndClearsStaleGitLocks(t *testing.T) {
 	testutil.Home(t)
 	s := testutil.NewStore(t, testutil.BareRemote(t), "proj")
 	path := filepath.Join(s.Home, "lock")
 
-	// A process that has exited: its pid is free.
-	dead := exec.Command("git", "version")
-	if err := dead.Run(); err != nil {
-		t.Fatal(err)
-	}
-	os.WriteFile(path, []byte(fmt.Sprintf("%d L-DEAD", dead.Process.Pid)), 0o644)
+	// What a killed dumen leaves: the file with its pid, and nobody holding it. Even a pid
+	// that is alive (reused by another program) must not matter.
+	os.WriteFile(path, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0o644)
 	index := filepath.Join(s.Root(), ".git", "index.lock")
 	os.WriteFile(index, nil, 0o644) // as a killed git leaves it
 	start := time.Now()
 	unlock, ok := tryLock(t, s.Lock, 5*time.Second)
-	if !ok || time.Since(start) > 2*time.Second {
-		t.Fatalf("the lock of a dead process must be taken over at once (ok=%v after %v)", ok, time.Since(start))
+	if !ok || time.Since(start) > time.Second {
+		t.Fatalf("a lock file nobody holds must be taken at once (ok=%v after %v)", ok, time.Since(start))
 	}
 	if _, err := os.Stat(index); err == nil {
 		t.Error("a stale index.lock must be removed by whoever takes the store lock")
@@ -47,34 +48,86 @@ func TestLockTakeoverAndStaleGitLocks(t *testing.T) {
 	if _, err := s.Sync(context.Background()); err != nil {
 		t.Errorf("the store must work after a stale index.lock: %v", err)
 	}
+	if data, _ := os.ReadFile(path); strings.TrimSpace(string(data)) != fmt.Sprint(os.Getpid()) {
+		t.Errorf("the lock file should name its holder, got %q", data)
+	}
 
-	// While it is held by this (live) process, nobody else gets it.
+	// While it is held nobody else gets it, however old the file looks.
+	old := time.Now().Add(-time.Hour)
+	os.Chtimes(path, old, old)
 	if _, ok := tryLock(t, s.Lock, 200*time.Millisecond); ok {
 		t.Fatal("a held lock was handed out twice")
 	}
 	unlock()
 	unlock() // a second unlock is harmless
-	if _, err := os.Stat(path); err == nil {
-		t.Fatal("unlock left the lock file behind")
-	}
-
-	// A live pid with a fresh lock is respected; the same lock gone old is not (the pid
-	// was reused by some other program, which never touches the file).
-	os.WriteFile(path, []byte(fmt.Sprintf("%d L-LIVE", os.Getpid())), 0o644)
-	if _, ok := tryLock(t, s.Lock, 200*time.Millisecond); ok {
-		t.Fatal("a fresh lock of a live process was taken over")
-	}
-	old := time.Now().Add(-3 * time.Minute)
-	os.Chtimes(path, old, old)
-	unlock, ok = tryLock(t, s.Lock, 2*time.Second)
+	unlock, ok = tryLock(t, s.Lock, time.Second)
 	if !ok {
-		t.Fatal("a lock nobody has touched for minutes must be taken over")
+		t.Fatal("a released lock could not be taken again")
 	}
-	// Unlock removes only the caller's own lock.
-	os.WriteFile(path, []byte("1 L-OTHER"), 0o644)
 	unlock()
-	if data, _ := os.ReadFile(path); !strings.Contains(string(data), "L-OTHER") {
-		t.Error("unlock removed a lock that belongs to another holder")
+}
+
+// Gauntlet L1: the lock dies with its holder. A child process takes the lock and is
+// killed; the parent gets it at once.
+func TestLockIsReleasedWhenTheHolderIsKilled(t *testing.T) {
+	if os.Getenv("DUMEN_TEST_HOLD_LOCK") != "" {
+		s, err := store.Open("proj")
+		if err != nil {
+			os.Exit(3)
+		}
+		if _, err := s.Lock(context.Background()); err != nil {
+			os.Exit(4)
+		}
+		fmt.Println("held")
+		time.Sleep(time.Minute)
+		return
+	}
+	home := testutil.Home(t)
+	s := testutil.NewStore(t, testutil.BareRemote(t), "proj")
+	child := exec.Command(os.Args[0], "-test.run", "^TestLockIsReleasedWhenTheHolderIsKilled$")
+	child.Env = append(os.Environ(), "DUMEN_TEST_HOLD_LOCK=1")
+	out, err := child.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := child.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer child.Process.Kill()
+	buf := make([]byte, 5)
+	if _, err := io.ReadFull(out, buf); err != nil || string(buf[:4]) != "held" {
+		t.Fatalf("child did not take the lock (home %s): %q %v", home, buf, err)
+	}
+	if _, ok := tryLock(t, s.Lock, 200*time.Millisecond); ok {
+		t.Fatal("the lock of a live process was handed out")
+	}
+	child.Process.Kill()
+	child.Wait()
+	unlock, ok := tryLock(t, s.Lock, 2*time.Second)
+	if !ok {
+		t.Fatal("the lock of a killed process was not released")
+	}
+	unlock()
+}
+
+// Gauntlet L2: setting a store up again (dumen join in a second repository) waits for
+// whoever is working in the clone.
+func TestSetupWaitsForTheStoreLock(t *testing.T) {
+	testutil.Home(t)
+	remote := testutil.BareRemote(t)
+	s := testutil.NewStore(t, remote, "proj")
+	unlock, ok := tryLock(t, s.Lock, time.Second)
+	if !ok {
+		t.Fatal("setup: lock")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	if _, _, err := store.Setup(ctx, remote, s.Branch, "proj", false, model.Actor{Email: "dev@example.com"}); err == nil || !strings.Contains(err.Error(), "busy") {
+		t.Fatalf("Setup must wait for the store lock, got %v", err)
+	}
+	unlock()
+	if _, _, err := store.Setup(context.Background(), remote, s.Branch, "proj", false, model.Actor{Email: "dev@example.com"}); err != nil {
+		t.Fatalf("Setup after the lock is free: %v", err)
 	}
 }
 

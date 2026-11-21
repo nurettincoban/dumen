@@ -3,9 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"github.com/nurettincoban/dumen/internal/proc"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -171,6 +169,13 @@ func Setup(ctx context.Context, remote, branch, project string, create bool, fou
 		return nil, res, err
 	}
 	s := &Store{Home: filepath.Join(base, project), Local: Local{Project: project, Remote: remote, Branch: branch, Email: strings.ToLower(founder.Email)}}
+	// Everything below runs git in the clone, and may wipe and rebuild it: it must not
+	// happen while another dumen process on this machine is working there.
+	unlock, err := s.Lock(ctx)
+	if err != nil {
+		return nil, res, err
+	}
+	defer unlock()
 	if prev, err := Open(project); err == nil {
 		s.Roots = prev.Roots
 		if prev.Remote != remote || prev.Branch != branch {
@@ -441,86 +446,44 @@ func (s *Store) HasMergeCommits(ctx context.Context) (bool, error) {
 // Lock takes the store's exclusive lock, waiting until ctx is done.
 // Only one process at a time may sync, apply and push in a local store.
 //
-// The lock file holds the holder's pid and a random token, and the holder touches it
-// every lockRefresh while it works. A lock whose holder is gone, or that nobody has
-// touched for lockStale, is taken over; a long flush keeps its lock for as long as it runs.
+// It is an operating system lock on an open file (flock, LockFileEx), held for as long as
+// the operation runs. The kernel releases it when the process ends, however it ends, so
+// there is nothing to expire, refresh or take over. The file itself stays; the pid in it
+// is for a person who looks, not for dumen.
 func (s *Store) Lock(ctx context.Context) (unlock func(), err error) {
-	path := filepath.Join(s.Home, "lock")
-	mine := fmt.Sprintf("%d %s", os.Getpid(), model.NewID("L"))
+	if err := os.MkdirAll(s.Home, 0o755); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(filepath.Join(s.Home, "lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, err
+	}
 	for {
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-		if err == nil {
-			f.WriteString(mine)
+		ok, err := tryFlock(f)
+		if err != nil {
 			f.Close()
-			s.clearGitLocks()
-			stop := make(chan struct{})
-			go func() {
-				t := time.NewTicker(lockRefresh)
-				defer t.Stop()
-				for {
-					select {
-					case <-stop:
-						return
-					case now := <-t.C:
-						os.Chtimes(path, now, now)
-					}
-				}
-			}()
-			var once sync.Once
-			return func() {
-				once.Do(func() {
-					close(stop)
-					if cur, _ := os.ReadFile(path); string(cur) == mine {
-						os.Remove(path)
-					}
-				})
-			}, nil
-		}
-		if !errors.Is(err, os.ErrExist) {
 			return nil, err
 		}
-		if held, st := readLock(path); st != nil && lockAbandoned(held, st.ModTime()) {
-			// Remove it only if it is still the lock that was judged abandoned.
-			if cur, _ := os.ReadFile(path); string(cur) == held {
-				os.Remove(path)
-			}
-			continue
+		if ok {
+			break
 		}
 		select {
 		case <-ctx.Done():
+			f.Close()
 			return nil, fmt.Errorf("dumen store is busy: %w", ctx.Err())
 		case <-time.After(15 * time.Millisecond):
 		}
 	}
-}
-
-const (
-	lockRefresh = 20 * time.Second
-	lockStale   = 2 * time.Minute
-)
-
-func readLock(path string) (string, os.FileInfo) {
-	st, err := os.Stat(path)
-	if err != nil {
-		return "", nil
-	}
-	data, _ := os.ReadFile(path)
-	return string(data), st
-}
-
-// lockAbandoned reports whether a lock can be taken over: its holder's process is gone,
-// or nobody has touched it for lockStale (a live holder touches it every lockRefresh, so
-// an old lock under a live pid means the pid now belongs to some other program).
-func lockAbandoned(content string, touched time.Time) bool {
-	if time.Since(touched) > lockStale {
-		return true
-	}
-	fields := strings.Fields(content)
-	if len(fields) == 0 {
-		return time.Since(touched) > 2*time.Second // being written right now, or left empty by a crash
-	}
-	pid, err := strconv.Atoi(fields[0])
-	return err == nil && pid > 0 && !proc.Alive(pid)
+	f.Truncate(0)
+	f.WriteAt([]byte(strconv.Itoa(os.Getpid())+"\n"), 0)
+	s.clearGitLocks()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			unFlock(f)
+			f.Close()
+		})
+	}, nil
 }
 
 // clearGitLocks removes lock files a killed git left in the store's clone. Every git
