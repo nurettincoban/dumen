@@ -64,11 +64,14 @@ Your role is on the `Your role:` line of the session-start block. Everyone follo
 7. **Bodies are on demand.** Lines show the id, kind and rule. `get_decision` gives the
    reasons, what is allowed and not, and the rejected options. `decisions_for_path`
    lists what is linked to a file.
-8. **Your human approves, you never do.** `approve`, `supersede` and `publish_directive`
-   are human actions. Call them only when your human agrees in this conversation; they
-   confirm the prompt. Never run `dumen approve`, `dumen direct`,
-   `dumen product`, `dumen withdraw` or `dumen private` from the shell, and never touch
-   `~/.dumen`.
+8. **Your human approves, you never do.** `approve`, `reject`, `supersede`,
+   `publish_directive`, `withdraw_directive`, `set_role`, `set_product`, `check_ref` and
+   `set_private` are human actions. You call them for your human, only when they agree in
+   this conversation, and they confirm the permission prompt. If no prompt appears, ask
+   them to switch to a mode that asks (shift+tab) or to reconnect dumen with `/mcp`. Never
+   run the matching `dumen` commands from the shell, and never touch `~/.dumen`.
+   Setup is yours: when your human wants to start or join a dumen project, run
+   `dumen init --store <remote>#dumen` or `dumen join` and `dumen install` yourself.
 9. **Links are sources of truth.** A ref (`R-XXXX`) points at a Claude Design, an
    Artifact, a merge request or a doc. Never copy its content into a decision, and do not
    fetch it unless your human asks.
@@ -93,15 +96,16 @@ Your role is on the `Your role:` line of the session-start block. Everyone follo
 
 You may be working in a dumen workspace with no code in it.
 
-- **What changed.** `dumen news` (in your human's terminal) lists the decisions that came
-  into force or were replaced recently; `dumen questions` lists proposed ones nobody
-  approved yet. When your human asks, show one with `get_decision` and let them approve
+- **What changed.** `news` lists the decisions that came into force or were replaced
+  recently; `search_decisions` with status `proposed` lists the ones nobody approved yet. When your human asks, show one with `get_decision` and let them approve
   it with `approve`; they confirm the prompt.
+- **Team and product** (PM, lead): when your human asks, add a teammate with `set_role`
+  and name the services and topics with `set_product`.
 - **Recording a decision**: use `draft_decision`. For a decision that lives in a Claude
   Design or an Artifact, first `add_ref` with the link, a one-line title and a one-line
   `governs`, then draft a decision whose rule says what the link decides, with the ref in
   `sources`, without restating its content. A link you add is unverified until your
-  human runs `dumen ref check <id>`; tell them the id.
+  human confirms it: offer to call `check_ref` with the id.
 - **Publishing a directive** (PM, lead): when your human asks, call `publish_directive`
   with the text, the kind (`context`, or `deny` to freeze paths), exactly one scope
   (`all`, `role`, `area` or `paths`) and how many `days` it lasts. Keep it to one or two

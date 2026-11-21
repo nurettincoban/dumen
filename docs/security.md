@@ -30,12 +30,12 @@ How the human-only actions are kept human:
   Code itself started for the session, and that was running when you were asked, can do so.
   A second `dumen mcp` that an agent starts from a shell is not that server.
 - The prompt is used only in the permission modes where a person answers it (`default`,
-  `acceptEdits`, `plan`). In every other mode the call is refused, and you run the command in
-  your own terminal.
+  `acceptEdits`, `plan`). In every other mode the call is refused; switch to a mode that
+  asks and the agent calls the tool again.
 - A hook blocks shell commands such as `dumen approve` or `dumen decide --approve` inside a
-  session, and the CLI refuses human actions when it runs inside Claude Code or has no terminal:
-  an agent's shell tool has none, so clearing the environment does not help. Scripts opt out with
-  `--no-terminal`, which the hook refuses in an agent's shell. These are a second layer, not a
+  session, and the CLI refuses human actions when it runs inside Claude Code or its stdin is not
+  a real terminal (a tty check, so `/dev/null` does not count): an agent's shell tool has none,
+  so clearing the environment does not help. There is no opt-out. These are a second layer, not a
   wall: an agent that deliberately works around them (for example by allocating a terminal) can
   get past them. See
   [the next section](#a-guard-rail-not-a-boundary).

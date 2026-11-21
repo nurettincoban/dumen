@@ -65,19 +65,10 @@ func init() {
 // Main runs the CLI and returns the process exit code.
 func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	a := &app{in: stdin, out: stdout, err: stderr}
-	// A person runs human actions in a terminal. An agent's shell tool has none, so a
-	// command without one is an agent's, whatever its environment says. Scripts and
-	// tests opt out with --no-terminal, which the hook refuses in an agent's shell.
+	// Human actions belong in the permission prompt inside Claude Code. The CLI accepts
+	// one only at a real terminal, which an agent's shell tool does not have. There is no
+	// flag or variable that turns this off; tests replace isTerminal in-process.
 	humanAtTerminal = isTerminal(stdin)
-	kept := args[:0:0]
-	for _, x := range args {
-		if x == "--no-terminal" || x == "-no-terminal" {
-			humanAtTerminal = true
-			continue
-		}
-		kept = append(kept, x)
-	}
-	args = kept
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
 		a.help()
 		return 0
@@ -90,7 +81,7 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				}
 				fmt.Fprintln(stderr, "dumen:", err)
 				if errors.Is(err, op.ErrForbidden) && !humanAtTerminal && os.Getenv("CLAUDECODE") == "" {
-					fmt.Fprintln(stderr, "dumen: this command has no terminal, so dumen treats it as an agent's. Run it in your own terminal.")
+					fmt.Fprintln(stderr, "dumen: this command has no terminal, so dumen treats it as an agent's. In Claude Code, the agent calls the matching dumen tool and you confirm the prompt.")
 				}
 				var coded *exitError
 				if errors.As(err, &coded) {
@@ -157,17 +148,14 @@ func actor(dir string, s *store.Store) model.Actor {
 	return model.Actor{Email: email, Kind: kind}
 }
 
-// humanAtTerminal is set by Main: the command has a terminal, or --no-terminal was given.
+// humanAtTerminal is set by Main: the command's stdin is a real terminal.
 var humanAtTerminal bool
 
-// isTerminal reports whether r is a terminal (a character device).
-func isTerminal(r io.Reader) bool {
+// isTerminal reports whether r is a real terminal. A character device is not enough:
+// /dev/null and /dev/zero are character devices. Tests replace it.
+var isTerminal = func(r io.Reader) bool {
 	f, ok := r.(*os.File)
-	if !ok {
-		return false
-	}
-	st, err := f.Stat()
-	return err == nil && st.Mode()&os.ModeCharDevice != 0
+	return ok && ttyFD(f.Fd())
 }
 
 func openProject() (*project.Project, error) {

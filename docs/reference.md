@@ -68,13 +68,20 @@ Every command accepts `--help`. Ids look like `Y-2APW` (directive), `D-PG18` (de
 | `dumen mcp` | The MCP stdio server. It also runs the background sync. |
 | `dumen hook EVENT` | The hook entry point. It reads the hook JSON on stdin. |
 
-Human actions (`approve`, `reject`, `supersede`, `direct`, `withdraw`, `private`, `role set`,
-`role rm`, `ref check`) are refused when the command runs inside a Claude Code session.
+**Human actions.** Approving, rejecting and superseding a decision, publishing and
+withdrawing a directive, changing roles or the product, confirming a link and turning
+monitoring off belong to a person. The normal path is inside Claude Code: the agent calls the
+matching tool (`approve`, `reject`, `supersede`, `publish_directive`, `withdraw_directive`,
+`set_role`, `set_product`, `check_ref`, `set_private`) and the person confirms the permission
+prompt. If no prompt appears, switch to a mode that asks (shift+tab) or reconnect dumen with
+`/mcp`.
 
-Human actions (approve, reject, supersede, `decide --approve`, direct, withdraw, role, product,
-ref check, private) need a terminal: a command without one counts as an agent's. Scripts and CI
-add the global flag `--no-terminal`, for example `dumen --no-terminal approve D-7K2P`; the hook
-refuses that flag in an agent's shell.
+As an emergency path, the same commands (`approve`, `reject`, `supersede`, `decide --approve`,
+`direct`, `withdraw`, `role set`, `role rm`, `product`, `ref check`, `private`) work from a
+person's own terminal. The CLI accepts them only when stdin is a real terminal (not a pipe, a
+file or `/dev/null`) and the command is not inside a Claude Code session. There is no flag or
+variable that turns this off. Setup (`init`, `join`, `workspace`, `install`) and every other
+command are the agent's and need no terminal.
 
 ## Environment variables
 

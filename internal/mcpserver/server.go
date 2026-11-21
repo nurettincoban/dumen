@@ -856,7 +856,8 @@ func add[In any](srv *mcp.Server, s *Server, name, desc string, guarded bool, fn
 			}
 			if !session.ConsumeTicket(p.Store.SessionsDir(), name, req.Params.Arguments, time.Now(), s.ParentPID, s.pid()) {
 				return nil, nil, fmt.Errorf("%s is a human action and this call was not confirmed by a person through the dumen hook. "+
-					"Do not retry. Ask your human to run the matching `dumen` command in their own terminal", name)
+					"Do not retry it the same way. Tell your human it needs their confirmation in Claude Code's permission prompt: "+
+					"if no prompt appeared, they can run /mcp to reconnect dumen or switch to a mode that asks, then ask you again", name)
 			}
 		}
 		text, err := fn(ctx, in)
@@ -887,6 +888,13 @@ func New(s *Server) *mcp.Server {
 	add(srv, s, "record_answer", "Save your human's answer to a question you asked them (with the question tool or in the chat) as a team decision, so no teammate or agent is asked again. Only for lasting choices of any kind: product, UX, UI, architecture or technical.", false, s.RecordAnswer)
 	add(srv, s, "approve", "Approve a proposed decision. Human action: the person is asked to confirm.", true, s.Approve)
 	add(srv, s, "supersede", "Replace an approved decision with a new approved one. Human action: the person is asked to confirm.", true, s.Supersede)
+	add(srv, s, "reject", "Reject a proposed decision. Human action: the person is asked to confirm.", true, s.Reject)
+	add(srv, s, "withdraw_directive", "End an active directive early. Human action: the person is asked to confirm.", true, s.WithdrawDirective)
+	add(srv, s, "set_role", "Add a teammate by git email with a role (pm, lead, designer, dev, ...), change it, or remove them with an empty role. Human action: the person is asked to confirm.", true, s.SetRole)
+	add(srv, s, "set_product", "Name the product, its services (repositories), topics with keywords, and optionally the only role that may approve a kind. Human action: the person is asked to confirm.", true, s.SetProduct)
+	add(srv, s, "check_ref", "Mark a source-of-truth link an agent added as checked by a person, so other agents see it. Human action: the person is asked to confirm.", true, s.CheckRef)
+	add(srv, s, "set_private", "Stop or resume monitoring of new Claude Code sessions on this machine (activity logging only; directives and decisions still apply). Human action: the person is asked to confirm.", true, s.SetPrivate)
+	add(srv, s, "news", "List decisions that came into force recently, with who approved them, where, what they replaced and what they need from other services.", false, s.News)
 	add(srv, s, "add_ref", "Record a link to a Design, Artifact, merge request or doc as a source of truth. Stores the link and one-line labels only.", false, s.AddRef)
 	add(srv, s, "log_event", "Log where this session stands: asking_human when blocked on a person, blocked, progress, or finished with what is done and what is left.", false, s.LogEvent)
 	add(srv, s, "activity", "Summarise agent activity: counts, sessions, who is stuck, and who has not acknowledged each active directive.", false, s.Activity)

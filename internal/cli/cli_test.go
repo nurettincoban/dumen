@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/nurettincoban/dumen/internal/gitx"
@@ -55,7 +56,7 @@ func repo(t *testing.T) (dir string, p *project.Project) {
 func run(t *testing.T, args ...string) string {
 	t.Helper()
 	var out, errb bytes.Buffer
-	if code := Main(append([]string{"--no-terminal"}, args...), strings.NewReader(""), &out, &errb); code != 0 {
+	if code := Main(args, strings.NewReader(""), &out, &errb); code != 0 {
 		t.Fatalf("dumen %s: exit %d\n%s%s", strings.Join(args, " "), code, out.String(), errb.String())
 	}
 	return out.String()
@@ -63,7 +64,7 @@ func run(t *testing.T, args ...string) string {
 
 func runErr(args ...string) (string, int) {
 	var out, errb bytes.Buffer
-	code := Main(append([]string{"--no-terminal"}, args...), strings.NewReader(""), &out, &errb)
+	code := Main(args, strings.NewReader(""), &out, &errb)
 	return out.String() + errb.String(), code
 }
 
@@ -844,7 +845,28 @@ func TestAnotherRepositoryWithTheSameProjectNameIsNotTheProject(t *testing.T) {
 func TestHumanActionsNeedATerminal(t *testing.T) {
 	repo(t)
 	t.Setenv("CLAUDECODE", "")
-	out := run(t, "decide", "--title", "x; y", "--rule", "r", "--kind", "product", "-m", "b")
+	isTerminal = func(io.Reader) bool { return false }
+	defer func() { isTerminal = func(io.Reader) bool { return true } }()
+	// There is no runtime opt-out: an old flag is an unknown command, and /dev/null and
+	// /dev/zero are character devices but not terminals.
+	if out, code := runErr("--no-terminal", "approve", "D-0000"); code == 0 {
+		t.Errorf("--no-terminal must not exist: %s", out)
+	}
+	isTerminal = realIsTerminal
+	for _, dev := range []string{os.DevNull, "/dev/zero"} {
+		f, err := os.Open(dev)
+		if err != nil {
+			continue
+		}
+		var o, e bytes.Buffer
+		code := Main([]string{"decide", "--title", "t", "--rule", "r", "--kind", "product", "-m", "b", "--approve"}, f, &o, &e)
+		f.Close()
+		if code == 0 || !strings.Contains(e.String(), "no terminal") {
+			t.Errorf("decide --approve with stdin %s: exit %d\n%s%s", dev, code, o.String(), e.String())
+		}
+	}
+	isTerminal = func(io.Reader) bool { return false }
+	out, _ := runErr("decide", "--title", "x; y", "--rule", "r", "--kind", "product", "-m", "b") // proposing is an agent's action too
 	id := out[strings.Index(out, "D-") : strings.Index(out, "D-")+6]
 	for _, args := range [][]string{
 		{"approve", id}, {"reject", id},

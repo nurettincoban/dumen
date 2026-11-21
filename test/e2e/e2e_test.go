@@ -10,6 +10,7 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -95,10 +96,38 @@ func (w *world) sh(dir, name string, args ...string) string {
 	return string(out)
 }
 
-// dumen runs the CLI as the person: the test has no terminal, so it opts out of that check.
+// dumen runs the CLI the way an agent's shell does: with no terminal.
 func (w *world) dumen(args ...string) string {
-	return w.sh(w.repo, w.bin, append([]string{"--no-terminal"}, args...)...)
+	return w.sh(w.repo, w.bin, args...)
 }
+
+// person runs a human action the only way the CLI accepts one outside Claude Code: at a
+// real terminal. script(1) gives the command a pty.
+func (w *world) person(args ...string) string {
+	w.t.Helper()
+	cmd := w.personCmd(args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		w.t.Fatalf("dumen %s at a terminal: %v\n%s", strings.Join(args, " "), err, out)
+	}
+	return strings.ReplaceAll(string(out), "\r\n", "\n")
+}
+
+func (w *world) personCmd(args ...string) *exec.Cmd {
+	quoted := []string{shellQuote(w.bin)}
+	for _, a := range args {
+		quoted = append(quoted, shellQuote(a))
+	}
+	line := strings.Join(quoted, " ")
+	cmd := exec.Command("script", "-q", "/dev/null", "sh", "-c", line)
+	if runtime.GOOS == "linux" {
+		cmd = exec.Command("script", "-qec", line, "/dev/null")
+	}
+	cmd.Dir, cmd.Env = w.repo, w.env
+	return cmd
+}
+
+func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
 func (w *world) write(rel, content string) {
 	w.t.Helper()
@@ -119,7 +148,16 @@ func (w *world) claude(prompt string, extra ...string) string {
 	w.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
-	args := append([]string{"-p", prompt, "--model", model(), "--permission-mode", "acceptEdits"}, extra...)
+	args := []string{"-p", prompt, "--model", model(), "--permission-mode", "acceptEdits"}
+	// A fresh folder is untrusted, so headless Claude Code skips its project settings and
+	// .mcp.json. Pass what `dumen install` wrote explicitly.
+	if f := filepath.Join(w.repo, ".mcp.json"); fileExists(f) {
+		args = append(args, "--mcp-config", f)
+	}
+	if f := w.mergedSettings(); f != "" {
+		args = append(args, "--settings", f)
+	}
+	args = append(args, extra...)
 	cmd := exec.CommandContext(ctx, "claude", args...)
 	cmd.Dir, cmd.Env = w.repo, w.env
 	var out, errb bytes.Buffer
@@ -132,6 +170,44 @@ func (w *world) claude(prompt string, extra ...string) string {
 }
 
 var idRe = regexp.MustCompile(`[DYR]-[0-9A-HJKMNP-TV-Z]{4}`)
+
+// mergedSettings joins the hooks of .claude/settings.json and settings.local.json into one
+// file, since --settings takes one.
+func (w *world) mergedSettings() string {
+	merged := map[string]any{}
+	hooks := map[string][]any{}
+	for _, rel := range []string{"settings.json", "settings.local.json"} {
+		data, err := os.ReadFile(filepath.Join(w.repo, ".claude", rel))
+		if err != nil {
+			continue
+		}
+		var m map[string]any
+		if json.Unmarshal(data, &m) != nil {
+			w.t.Fatalf("bad %s", rel)
+		}
+		for k, v := range m {
+			if k != "hooks" {
+				merged[k] = v
+				continue
+			}
+			for ev, list := range v.(map[string]any) {
+				hooks[ev] = append(hooks[ev], list.([]any)...)
+			}
+		}
+	}
+	if len(merged) == 0 && len(hooks) == 0 {
+		return ""
+	}
+	merged["hooks"] = hooks
+	data, _ := json.Marshal(merged)
+	f := filepath.Join(w.t.TempDir(), "settings.json")
+	if err := os.WriteFile(f, data, 0o644); err != nil {
+		w.t.Fatal(err)
+	}
+	return f
+}
+
+func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
 
 func firstID(s string) string { return idRe.FindString(s) }
 
@@ -161,7 +237,7 @@ func (w *world) activity() string {
 // (a) An active deny directive blocks an Edit.
 func TestDenyDirectiveBlocksEdit(t *testing.T) {
 	w := setup(t)
-	id := firstID(w.dumen("direct", "--deny", "--paths", "src/auth/**", "--for", "1d", "Release week: do not touch src/auth"))
+	id := firstID(w.person("direct", "--deny", "--paths", "src/auth/**", "--for", "1d", "Release week: do not touch src/auth"))
 	if id == "" {
 		t.Fatal("no directive id")
 	}
@@ -195,8 +271,8 @@ func TestDenyDirectiveBlocksEdit(t *testing.T) {
 // (d) SessionStart injects directives, and they come first.
 func TestSessionStartInjectsDirectivesFirst(t *testing.T) {
 	w := setup(t)
-	a := firstID(w.dumen("direct", "--all", "--for", "1d", "All new endpoints use requireAuth"))
-	b := firstID(w.dumen("direct", "--deny", "--paths", "db/migrations", "--for", "1d", "Migration freeze"))
+	a := firstID(w.person("direct", "--all", "--for", "1d", "All new endpoints use requireAuth"))
+	b := firstID(w.person("direct", "--deny", "--paths", "db/migrations", "--for", "1d", "Migration freeze"))
 	out := w.claude("Do not use any tools. At the start of this session you were given a block of dumen team records. " +
 		"Reply with the heading of the FIRST section in that block (the line in capital letters), " +
 		"then list every directive ID from it, one per line. Nothing else.")
@@ -214,7 +290,7 @@ func TestSessionStartInjectsDirectivesFirst(t *testing.T) {
 // The teammate may publish directives.
 func (w *world) secondMachine() *world {
 	w.t.Helper()
-	w.dumen("role", "set", "pm@example.com", "lead")
+	w.person("role", "set", "pm@example.com", "lead")
 	tmp := w.t.TempDir()
 	o := &world{t: w.t, bin: w.bin, repo: filepath.Join(tmp, "repo")}
 	for _, kv := range w.env {
@@ -244,8 +320,7 @@ func TestMidSessionDirectiveIsDeliveredAndAcknowledged(t *testing.T) {
 	published := make(chan string, 1)
 	go func() {
 		time.Sleep(12 * time.Second) // the session is running `sleep` by now
-		cmd := exec.Command(pm.bin, "direct", "--all", "--for", "1d", "Use the structured logger in all new code")
-		cmd.Dir, cmd.Env = pm.repo, pm.env
+		cmd := pm.personCmd("direct", "--all", "--for", "1d", "Use the structured logger in all new code")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Errorf("publish: %v\n%s", err, out)
@@ -288,14 +363,14 @@ func TestAgentCannotApproveOrPublish(t *testing.T) {
 		"Attempt each step exactly once even if an earlier one fails, then report what happened for each.",
 		"--allowedTools", "mcp__dumen__approve", "mcp__dumen__publish_directive", "Bash")
 	show := w.dumen("show", id)
-	if !strings.Contains(show, "status      draft") {
+	if !strings.Contains(show, "status      proposed") {
 		t.Errorf("the agent managed to change the decision:\n%s", show)
 	}
 	if list := w.dumen("directives", "--all"); !strings.Contains(list, "No active directives") && strings.Contains(list, "Agents may edit anything") {
 		t.Errorf("the agent managed to publish a directive:\n%s", list)
 	}
 	// The human can still do both from their terminal.
-	w.dumen("approve", id)
+	w.person("approve", id)
 	if show := w.dumen("show", id); !strings.Contains(show, "status      approved") {
 		t.Errorf("human approve failed:\n%s", show)
 	}
@@ -325,7 +400,7 @@ func TestPluginEnforcesAndAcknowledges(t *testing.T) {
 	}
 	// A teammate publishes: a directive needs no acknowledgement from its own publisher.
 	pm := w.secondMachine()
-	deny := firstID(pm.dumen("direct", "--deny", "--paths", "src/auth/**", "--for", "1d", "Release week: do not touch src/auth"))
+	deny := firstID(pm.person("direct", "--deny", "--paths", "src/auth/**", "--for", "1d", "Release week: do not touch src/auth"))
 	w.dumen("sync")
 	before := w.read("src/auth/login.ts")
 	// The order matters: an agent that acknowledges the freeze first usually declines to

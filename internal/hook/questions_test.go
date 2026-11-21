@@ -2,6 +2,9 @@ package hook
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -84,5 +87,34 @@ func TestAnswerIsCaptured(t *testing.T) {
 	other := map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": "ls"}}
 	if out := f.run(PostToolUse, other); out != nil {
 		t.Fatalf("PostToolUse on another tool printed %+v", out)
+	}
+}
+
+// The PostToolUse input Claude Code 2.1.330 sends for AskUserQuestion, captured from a
+// live interactive session: the picked label is in tool_response.answers, and the
+// response echoes every option.
+func TestRealAnswerFixture(t *testing.T) {
+	f := newFixture(t)
+	data, err := os.ReadFile(filepath.Join("testdata", "askuserquestion-post-2.1.330.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var in map[string]any
+	if err := json.Unmarshal(data, &in); err != nil {
+		t.Fatal(err)
+	}
+	if out := f.run(PostToolUse, in); out == nil {
+		t.Fatal("no output for the real payload")
+	}
+	st := session.Load(f.proj.Store.SessionsDir(), "sess-1")
+	if len(st.Answers) != 1 {
+		t.Fatalf("captured: %+v", st.Answers)
+	}
+	a := st.Answers[0]
+	if got := a.Picked["Which queue should orders use?"]; len(got) != 1 || got[0] != "Kafka" {
+		t.Fatalf("picked: %+v", a.Picked)
+	}
+	if len(a.Questions) != 1 || len(a.Questions[0].Options) != 2 {
+		t.Fatalf("questions: %+v", a.Questions)
 	}
 }
