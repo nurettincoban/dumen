@@ -286,6 +286,9 @@ func TestRefsAndPathLookup(t *testing.T) {
 	if out := w.hook(hook.SessionStart, map[string]any{"source": "startup"}); strings.Contains(out, "Checkout flow") || !strings.Contains(out, "awaiting a human check") {
 		t.Fatalf("an unverified ref must not be injected, only counted: %s", out)
 	}
+	if text, isErr := w.call("get_decision", map[string]any{"id": ref}); !isErr || strings.Contains(text, "claude.ai/design") {
+		t.Fatalf("an unverified ref must not be readable by id: %s", text)
+	}
 	ctx := context.Background()
 	if _, err := w.proj.Engine().Submit(ctx, model.Actor{Email: testutil.Lead.Email, Kind: model.KindAgent}, &op.CheckRef{ID: ref}); !errors.Is(err, op.ErrForbidden) {
 		t.Fatalf("an agent must not confirm a ref, got %v", err)
@@ -295,6 +298,10 @@ func TestRefsAndPathLookup(t *testing.T) {
 	}
 	if text := w.ok("decisions_for_path", path); !strings.Contains(text, ref) || !strings.Contains(text, "https://claude.ai/design/abc") {
 		t.Fatalf("decisions_for_path after the human check: %s", text)
+	}
+	// An agent that has a link's id can read the link with the tool it reaches for first.
+	if text := w.ok("get_decision", map[string]any{"id": strings.ToLower(ref)}); !strings.Contains(text, "https://claude.ai/design/abc") || !strings.Contains(text, "checkout screens") {
+		t.Fatalf("get_decision with a ref id: %s", text)
 	}
 	if text := w.ok("propose_directive", map[string]any{"text": "Use the new logger", "role": "backend"}); !strings.Contains(text, "not in force") {
 		t.Fatalf("propose: %s", text)

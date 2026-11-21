@@ -40,8 +40,6 @@ Everything dumen does not do, or does not do yet. dumen is early and has not bee
 - **Non-technical teammates.** Today everyone needs git access to the store. A friendlier path for
   product managers without a git account is not built yet. The generated `DECISIONS.md` and
   `ACTIVITY.md` can be read in the web UI of your git host.
-- **Local remotes need an absolute path.** `dumen init` fails when `origin` is a relative path such
-  as `../remote.git`.
 - **Old and new versions.** A store upgraded by a newer dumen becomes read-only for older ones
   until they upgrade; they say so and write nothing.
 - **Continuous integration** for this repository is not set up yet. Tests run locally, on Linux.

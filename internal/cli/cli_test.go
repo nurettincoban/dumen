@@ -486,3 +486,62 @@ func TestHostRefusalIsShownAsIs(t *testing.T) {
 		t.Fatalf("the refused directive was published later: %q", list)
 	}
 }
+
+// `dumen init` works when origin is a relative local path: the store's clone lives
+// elsewhere, so the path is resolved against the repository first.
+func TestInitResolvesARelativeOrigin(t *testing.T) {
+	testutil.Home(t)
+	t.Setenv("CLAUDECODE", "")
+	remote := testutil.BareRemote(t)
+	dir := filepath.Join(filepath.Dir(remote), "code")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"init", "-q"}, {"config", "user.email", testutil.Lead.Email}, {"config", "user.name", "Lead"},
+		{"remote", "add", "origin", "../" + filepath.Base(remote)},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	t.Chdir(dir)
+	run(t, "init")
+	if out := run(t, "status"); !strings.Contains(out, "up to date") {
+		t.Fatalf("status after init with a relative origin:\n%s", out)
+	}
+}
+
+// `dumen join <url>` names the project after the store's own dumen.yml, not after the
+// URL, so a workspace shares local state with the code repositories of the project.
+func TestJoinWorkspaceUsesTheStoreProjectName(t *testing.T) {
+	_, p := repo(t)
+	run(t, "role", "set", testutil.PM.Email, "pm")
+	remote := p.Store.Remote
+	want := p.Name
+
+	// The PM's machine: its own dumen home, a global git identity, no code.
+	testutil.Home(t)
+	global := filepath.Join(t.TempDir(), "gitconfig")
+	if err := os.WriteFile(global, []byte("[user]\n\temail = "+testutil.PM.Email+"\n\tname = PM\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", global)
+	spaces := t.TempDir()
+	t.Setenv("DUMEN_WORKSPACES", spaces)
+	// A URL whose last element differs from the project name.
+	alias := filepath.Join(t.TempDir(), "team-store.git")
+	if err := os.Symlink(remote, alias); err != nil {
+		t.Skip("symlinks are not available")
+	}
+	t.Chdir(t.TempDir())
+	out := run(t, "join", alias)
+	if !strings.Contains(out, "Joined project \""+want+"\"") {
+		t.Fatalf("join should use the project name from the store (%q):\n%s", want, out)
+	}
+	if _, err := os.Stat(filepath.Join(spaces, want, project.File)); err != nil {
+		t.Fatalf("workspace %s was not created: %v", want, err)
+	}
+}

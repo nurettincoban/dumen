@@ -13,6 +13,8 @@ import (
 
 	"github.com/nurettincoban/dumen/internal/gitx"
 	"github.com/nurettincoban/dumen/internal/model"
+
+	"gopkg.in/yaml.v3"
 )
 
 // DefaultBranch is the branch dumen records live on.
@@ -51,6 +53,33 @@ func ProjectName(remote string) string {
 		s = "project"
 	}
 	return s
+}
+
+// RemoteProject reads the project name from dumen.yml on the store branch without
+// setting anything up locally. It returns "" when the name cannot be read.
+func RemoteProject(ctx context.Context, remote, branch string) string {
+	tmp, err := os.MkdirTemp("", "dumen-peek-")
+	if err != nil {
+		return ""
+	}
+	defer os.RemoveAll(tmp)
+	g := gitx.Git{Dir: tmp}
+	for _, st := range [][]string{{"init", "-q"}, {"fetch", "-q", "--depth", "1", remote, "refs/heads/" + branch}} {
+		if _, err := g.Run(ctx, st...); err != nil {
+			return ""
+		}
+	}
+	out, err := g.Run(ctx, "show", "FETCH_HEAD:"+ConfigFile)
+	if err != nil {
+		return ""
+	}
+	var cfg struct {
+		Project string `yaml:"project"`
+	}
+	if yaml.Unmarshal([]byte(out), &cfg) != nil {
+		return ""
+	}
+	return model.Slug(cfg.Project)
 }
 
 // Local is the per-machine description of a store (~/.dumen/<project>/local.json).
