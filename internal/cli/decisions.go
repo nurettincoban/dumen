@@ -95,7 +95,7 @@ func (f decisionFlags) build(a *app, p *project.Project) (model.Decision, string
 	}
 	d := model.Decision{ID: model.NewID(model.PrefixDecision), Title: strings.TrimSpace(*f.title),
 		Rule: strings.Join(strings.Fields(*f.rule), " "), Kind: strings.ToLower(strings.TrimSpace(*f.kind)),
-		AppliesTo: model.AppliesTo{Services: splitList(*f.services), Topics: splitList(strings.ToLower(*f.topics))},
+		AppliesTo: model.AppliesTo{Services: splitList(strings.ToLower(*f.services)), Topics: splitList(strings.ToLower(*f.topics))},
 		Owner:     strings.ToLower(strings.TrimSpace(*f.owner)), Area: *f.area,
 		Sources: splitList(strings.ToUpper(*f.sources)), AnchoredAt: Anchor(root)}
 	for _, x := range splitList(*f.paths) {

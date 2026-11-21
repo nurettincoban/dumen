@@ -105,8 +105,8 @@ type Config struct {
 	// Topics are words from the product's language. Each maps to the keywords that
 	// bring its decisions to an agent's attention when a request mentions them.
 	Topics map[string][]string `yaml:"topics,omitempty"`
-	// Kinds are the kinds of decision the team records, each with the role that owns
-	// it. Empty means DefaultKinds.
+	// Kinds are extra kinds of decision the team records, or a different owner role for
+	// a default kind. The default kinds are always known.
 	Kinds    map[string]KindConfig `yaml:"kinds,omitempty"`
 	Areas    map[string]Area       `yaml:"areas,omitempty"`
 	Settings Settings              `yaml:"settings"`
@@ -117,12 +117,14 @@ type KindConfig struct {
 	OwnerRole string `yaml:"owner_role"`
 }
 
-// KindsOrDefault returns the configured kinds, or DefaultKinds when none are declared.
+// KindsOrDefault returns the default kinds together with the ones dumen.yml declares. A
+// declared kind with the name of a default one changes its owner role.
 func (c Config) KindsOrDefault() map[string]KindConfig {
-	if len(c.Kinds) > 0 {
-		return c.Kinds
+	out := DefaultKinds()
+	for k, v := range c.Kinds {
+		out[k] = v
 	}
-	return DefaultKinds()
+	return out
 }
 
 // KnownKind reports whether kind is one of the team's decision kinds.
@@ -314,6 +316,12 @@ func ValidName(s string) bool {
 	return true
 }
 
+// ValidService reports whether s is a usable service name: a repository name as `dumen
+// init --repo` accepts it, in lower case, since .dumen stores repository names that way.
+func ValidService(s string) bool {
+	return CheckName("service", s) == nil && s == strings.ToLower(s)
+}
+
 // Validate checks field-level rules.
 func (d Decision) Validate() error {
 	if !ValidID(d.ID, PrefixDecision) {
@@ -329,9 +337,12 @@ func (d Decision) Validate() error {
 		return fmt.Errorf("decision %s: invalid kind %q", d.ID, d.Kind)
 	}
 	for _, s := range d.AppliesTo.Services {
-		if s != "*" && !ValidName(s) {
-			return fmt.Errorf("decision %s: invalid service %q", d.ID, s)
+		if s != "*" && !ValidService(s) {
+			return fmt.Errorf("decision %s: invalid service %q: use the repository name from .dumen", d.ID, s)
 		}
+	}
+	if d.Owner != "" && (!strings.Contains(d.Owner, "@") || strings.ContainsAny(d.Owner, " \t\r\n") || len(d.Owner) > 254) {
+		return fmt.Errorf("decision %s: owner %q is not an email address", d.ID, d.Owner)
 	}
 	for _, t := range d.AppliesTo.Topics {
 		if !ValidName(t) {

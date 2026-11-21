@@ -511,7 +511,8 @@ func (s *Server) GetDecision(ctx context.Context, in idIn) (string, error) {
 		svc = strings.Join(d.AppliesTo.Services, ", ")
 	}
 	fmt.Fprintf(&b, "\nrule: %s\nkind: %s\nservices: %s\ntopics: %s\nowner: %s",
-		dash(render.Label(d.Rule, 300)), dash(d.Kind), svc, dash(strings.Join(d.Topics(), ", ")), dash(d.Owner))
+		dash(render.Label(d.Rule, 300)), dash(render.Label(d.Kind, 40)), render.Label(svc, 300),
+		dash(render.Label(strings.Join(d.Topics(), ", "), 300)), dash(render.Label(d.Owner, 120)))
 	fmt.Fprintf(&b, "\narea: %s\npaths: %s\nauthor: %s (%s)\napproved by: %s\nsupersedes: %s\ncreated: %s\n",
 		dash(d.Area), dash(strings.Join(d.Paths, ", ")), d.Author, d.AuthorKind, dash(d.ApprovedBy), dash(strings.Join(d.Supersedes, ", ")), d.Created)
 	for _, r := range refs {
@@ -618,7 +619,7 @@ func (s *Server) DraftDecision(ctx context.Context, in decisionIn) (string, erro
 func decisionFrom(in decisionIn) model.Decision {
 	return model.Decision{ID: model.NewID(model.PrefixDecision), Title: strings.TrimSpace(in.Title),
 		Rule: strings.Join(strings.Fields(in.Rule), " "), Kind: strings.ToLower(strings.TrimSpace(in.Kind)),
-		AppliesTo: model.AppliesTo{Services: trimAll(in.Services), Topics: trimAll(lowerAll(in.Topics))},
+		AppliesTo: model.AppliesTo{Services: trimAll(lowerAll(in.Services)), Topics: trimAll(lowerAll(in.Topics))},
 		Area:      in.Area, Sources: upper(in.Sources)}
 }
 

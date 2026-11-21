@@ -187,6 +187,9 @@ func (o *CreateDecision) Apply(tx *Tx) error {
 				return fmt.Errorf("decision: %s is not approved, so it cannot be superseded", s)
 			}
 		}
+		if err := mayRetire(cfg, tx.Actor.Email, d.Supersedes, byID); err != nil {
+			return err
+		}
 		d.Status = model.StatusApproved
 		d.ApprovedBy = tx.Actor.Email
 	}
@@ -233,6 +236,19 @@ func upgradeSchema(tx *Tx, cfg model.Config) error {
 	}
 	cfg.Version = 2
 	return store.WriteConfig(tx.Root, cfg)
+}
+
+// mayRetire checks that the person approving a decision that supersedes others may also
+// approve each decision it retires: a designer who approves a UX decision must not
+// retire an architecture decision through it.
+func mayRetire(cfg model.Config, email string, ids []string, byID map[string]model.Decision) error {
+	for _, id := range ids {
+		old := byID[id]
+		if !cfg.CanApprove(email, old.Kind, old.Area) {
+			return fmt.Errorf("%w: %s may not retire %s, which is one of the %s", ErrForbidden, email, id, what(old))
+		}
+	}
+	return nil
 }
 
 // what names a decision for an error message.
@@ -295,6 +311,12 @@ func (o *ResolveDecision) Apply(tx *Tx) error {
 			if byID[s].Status != model.StatusApproved {
 				return fmt.Errorf("decision %s supersedes %s, which is not approved", d.ID, s)
 			}
+		}
+		if err := mayRetire(cfg, tx.Actor.Email, d.Supersedes, byID); err != nil {
+			return err
+		}
+		for _, id := range d.Supersedes {
+			tx.Notes = append(tx.Notes, fmt.Sprintf("%s supersedes %s [%s]: %s is no longer in force", d.ID, id, orDash(byID[id].Kind), id))
 		}
 		if err := policy.SupersedeCycle(all); err != nil {
 			return err
@@ -483,9 +505,6 @@ func (o *SetDirectiveStatus) Apply(tx *Tx) error {
 	}
 	d.Status = o.Status
 	if err := d.Validate(); err != nil {
-		return err
-	}
-	if err := upgradeSchema(tx, cfg); err != nil {
 		return err
 	}
 	tx.RecordID = d.ID
@@ -709,4 +728,11 @@ func (o *CompactActivity) Apply(tx *Tx) error {
 		tx.Notes = append(tx.Notes, fmt.Sprintf("compacted %d days of activity", n))
 	}
 	return nil
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
 }

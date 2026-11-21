@@ -159,3 +159,48 @@ func (o *setServices) Apply(tx *Tx) error {
 	cfg.Services = o.Services
 	return store.WriteConfig(tx.Root, cfg)
 }
+
+// Gauntlet A1: approving a decision also retires what it supersedes, so the approver
+// must be allowed to approve those too.
+func TestSupersedeNeedsRightsOverTheRetiredDecision(t *testing.T) {
+	a, _, _ := setup(t)
+	designer := model.Actor{Email: "sofia@example.com", Kind: model.KindHuman}
+	if _, err := a.Submit(ctx, testutil.Lead, &SetRole{Email: designer.Email, Role: "designer"}); err != nil {
+		t.Fatal(err)
+	}
+	arch := decision("Payments", "Only billing-svc talks to the payment provider", model.KindArchitecture)
+	arch.Approve = true
+	out, err := a.Submit(ctx, testutil.Lead, arch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sneak := decision("Checkout UX", "Checkout charges the card directly", model.KindUX)
+	sneak.Decision.Supersedes = []string{out.RecordID}
+	prop, err := a.Submit(ctx, agent, sneak)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Submit(ctx, designer, &ResolveDecision{ID: prop.RecordID, Status: model.StatusApproved}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("the designer retired an architecture decision through a UX one: %v", err)
+	}
+	direct := decision("Checkout UX", "Checkout charges the card directly", model.KindUX)
+	direct.Decision.Supersedes, direct.Approve = []string{out.RecordID}, true
+	if _, err := a.Submit(ctx, designer, direct); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("the designer superseded an architecture decision directly: %v", err)
+	}
+	got, err := a.Submit(ctx, testutil.Lead, &ResolveDecision{ID: prop.RecordID, Status: model.StatusApproved})
+	if err != nil || len(got.Notes) == 0 || !strings.Contains(got.Notes[0], "[architecture]") {
+		t.Fatalf("the lead's approval should name what it retires: %+v %v", got, err)
+	}
+}
+
+// Gauntlet B1: a repository name with a dot is a valid service.
+func TestServiceNamesFollowRepositoryNames(t *testing.T) {
+	a, _, _ := setup(t)
+	if _, err := a.Submit(ctx, agent, decision("x", "r", model.KindProduct, "billing.svc")); err != nil {
+		t.Fatalf("dotted service: %v", err)
+	}
+	if _, err := a.Submit(ctx, agent, decision("x", "r", model.KindProduct, "Billing.Svc")); err == nil {
+		t.Fatal("an upper-case service name was accepted; .dumen stores repository names in lower case")
+	}
+}
