@@ -195,7 +195,11 @@ func resolve(a *app, args []string, status string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(a.out, "%s is now %s\n", out.RecordID, status)
+	id := out.RecordID
+	if id == "" {
+		id = strings.ToUpper(args[0])
+	}
+	fmt.Fprintf(a.out, "%s is now %s\n", id, status)
 	return nil
 }
 

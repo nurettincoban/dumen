@@ -143,13 +143,46 @@ and shows the decision.
 
 ### Two backend developers, one product
 
-Ayşe's agent in `booking-svc` asks her what happens to the money when a guest cancels. She
-picks an option in Claude Code's question prompt; the agent saves it with `record_answer` and
-she confirms `approve`. Mehmet's agent in `billing-svc`, in the middle of a refund endpoint,
-gets the same DECISION NEWS on its next step. When Mehmet later learns that store credit
-breaks the accounting rules in one country, he tells his agent to change it; the agent calls
-`supersede`, he confirms, and every agent on payments hears "D-9QXA ... replaces D-7K2P".
-Anyone who asks their agent "what changed this week?" gets the same list from the `news` tool.
+Recorded in interactive Claude Code, two terminals side by side
+([full excerpt](docs/transcripts/interactive-two-backends.txt)). Ayşe is adding guest
+cancellation to `booking-svc`; her agent checks the team's decisions, finds none, and asks:
+
+```text
+● Nothing in the team's decisions covers this yet, so I'll ask you.
+ ☐ Cancel money
+│ When a guest cancels a booking, what happens to the money: refund to the original card, or store credit?
+  1. Refund to card
+❯ 2. Store credit
+```
+
+It saves her pick as D-TKB0 and asks whether to put it in force. She says yes, and Claude
+Code shows the permission prompt dumen asked for:
+
+```text
+ dumen — Approve Tool: (MCP)
+ │ dumen: approving a decision (D-TKB0) is a human action. It puts in force D-TKB0 [product] "When a guest cancels a booking, the money is
+ │ returned as store credit usable on future bookings, not refunded to the original card.". Confirm only if you, the human, want this.
+ Do you want to proceed?
+ ❯ 1. Yes
+```
+
+In the same minute Mehmet's agent in `billing-svc` was running a 75-second test before writing
+a refund endpoint. When it finished, it told Mehmet:
+
+```text
+● The baseline passed (sh test.sh exited 0), and I added the skeleton at src/refund.go. ...
+  A teammate's decision just came in: D-TKB0 (product, approved by ayse, in booking-svc)
+  says a guest cancelling a booking gets store credit for future bookings, not a refund
+  to the original card. That affects this endpoint. If refunds here are cancellation
+  refunds, RefundBooking should issue store credit rather than call the card processor.
+  Do you want it to follow that rule, or is this a different kind of refund, such as a
+  billing dispute?
+```
+
+If Mehmet later learns that store credit breaks the accounting rules in one country, he tells
+his agent to change it; the agent calls `supersede`, he confirms, and every agent on payments
+hears the replacement as news. Choosing "Yes, and don't ask again" for `approve` does not
+skip the prompt: the recording shows the next approval asking again.
 
 Other decisions such a team keeps: "Only billing-svc talks to the payment provider"
 (architecture), "A booking is held for 10 minutes while the guest pays" (product), "Creating a

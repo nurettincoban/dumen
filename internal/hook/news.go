@@ -63,11 +63,19 @@ func (r *runCtx) news() []cache.Decision {
 		r.sess.Save()
 		return nil
 	}
+	own := session.Approved(r.proj.Store.SessionsDir(), r.sess.Session)
 	var out []cache.Decision
 	for i := len(r.c.Decisions) - 1; i >= 0; i-- {
 		d := r.c.Decisions[i]
 		// A subagent has its own context: what it is told does not count for the main agent.
 		if session.Has(r.sess.Known, d.ID) || (sub != "" && session.Has(r.sess.SubKnown[sub], d.ID)) || !r.c.Concerns(d, r.proj.Repo) {
+			continue
+		}
+		// This session's own dumen server put it in force: the agent called approve or
+		// supersede itself, so it is not news here. Every other session, the same
+		// person's included, still gets it.
+		if sub == "" && session.Has(own, d.ID) {
+			r.sess.Known = session.Add(r.sess.Known, d.ID)
 			continue
 		}
 		out = append(out, d)

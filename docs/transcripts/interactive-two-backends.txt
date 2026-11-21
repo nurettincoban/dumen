@@ -1,0 +1,83 @@
+# Interactive Claude Code, two developers, 2026-11-21. Excerpts copied from the terminal, unedited apart from cut lines.
+
+## Ayşe, booking-svc
+❯ I'm adding guest cancellation to booking-svc. Before you write code, ask me with your question tool what happens to the money when a guest cancels: refund to
+  the card, or store credit.
+  Called dumen
+● Nothing in the team's decisions covers this yet, so I'll ask you.
+────────────────────────────────────────
+ ☐ Cancel money
+│ When a guest cancels a booking, what happens to the money: refund to the original card, or store credit?
+❯ 1. Refund to card
+     Return the payment to the guest's original card.
+  2. Store credit
+     Issue credit the guest can spend on a future booking; no money goes back to the card.
+  3. Type something.
+────────────────────────────────────────
+  4. Chat about this
+[Ayşe picks 2. Store credit]
+● Answered Claude's questions:
+  ⎿  · When a guest cancels a booking, what happens to the money: refund to the original card, or store credit? → Store credit
+  Called dumen
+● You picked store credit. I saved it as proposed decision D-TKB0: guest cancellations return money as store credit, not a refund to the card. It only binds the
+  team once approved.
+  Do you want me to approve it now so other agents get it as news? If yes, I'll start on the cancellation code with store credit as the rule.
+✻ Cooked for 8s · done 2:27 PM
+❯ Yes, put it in force.
+  Calling dumen…
+────────────────────────────────────────
+ Tool use
+ dumen — Approve Tool: (MCP)
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ id: "D-TKB0"
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ About the dumen — Approve Tool:
+ │ Approve a proposed decision. Human action: the person is asked to confirm.
+ │ Hook PreToolUse:mcp__dumen__approve requires confirmation for this tool:
+ │ dumen: approving a decision (D-TKB0) is a human action. It puts in force D-TKB0 [product] "When a guest cancels a booking, the money is returned as store
+ │ credit usable on future bookings, not refunded to the original card.". Confirm only if you, the human, want this. [settings]
+ settings.json to update hooks
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don't ask again for dumen — Approve commands in /work/booking-svc
+   3. No
+ Esc to cancel · Tab to amend
+[Ayşe picks 1. Yes]
+
+## Mehmet, billing-svc, same minute, mid-task
+❯ I'm adding a refund endpoint to billing-svc. First run sh test.sh once (it takes about a minute) to make sure the baseline passes, then write a small
+  RefundBooking function skeleton in src/refund.go.
+  [the baseline test runs for 75 seconds; Ayşe approves D-TKB0 meanwhile; the agent writes src/refund.go]
+● The baseline passed (sh test.sh exited 0), and I added the skeleton at src/refund.go.
+  It's in package main to match src/main.go, and gofmt reports nothing. I couldn't
+  compile it, because the repo has no go.mod, so go vet wouldn't run.
+  RefundBooking(bookingID string, amount int64) (*RefundResult, error) currently returns
+  ErrNotImplemented. The TODOs cover refundability checks, idempotency keyed by booking
+  ID, and how the money is returned.
+  A teammate's decision just came in: D-TKB0 (product, approved by ayse, in booking-svc)
+  says a guest cancelling a booking gets store credit for future bookings, not a refund
+  to the original card. That affects this endpoint. If refunds here are cancellation
+  refunds, RefundBooking should issue store credit rather than call the card processor.
+  Do you want it to follow that rule, or is this a different kind of refund, such as a
+  billing dispute? Until you say, I've left the return mechanism open in the skeleton.
+
+## Ayşe chose "Yes, and don't ask again" for approve on the previous decision; settings.local.json now allows mcp__dumen__approve. The next approval still asks:
+❯ One more: record that only billing-svc talks to the payment provider (architecture, topic payments), and put it in force.
+  Calling dumen 2 times…
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Tool use
+ dumen — Approve Tool: (MCP)
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ id: "D-XS33"
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ About the dumen — Approve Tool:
+ │ Approve a proposed decision. Human action: the person is asked to confirm.
+ │ Hook PreToolUse:mcp__dumen__approve requires confirmation for this tool:
+ │ dumen: approving a decision (D-XS33) is a human action. It puts in force D-XS33 [architecture] "Only billing-svc talks to the payment provider; every other
+ │ service (including booking-svc) must go through billing-svc for charges, refunds and credits.". Confirm only if you, the human, want this. [settings]
+ settings.json to update hooks
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don't ask again for dumen — Approve commands in /work/booking-svc
+   3. No
+ Esc to cancel · Tab to amend

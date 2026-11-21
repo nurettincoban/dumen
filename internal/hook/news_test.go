@@ -102,3 +102,21 @@ func TestSubagentDoesNotUseUpNews(t *testing.T) {
 		t.Fatalf("the main agent lost the news to its subagent: %s", got)
 	}
 }
+
+// A decision the person approved outside this session, in the same repository, is
+// still news here: they may run two sessions (gauntlet N2). Only the session whose own
+// server approved it is spared; see mcpserver.TestOwnApprovalIsNewsOnlyElsewhere.
+func TestSamePersonOtherSessionGetsNews(t *testing.T) {
+	f := newFixture(t)
+	f.now = f.now.Add(-time.Hour)
+	f.run(SessionStart, map[string]any{"source": "startup"})
+	f.now = f.now.Add(time.Hour)
+	mine := f.submit(&op.CreateDecision{Decision: model.Decision{ID: model.NewID("D"), Title: "Mine", Rule: "Cancelled bookings are refunded as store credit",
+		Kind: model.KindProduct}, Body: "Why.", Approve: true})
+	if _, err := f.proj.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := ctxOf(f.run(PreToolUse, map[string]any{"tool_name": "Read", "tool_input": map[string]any{"file_path": "x"}})); !strings.Contains(got, mine) || !strings.Contains(got, "approved by you") {
+		t.Errorf("the same person's decision from another session must be news here:\n%s", got)
+	}
+}

@@ -360,6 +360,16 @@ func (s *Server) ProposeDirective(ctx context.Context, in directiveIn) (string, 
 	return fmt.Sprintf("Proposed %s. It is not in force. A PM or lead puts it in force: their agent calls publish_directive with id %s and they confirm the prompt.%s", out.RecordID, out.RecordID, note), nil
 }
 
+// markOwn records, for this server's own session, a decision this server just put in
+// force, so that the session is not told about it as news. Other sessions still are.
+func (s *Server) markOwn(p *project.Project, id string) {
+	if id == "" || s.ParentPID <= 0 {
+		return
+	}
+	dir := p.Store.SessionsDir()
+	session.MarkApproved(dir, session.ForParent(dir, s.ParentPID), id)
+}
+
 // human is the actor for a call the person confirmed in the permission prompt.
 func (s *Server) human(p *project.Project) model.Actor {
 	return model.Actor{Email: p.Store.Email, Kind: model.KindHuman}
@@ -714,6 +724,10 @@ func (s *Server) Approve(ctx context.Context, in idIn) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if out.RecordID == "" || strings.HasPrefix(out.RecordID, "(") {
+		out.RecordID = strings.ToUpper(strings.TrimSpace(in.ID)) // the op names no record when it only changes a status
+	}
+	s.markOwn(p, out.RecordID)
 	return fmt.Sprintf("%s is now approved.%s", out.RecordID, note), nil
 }
 
@@ -738,6 +752,7 @@ func (s *Server) Supersede(ctx context.Context, in decisionIn) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	s.markOwn(p, out.RecordID)
 	return fmt.Sprintf("Recorded %s (approved), superseding %s.%s", out.RecordID, old, note), nil
 }
 
