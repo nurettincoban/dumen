@@ -80,6 +80,7 @@ func init() {
 	register(func() Op { return &CheckRef{} })
 	register(func() Op { return &UpdateConfig{} })
 	register(func() Op { return &SetRole{} })
+	register(func() Op { return &SetProduct{} })
 	register(func() Op { return &CompactActivity{} })
 }
 
@@ -123,7 +124,11 @@ func (o *CreateDecision) Check() error {
 	if strings.TrimSpace(d.Title) == "" {
 		return fmt.Errorf("decision: title is required")
 	}
-	return secrets.Scan(d.Title, d.Rule, o.Body, d.Area, strings.Join(d.Paths, "\n"))
+	texts := []string{d.Title, d.Rule, o.Body, d.Area, strings.Join(d.Paths, "\n")}
+	if d.Origin != nil {
+		texts = append(texts, d.Origin.Question, d.Origin.Answer, strings.Join(d.Origin.Options, "\n"))
+	}
+	return secrets.Scan(texts...)
 }
 
 func (o *CreateDecision) Apply(tx *Tx) error {
@@ -687,6 +692,133 @@ func (o *SetRole) Apply(tx *Tx) error {
 	tx.cfg = nil
 	tx.RecordID = o.Email
 	return store.WriteConfig(tx.Root, cfg)
+}
+
+// SetProduct changes the product description, services, topics and decision kinds in
+// dumen.yml one entry at a time, so that two people editing different entries never
+// overwrite each other. An empty value removes the entry. Publishers only.
+type SetProduct struct {
+	Product  *string             `json:"product,omitempty"`
+	Services map[string]string   `json:"services,omitempty"` // name -> description
+	Topics   map[string][]string `json:"topics,omitempty"`   // name -> keywords
+	Kinds    map[string]string   `json:"kinds,omitempty"`    // name -> owner role
+}
+
+func (o *SetProduct) Kind() string { return "config.product" }
+
+func (o *SetProduct) Check() error {
+	for _, n := range model.SortedKeys(o.Services) {
+		if !model.ValidService(n) {
+			return fmt.Errorf("service %q: use the repository name, in lower case", n)
+		}
+	}
+	for _, names := range [][]string{model.SortedKeys(o.Topics), model.SortedKeys(o.Kinds)} {
+		for _, n := range names {
+			if !model.ValidName(n) {
+				return fmt.Errorf("%q: names are lowercase letters, digits, - and _ (at most 40)", n)
+			}
+		}
+	}
+	for k, r := range o.Kinds {
+		if r != "" && model.Slug(r) != r {
+			return fmt.Errorf("kind %s: role %q must be a short lowercase word such as pm, designer or lead", k, r)
+		}
+	}
+	var texts []string
+	if o.Product != nil {
+		texts = append(texts, *o.Product)
+	}
+	for _, d := range o.Services {
+		texts = append(texts, d)
+	}
+	for _, kws := range o.Topics {
+		texts = append(texts, kws...)
+	}
+	for _, t := range texts {
+		if strings.ContainsAny(t, "\n\r") || len(t) > 200 {
+			return fmt.Errorf("the product description, service descriptions and keywords are one line of at most 200 characters")
+		}
+	}
+	return secrets.Scan(texts...)
+}
+
+func (o *SetProduct) Apply(tx *Tx) error {
+	cfg, err := tx.Config()
+	if err != nil {
+		return err
+	}
+	if err := requireHuman(tx, "change dumen.yml"); err != nil {
+		return err
+	}
+	if !cfg.CanPublish(tx.Actor.Email) {
+		return fmt.Errorf("%w: %s may not change the product description, services, topics or kinds", ErrForbidden, tx.Actor.Email)
+	}
+	if o.Product != nil {
+		cfg.Product = strings.TrimSpace(*o.Product)
+	}
+	services := map[string]string{} // copies: tx.Config shares its maps
+	for k, v := range cfg.Services {
+		services[k] = v
+	}
+	for k, v := range o.Services {
+		if v = strings.TrimSpace(v); v == "" {
+			delete(services, k)
+		} else {
+			services[k] = v
+		}
+	}
+	topics := map[string][]string{}
+	for k, v := range cfg.Topics {
+		topics[k] = v
+	}
+	for k, v := range o.Topics {
+		var kws []string
+		for _, kw := range v {
+			if kw = strings.ToLower(strings.TrimSpace(kw)); kw != "" {
+				kws = append(kws, kw)
+			}
+		}
+		if len(kws) == 0 {
+			delete(topics, k)
+		} else {
+			topics[k] = kws
+		}
+	}
+	kinds := map[string]model.KindConfig{}
+	for k, v := range cfg.KindsOrDefault() {
+		kinds[k] = v
+	}
+	for k, r := range o.Kinds {
+		if r == "" {
+			delete(kinds, k)
+		} else {
+			kinds[k] = model.KindConfig{OwnerRole: r}
+		}
+	}
+	if len(kinds) == 0 {
+		return fmt.Errorf("at least one kind of decision must remain")
+	}
+	cfg.Services, cfg.Topics, cfg.Kinds = nilIfEmpty(services), nilIfEmptyList(topics), kinds
+	tx.cfg = nil
+	tx.RecordID = "dumen.yml"
+	if cfg.Version < 2 {
+		cfg.Version = 2
+	}
+	return store.WriteConfig(tx.Root, cfg)
+}
+
+func nilIfEmpty(m map[string]string) map[string]string {
+	if len(m) == 0 {
+		return nil
+	}
+	return m
+}
+
+func nilIfEmptyList(m map[string][]string) map[string][]string {
+	if len(m) == 0 {
+		return nil
+	}
+	return m
 }
 
 // ---- maintenance ----

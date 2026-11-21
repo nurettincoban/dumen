@@ -1,5 +1,21 @@
 {
   "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "dumen",
+            "args": [
+              "hook",
+              "post-tool-use"
+            ],
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "*",

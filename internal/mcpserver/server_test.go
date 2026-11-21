@@ -8,6 +8,7 @@ import (
 	"github.com/nurettincoban/dumen/internal/session"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -144,7 +145,7 @@ func TestToolList(t *testing.T) {
 		}
 	}
 	sort.Strings(names)
-	want := "ack_directive activity add_ref approve decisions_for_path directives draft_decision get_decision log_event propose_directive publish_directive search_decisions supersede"
+	want := "ack_directive activity add_ref approve decisions_for_path directives draft_decision get_decision log_event propose_directive publish_directive record_answer search_decisions supersede"
 	if got := strings.Join(names, " "); got != want {
 		t.Fatalf("tools:\n got %s\nwant %s", got, want)
 	}
@@ -400,6 +401,49 @@ func TestConfirmationOnlyInModesWithAPerson(t *testing.T) {
 		out := w.hook(hook.PreToolUse, map[string]any{"tool_name": "mcp__dumen__approve", "permission_mode": mode, "tool_input": args})
 		if !strings.Contains(out, `"permissionDecision":"ask"`) {
 			t.Errorf("mode %q: want ask, got %s", mode, out)
+		}
+	}
+}
+
+// The permission prompt for approve and supersede says what the person is putting in
+// force and what it retires, so that nobody approves an id they cannot read.
+func TestConfirmationSaysWhatIsDecided(t *testing.T) {
+	w := setup(t)
+	idOf := func(text string) string { return text[strings.Index(text, "D-") : strings.Index(text, "D-")+6] }
+	old := idOf(w.ok("draft_decision", map[string]any{"title": "Payments", "rule": "Any service may call the payment provider", "kind": "architecture", "body": "b"}))
+	if text, isErr := w.confirmed("approve", map[string]any{"id": old}); isErr {
+		t.Fatal(text)
+	}
+	ask := func(tool string, args map[string]any) string {
+		t.Helper()
+		out := w.hook(hook.PreToolUse, map[string]any{"tool_name": "mcp__dumen__" + tool, "permission_mode": "default", "tool_input": args})
+		if !strings.Contains(out, `"permissionDecision":"ask"`) {
+			t.Fatalf("%s: hook did not ask: %s", tool, out)
+		}
+		return out
+	}
+	sup := map[string]any{"id": old, "title": "Payments via billing", "rule": "Only billing-svc talks to the payment provider", "body": "b"}
+	got := ask("supersede", sup)
+	for _, want := range []string{"retires " + old + " [architecture]", "Any service may call", "Only billing-svc talks"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("supersede prompt lacks %q: %s", want, got)
+		}
+	}
+	text, isErr := w.confirmed("supersede", sup)
+	if isErr {
+		t.Fatal(text)
+	}
+	var newID string
+	for _, id := range regexp.MustCompile(`D-[0-9A-Z]{4}`).FindAllString(text, -1) {
+		if id != old {
+			newID = id
+			break
+		}
+	}
+	got = ask("approve", map[string]any{"id": newID})
+	for _, want := range []string{"puts in force " + newID + " [architecture]", "Only billing-svc talks", "retires " + old + " [architecture]"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("approve prompt lacks %q: %s", want, got)
 		}
 	}
 }

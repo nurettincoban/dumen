@@ -27,8 +27,40 @@ type State struct {
 	Finished     bool                `json:"finished,omitempty"`
 	Asking       bool                `json:"asking,omitempty"`   // the agent said it is waiting for its human
 	Violated     []string            `json:"violated,omitempty"` // "<directive id> <file>" already reported as changed under a deny directive
+	Held         []string            `json:"held,omitempty"`     // keys of questions held back once because a decision may answer them
+	Answers      []Answer            `json:"answers,omitempty"`  // the last questions the agent asked its human, with the raw answer
 
 	path string
+}
+
+// Answer is one call of Claude Code's question tool as the PostToolUse hook saw it.
+// Raw keeps what Claude Code returned for the call as it was sent, because the shape of
+// the answer is not documented: dumen only searches it for the picked label.
+type Answer struct {
+	At        string     `json:"at"`
+	ToolUseID string     `json:"tool_use_id,omitempty"`
+	Questions []Question `json:"questions"`
+	// Picked holds the labels Claude Code reported per question, when it reported them
+	// in a structured "answers" field.
+	Picked map[string][]string `json:"picked,omitempty"`
+	Raw    string              `json:"raw"`
+}
+
+// Question is one question of a question-tool call.
+type Question struct {
+	Question string   `json:"question"`
+	Options  []string `json:"options,omitempty"`
+}
+
+// MaxAnswers is how many question-tool calls a session keeps.
+const MaxAnswers = 10
+
+// AddAnswer keeps the newest MaxAnswers calls.
+func (s *State) AddAnswer(a Answer) {
+	s.Answers = append(s.Answers, a)
+	if n := len(s.Answers); n > MaxAnswers {
+		s.Answers = s.Answers[n-MaxAnswers:]
+	}
 }
 
 func safe(id string) string {

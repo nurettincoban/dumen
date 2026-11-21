@@ -52,6 +52,15 @@ that role below. Everyone follows "Always".
   its `kind` (`product`, `ux`, `ui`, `architecture` or `technical`), the `services` and
   `topics` it applies to, and a body with why, what is allowed and not allowed, and the
   rejected alternatives. It is proposed until the person who owns that kind approves it.
+- **Ask, then save the answer.** When you meet a lasting choice nobody wrote down (a
+  calendar or slot buttons, keep or release a hold, a new table or a column), ask your
+  human with the question tool (`AskUserQuestion`) and recommend an option. dumen may hold
+  the question back once with an approved decision that already answers it: follow that
+  decision and tell your human which one, or ask again unchanged if it does not apply.
+  After your human answers, save the answer with `record_answer` (the question, the
+  picked option, a one-sentence `rule`, its `kind`, `services` and `topics`), once per
+  question, and tell your human in one line. If dumen lists similar decisions, follow the
+  one that covers it; call again with `new: true` only if none does.
 - Do **not** record trivial or local details: variable names, a refactor inside one
   file, a bug fix, anything a reader gets from the diff.
 - If a decision you need already exists, follow it. If it looks wrong for the task,

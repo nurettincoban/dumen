@@ -787,7 +787,7 @@ func cmdInstall(a *app, args []string) error {
 
 func cmdHook(a *app, args []string) error {
 	if len(args) != 1 {
-		return fmt.Errorf("usage: dumen hook <session-start|user-prompt-submit|pre-tool-use|stop|session-end>")
+		return fmt.Errorf("usage: dumen hook <session-start|user-prompt-submit|pre-tool-use|post-tool-use|stop|session-end>")
 	}
 	hook.Run(args[0], a.in, a.out, hook.Env{
 		ProjectDir: os.Getenv("CLAUDE_PROJECT_DIR"),

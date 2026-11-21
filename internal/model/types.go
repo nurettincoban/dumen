@@ -237,8 +237,26 @@ type Decision struct {
 	Supersedes []string `yaml:"supersedes,omitempty"`
 	AnchoredAt string   `yaml:"anchored_at,omitempty"` // main sha
 	Created    string   `yaml:"created"`
-	Body       string   `yaml:"-"`
+	// Origin is set when the decision records a person's answer to a question an
+	// agent asked during its work.
+	Origin *Origin `yaml:"origin,omitempty"`
+	Body   string  `yaml:"-"`
 }
+
+// Origin says which question a decision answers and who picked the answer.
+type Origin struct {
+	Question   string   `yaml:"question"`
+	Options    []string `yaml:"options,omitempty"`
+	Answer     string   `yaml:"answer"`
+	AnsweredBy string   `yaml:"answered_by"` // git email of the person whose session asked
+	Session    string   `yaml:"session,omitempty"`
+	// Verified is true when dumen saw the question and the picked answer in the
+	// session's own question tool, not only in what the agent reported.
+	Verified bool `yaml:"verified"`
+}
+
+// MaxOriginText bounds the question, each option and the answer of an Origin.
+const MaxOriginText = 500
 
 // AppliesTo scopes a decision to services and topics. No services, or "*", means the
 // whole product.
@@ -347,6 +365,19 @@ func (d Decision) Validate() error {
 	for _, t := range d.AppliesTo.Topics {
 		if !ValidName(t) {
 			return fmt.Errorf("decision %s: invalid topic %q", d.ID, t)
+		}
+	}
+	if o := d.Origin; o != nil {
+		if strings.TrimSpace(o.Question) == "" || strings.TrimSpace(o.Answer) == "" {
+			return fmt.Errorf("decision %s: an answered question needs the question and the answer", d.ID)
+		}
+		if len(o.Options) > 10 {
+			return fmt.Errorf("decision %s: at most 10 options", d.ID)
+		}
+		for _, t := range append([]string{o.Question, o.Answer}, o.Options...) {
+			if utf8.RuneCountInString(t) > MaxOriginText {
+				return fmt.Errorf("decision %s: question, options and answer are at most %d characters each", d.ID, MaxOriginText)
+			}
 		}
 	}
 	switch d.Status {

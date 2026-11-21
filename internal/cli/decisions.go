@@ -20,6 +20,7 @@ func init() {
 	commands = append(commands,
 		command{"decide", `decide --title T --rule R --kind K [--services S1,S2] [--topics T1,T2] [--owner EMAIL] [-m BODY | --file F] [--paths P1,P2] [--sources R-1,R-2] [--approve]`, "record a decision (proposed unless --approve)", cmdDecide},
 		command{"decisions", "decisions [path] [--service S] [--topic T] [--kind K] [--proposed] [--all]", "list approved decisions, optionally filtered", cmdDecisions},
+		command{"questions", "questions [--all]", "list proposed decisions waiting for you: answers agents saved, in the kinds your role approves", cmdQuestions},
 		command{"show", "show <id>", "show a decision, directive or ref in full", cmdShow},
 		command{"approve", "approve <id>", "approve a proposed decision", func(a *app, args []string) error { return resolve(a, args, model.StatusApproved) }},
 		command{"reject", "reject <id>", "reject a proposed decision", func(a *app, args []string) error { return resolve(a, args, model.StatusRejected) }},
@@ -309,6 +310,9 @@ func cmdShow(a *app, args []string) error {
 			}
 			fmt.Fprintf(a.out, "rule        %s\nkind        %s\nservices    %s\ntopics      %s\nowner       %s\n",
 				orDash(d.Rule), orDash(d.Kind), services(d), orDash(strings.Join(d.Topics(), ", ")), orDash(d.Owner))
+			if o := d.Origin; o != nil {
+				fmt.Fprintf(a.out, "asked       %s\npicked      %s (by %s, verified %v)\n", o.Question, o.Answer, o.AnsweredBy, o.Verified)
+			}
 			fmt.Fprintf(a.out, "area        %s\npaths       %s\nsources     %s\nauthor      %s (%s)\napproved by %s\nsupersedes  %s\nanchored at %s\ncreated     %s\nfile        %s\n\n%s\n",
 				orDash(d.Area), orDash(strings.Join(d.Paths, ", ")), orDash(strings.Join(d.Sources, ", ")), d.Author, d.AuthorKind,
 				orDash(d.ApprovedBy), orDash(strings.Join(d.Supersedes, ", ")), orDash(shortAnchor(d.AnchoredAt)), d.Created, rel, d.Body)
@@ -417,4 +421,50 @@ func services(d model.Decision) string {
 		return "all (product-wide)"
 	}
 	return strings.Join(d.AppliesTo.Services, ", ")
+}
+
+func cmdQuestions(a *app, args []string) error {
+	fs := a.flags("questions")
+	all := fs.Bool("all", false, "list every proposed decision, not only those you may approve")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	p, err := openProject()
+	if err != nil {
+		return err
+	}
+	return locked(a, p, func(root string) error {
+		decs, err := store.ListDecisions(root)
+		if err != nil {
+			return err
+		}
+		cfg, err := store.ReadConfig(root)
+		if err != nil {
+			return err
+		}
+		n := 0
+		for _, d := range decs {
+			if d.Status != model.StatusProposed || (!*all && !cfg.CanApprove(p.Store.Email, d.Kind, d.Area)) {
+				continue
+			}
+			n++
+			fmt.Fprintf(a.out, "%s  %-12s %s\n", d.ID, clip(orDash(d.Kind), 12), clip(d.Headline(), 110))
+			if o := d.Origin; o != nil {
+				how := "reported by the agent"
+				if o.Verified {
+					how = "seen in the question tool"
+				}
+				fmt.Fprintf(a.out, "        asked:  %s\n        picked: %s (by %s, %s)\n", clip(o.Question, 100), clip(o.Answer, 80), o.AnsweredBy, how)
+			}
+		}
+		switch {
+		case n == 0 && *all:
+			fmt.Fprintln(a.out, "No proposed decisions.")
+		case n == 0:
+			fmt.Fprintln(a.out, "Nothing waits for you. `dumen questions --all` lists every proposed decision.")
+		default:
+			fmt.Fprintln(a.out, "Approve with `dumen approve <id>`, or reject with `dumen reject <id>`; `dumen show <id>` has the full text.")
+		}
+		return nil
+	})
 }
