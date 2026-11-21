@@ -229,7 +229,7 @@ func decisionLine(d cache.Decision) string {
 		tag = " [" + render.Label(d.Kind, 20) + "]"
 	}
 	if d.Area != "" {
-		tag = " [" + render.Label(d.Area, 30) + "]"
+		tag += " [" + render.Label(d.Area, 30) + "]"
 	}
 	if d.Contested {
 		tag += " [contested]"

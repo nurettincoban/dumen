@@ -80,6 +80,9 @@ func TestSeveralRepositoriesShareOneStore(t *testing.T) {
 		}
 	}
 	t.Chdir(billing)
+	// Gauntlet G1: a decision limited by paths to one repository stays there in every view.
+	run(t, "decide", "--title", "Refunds", "--rule", "Refunds are issued by the refund worker only", "--kind", "technical",
+		"--paths", "src/**", "--topics", "payments", "-m", "Why.", "--approve")
 	if list := run(t, "decisions", "src/api/list.go"); strings.Contains(list, "Orders are paginated") {
 		t.Fatalf("a decision about orders-svc leaked into billing-svc: %s", list)
 	}
@@ -107,6 +110,16 @@ func TestSeveralRepositoriesShareOneStore(t *testing.T) {
 	}
 	if strings.Contains(startB, "opaque cursors") || !strings.Contains(startO, "For orders-svc:") || !strings.Contains(startO, "[technical] List endpoints page with opaque cursors") {
 		t.Errorf("decisions shown at session start must be the ones relevant to the repository:\n%s\n---\n%s", startB, startO)
+	}
+	prompt := map[string]any{"prompt": "Add partial refunds to the payments page"}
+	if got := fire(orders, "sess-orders-2", hook.UserPromptSubmit, prompt); strings.Contains(got, "refund worker") {
+		t.Errorf("a decision limited to billing-svc paths reached orders-svc: %s", got)
+	}
+	if got := fire(billing, "sess-billing-2", hook.UserPromptSubmit, map[string]any{"prompt": prompt["prompt"]}); !strings.Contains(got, "refund worker") {
+		t.Errorf("the billing-svc decision was not noted in billing-svc: %s", got)
+	}
+	if !strings.Contains(startB, "For billing-svc:") || strings.Contains(startO, "refund worker") {
+		t.Errorf("path-limited decision grouping:\n%s\n%s", startB, startO)
 	}
 	if got := edit(billing, "sess-billing"); !strings.Contains(got, `"deny"`) {
 		t.Errorf("edit in the frozen service must be denied: %s", got)

@@ -23,7 +23,6 @@ func (r *runCtx) startDecisions() []cache.Decision {
 	var mine, wide []cache.Decision
 	for _, d := range r.c.DecisionsForRepo(r.proj.Repo) {
 		switch {
-		case !d.ForService(r.proj.Repo):
 		case r.forThisRepo(d):
 			mine = append(mine, d)
 		default:
@@ -99,14 +98,12 @@ func (r *runCtx) topicNote(text, where string) string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "Approved team decisions on topics in %s:\n", where)
-	ids := make([]string, 0, len(picked))
 	for _, m := range picked {
-		ids = append(ids, m.Decision.ID)
 		r.sess.Noted = session.Add(r.sess.Noted, m.Decision.ID)
 		b.WriteString(decisionLine(m.Decision) + "\n")
 	}
 	b.WriteString("Follow them where they apply; get_decision has the full text.")
-	r.log(model.EventDecisionRead, "decisions noted for topics in "+where, ids...)
+	// Not logged: the ids would tell the team which topics a person's message touched.
 	return b.String()
 }
 
@@ -128,7 +125,9 @@ func (r *runCtx) planNote() string {
 			break
 		}
 		ids = append(ids, m.Decision.ID)
-		r.sess.Noted = session.Add(r.sess.Noted, m.Decision.ID)
+		if r.in.AgentID == "" { // a subagent's context is its own; the main agent still gets the note
+			r.sess.Noted = session.Add(r.sess.Noted, m.Decision.ID)
+		}
 		b.WriteString(decisionLine(m.Decision) + "\n")
 	}
 	if len(ids) == 0 {

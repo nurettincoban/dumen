@@ -418,9 +418,12 @@ These were decided during the build, each at the owner's request or forced by a 
     product-wide ones, shows each as id, kind and rule, and lists the topics in use. A
     `UserPromptSubmit` note names up to three approved decisions on the topics of the
     human's message that the session has not been shown yet; the prompt is matched in
-    memory and never stored or logged. When the agent leaves plan mode (`ExitPlanMode`),
+    memory and never stored, and the note is not logged either, since the ids would tell the
+    team which topics a person's message touched. When the agent leaves plan mode (`ExitPlanMode`),
     `PreToolUse` adds up to five approved decisions on the plan's topics as context and
     never blocks the plan: a plan gate was rejected in the critic's review, because a
     keyword match is too weak to refuse work on. `decisions_for_topic` lists approved
-    decisions by topic name or by the topics of a text. Proposed decisions never appear in
-    any of these.
+    decisions by topic name or by the topics of a text. All of these, and the question
+    hold-back, use one rule for whether a decision concerns a repository: it names the
+    service or none, and its paths, if any, include paths of that repository. Proposed
+    decisions never appear in any of these.

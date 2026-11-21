@@ -48,7 +48,7 @@ func (s *Server) DecisionsForTopic(ctx context.Context, in topicIn) (string, err
 	var found []cache.Decision
 	if topic != "" {
 		for _, d := range c.Decisions {
-			if service != "" && !d.ForService(service) {
+			if !c.Concerns(d, service) {
 				continue
 			}
 			for _, t := range d.Topics() {
@@ -90,10 +90,7 @@ func (s *Server) DecisionsForTopic(ctx context.Context, in topicIn) (string, err
 			fmt.Fprintf(&b, "... and %d more; narrow the topic.\n", len(found)-i)
 			break
 		}
-		scope := "product-wide"
-		if !d.ProductWide() {
-			scope = strings.Join(d.AppliesTo.Services, ", ")
-		}
+		scope := d.ScopeLabel()
 		fmt.Fprintf(&b, "- %s%s %s (%s; topics: %s)\n", d.ID, kindTag(d.Kind), render.Label(d.Headline(), model.MaxRule),
 			render.Label(scope, 120), render.Label(strings.Join(d.Topics(), ", "), 120))
 	}
