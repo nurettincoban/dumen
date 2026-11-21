@@ -330,6 +330,9 @@ func (o *ResolveDecision) Apply(tx *Tx) error {
 			return err
 		}
 		d.ApprovedBy, d.ApprovedAt = tx.Actor.Email, model.FormatTime(tx.Now)
+		for _, svc := range model.SortedKeys(d.Needs) {
+			tx.Notes = append(tx.Notes, fmt.Sprintf("%s asks %s to: %s (its agents get this as news)", d.ID, svc, d.Needs[svc]))
+		}
 	}
 	d.Status = o.Status
 	if err := d.Validate(); err != nil {
@@ -787,8 +790,10 @@ func (o *SetProduct) Apply(tx *Tx) error {
 			topics[k] = kws
 		}
 	}
+	// Only what differs from the defaults is written, so that a later build's defaults
+	// still apply to the kinds a team never changed.
 	kinds := map[string]model.KindConfig{}
-	for k, v := range cfg.KindsOrDefault() {
+	for k, v := range cfg.Kinds {
 		kinds[k] = v
 	}
 	for k, r := range o.Kinds {
@@ -799,7 +804,7 @@ func (o *SetProduct) Apply(tx *Tx) error {
 		}
 	}
 	if len(kinds) == 0 {
-		return fmt.Errorf("at least one kind of decision must remain")
+		kinds = nil
 	}
 	cfg.Services, cfg.Topics, cfg.Kinds = nilIfEmpty(services), nilIfEmptyList(topics), kinds
 	tx.cfg = nil

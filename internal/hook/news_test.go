@@ -77,3 +77,28 @@ func TestStopHandsOverNewsOnce(t *testing.T) {
 		t.Fatalf("the agent was stopped twice for the same news: %+v", again)
 	}
 }
+
+// Gauntlet N1: news given to a subagent still reaches the main agent, and the main
+// agent's Stop still hands it over.
+func TestSubagentDoesNotUseUpNews(t *testing.T) {
+	f := newFixture(t)
+	f.now = f.now.Add(-time.Hour)
+	f.run(SessionStart, map[string]any{"source": "startup"})
+	id := f.approved("Holds", "A booking is held for 10 minutes while the guest pays")
+	read := func(agent string) map[string]any {
+		in := map[string]any{"tool_name": "Read", "tool_input": map[string]any{"file_path": "README.md"}}
+		if agent != "" {
+			in["agent_id"] = agent
+		}
+		return in
+	}
+	if got := ctxOf(f.run(PreToolUse, read("sub1"))); !strings.Contains(got, id) {
+		t.Fatalf("the subagent did not get the news: %s", got)
+	}
+	if got := ctxOf(f.run(PreToolUse, read("sub1"))); strings.Contains(got, id) {
+		t.Fatalf("the subagent got the news twice: %s", got)
+	}
+	if got := ctxOf(f.run(PreToolUse, read(""))); !strings.Contains(got, id) {
+		t.Fatalf("the main agent lost the news to its subagent: %s", got)
+	}
+}

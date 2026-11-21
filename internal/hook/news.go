@@ -52,6 +52,7 @@ func (r *runCtx) needsLine(d cache.Decision) string {
 // news returns the approved decisions that concern this repository and that the session
 // has not been given yet, oldest first, so that a change reads in the order it happened.
 func (r *runCtx) news() []cache.Decision {
+	sub := r.in.AgentID
 	if !r.sess.NewsBase {
 		// No session start was seen (dumen was installed mid-session): what is in force now
 		// is the baseline, and only later changes are news.
@@ -65,7 +66,8 @@ func (r *runCtx) news() []cache.Decision {
 	var out []cache.Decision
 	for i := len(r.c.Decisions) - 1; i >= 0; i-- {
 		d := r.c.Decisions[i]
-		if session.Has(r.sess.Known, d.ID) || !r.c.Concerns(d, r.proj.Repo) {
+		// A subagent has its own context: what it is told does not count for the main agent.
+		if session.Has(r.sess.Known, d.ID) || (sub != "" && session.Has(r.sess.SubKnown[sub], d.ID)) || !r.c.Concerns(d, r.proj.Repo) {
 			continue
 		}
 		out = append(out, d)
@@ -84,8 +86,15 @@ func (r *runCtx) newsBlock() string {
 	fmt.Fprintf(&b, "DECISION NEWS (%d): approved by a teammate since this session started; binding from now on\n", len(ds))
 	ids := make([]string, 0, len(ds))
 	for i, d := range ds {
-		r.sess.Known = session.Add(r.sess.Known, d.ID)
-		r.sess.Noted = session.Add(r.sess.Noted, d.ID)
+		if sub := r.in.AgentID; sub != "" {
+			if r.sess.SubKnown == nil {
+				r.sess.SubKnown = map[string][]string{}
+			}
+			r.sess.SubKnown[sub] = session.Add(r.sess.SubKnown[sub], d.ID)
+		} else {
+			r.sess.Known = session.Add(r.sess.Known, d.ID)
+			r.sess.Noted = session.Add(r.sess.Noted, d.ID)
+		}
 		ids = append(ids, d.ID)
 		if i < maxNews {
 			b.WriteString(r.newsLine(d) + "\n")
@@ -124,7 +133,9 @@ func (r *runCtx) sinceLastSession() string {
 	var ds []cache.Decision
 	for i := len(r.c.Decisions) - 1; i >= 0; i-- {
 		d := r.c.Decisions[i]
-		if d.ApprovedAt > last && r.c.Concerns(d, r.proj.Repo) {
+		// At one-second resolution, a decision approved in the second the previous
+		// session started may be shown again; that is better than missing it.
+		if d.ApprovedAt >= last && r.c.Concerns(d, r.proj.Repo) {
 			ds = append(ds, d)
 		}
 	}
