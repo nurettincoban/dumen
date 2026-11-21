@@ -47,9 +47,10 @@ agent uses dumen by itself, and asks its human whenever a person has to decide.
 | **Drafts a decision** when it makes a lasting choice: a library, an API shape | **Confirms a link** an agent added, before other agents see it |
 | **Reports** when it is blocked, waiting for its human, or finished | |
 
-**Agents can never approve on their own.** Publishing a directive and approving or superseding
-a decision always go through Claude Code's own permission prompt, where a person answers Yes or
-No. The same actions are available from a terminal with the `dumen` CLI.
+**An agent cannot approve through its tools.** Publishing a directive and approving or
+superseding a decision go through Claude Code's own permission prompt, where a person answers
+Yes or No. The same actions are available from a terminal with the `dumen` CLI. This is a guard
+rail, not a security boundary: see [Security model](docs/security.md).
 
 ## How it works
 
@@ -70,8 +71,10 @@ flowchart LR
 3. **Agents follow it.** Each Claude Code session checks the branch every 30 seconds. Hooks read
    a local cache in about 4 ms, hand new directives to the agent and block edits to frozen paths.
 
-Your code never leaves your machine. dumen stores paths, one-line labels and links, never file
-contents, prompts or tool output.
+Your code never leaves your machine. dumen stores what people and agents write for the team
+(directive texts, decision titles and bodies, links with one-line labels) and, for activity,
+file paths and a one-line summary of the agent's last message with code removed. It never
+stores file contents, prompts or tool output.
 
 ## Quickstart
 
@@ -98,6 +101,10 @@ Wrote .dumen. Commit it so teammates can run `dumen join`.
 ...
 ```
 
+The store holds your teammates' email addresses and one-line summaries of what their agents
+did. **Never keep it in a public repository.** For a public or busy repository, give the store
+a private repository of its own: see [Set up the store](docs/usage.md#set-up-the-store).
+
 **3. Connect Claude Code** (each developer, once, inside Claude Code)
 
 ```text
@@ -117,9 +124,6 @@ Joined project "shop" as ayse@example.com, role: dev.
 
 That is all. Start Claude Code as usual, then publish the directive from the top of this page and
 watch `dumen activity`.
-
-For a real team, keep the store in a small private repository of its own with
-`dumen init --store <url>#dumen`. See [Using dumen](docs/usage.md#set-up-the-store).
 
 ## What you get
 
