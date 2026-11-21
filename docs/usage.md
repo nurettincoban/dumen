@@ -47,8 +47,9 @@ dumen role set mehmet@example.com lead
 dumen role list
 ```
 
-Out of the box, people with the role `lead` or `pm` may publish directives and approve decisions.
-Everybody else, and every agent, may read, draft and propose.
+Everybody with a role may approve and change decisions: they are binding but changeable, and
+every change reaches the other agents as news. People with the role `lead` or `pm` may also
+publish directives. Agents may read, draft and propose, never approve.
 
 ## Connect Claude Code
 
@@ -102,18 +103,80 @@ limited to some repositories, only people whose agents worked there are listed.
 
 ## Decisions
 
+A decision is one sentence that every agent follows, with a kind and a scope. The examples
+below are from a table-reservation product with `booking-svc`, `billing-svc` and `web-app`.
+
+| Kind | Example rule |
+| --- | --- |
+| `product` | A booking is held for 10 minutes while the guest pays |
+| `ux` | A guest can cancel without signing in, from the link in the confirmation email |
+| `ui` | Guests pick a time from slot buttons grouped by part of day |
+| `architecture` | Only billing-svc talks to the payment provider |
+| `technical` | Creating a booking is idempotent with an Idempotency-Key header |
+
+### Most decisions start as a question
+
+You rarely type a decision. Your agent asks you "A or B?" while it works, you answer, and the
+agent saves the answer with `record_answer`: the question, the option you picked, a
+one-sentence rule, its kind, services and topics. It then offers to put it in force. Say yes,
+confirm the permission prompt, and the decision binds every agent from then on. Agents in the
+services it concerns get it as `DECISION NEWS` on their next step.
+
+When an agent is about to ask something an approved decision already answers, dumen holds the
+question back once and shows the decision. If it does not fit, the agent asks again and the
+question goes through.
+
+### From a terminal
+
 ```sh
-dumen decide --title "Use Postgres for the order service" --paths 'src/orders/**' \
-  -m "We need joins and transactions. Rejected: DynamoDB (no joins), SQLite (single writer)."
-dumen decisions --drafts
-dumen approve D-PG18        # or: dumen reject D-PG18
-dumen supersede D-PG18 --title "Move orders to CockroachDB" -m "..."
-dumen decisions src/orders/handler.go     # which decisions govern this file?
-dumen show D-PG18
+dumen decide --kind architecture --title "Payments go through billing" \
+  --rule "Only billing-svc talks to the payment provider" --topics payments \
+  -m "Why: one place for PCI scope and refunds. Not allowed: calling the provider's SDK from booking-svc."
+dumen decide --kind ui --services web-app --topics booking-flow \
+  --title "Time selection" --rule "Guests pick a time from slot buttons grouped by part of day" \
+  -m "Why: fewer taps on phones. Rejected: a calendar with a free time picker." --approve
+
+dumen decisions                      # in force for this repository
+dumen decisions --kind product       # or --service billing-svc, --topic payments
+dumen questions                      # proposed decisions you may approve, with the question asked
+dumen approve D-7K2P                 # or: dumen reject D-7K2P
+dumen supersede D-7K2P --title "Refunds to the card" --rule "Cancelled bookings are refunded to the card" -m "Why: ..."
+dumen news --since 7d                # what came into force or was replaced lately
+dumen show D-7K2P
 ```
 
-Decisions start as drafts. Drafts are never injected into agent context as facts; agents only see
-how many are waiting. Drafts nobody approves are archived after seven days by `dumen gc`.
+Without `--services`, a decision applies to the whole product. `--paths` still links a
+decision to files, for the teams that want that.
+
+### Who may approve
+
+Anyone with a role. Decisions are binding but changeable, and the safeguard is that everyone
+hears about every change. A team that wants a gate for a kind sets an owner role, for example
+only leads for architecture:
+
+```sh
+dumen product --kind architecture=lead
+```
+
+Proposed decisions are never shown to other agents as facts, only as a count. Proposed
+decisions nobody approves are archived after seven days by `dumen gc`.
+
+### Products, services and topics
+
+`dumen product` tells dumen the words of your product, so it can match decisions to prompts,
+plans and questions:
+
+```sh
+dumen product --name "Table reservations" \
+  --service booking-svc="Creates, changes and cancels bookings" \
+  --service billing-svc="Payments and refunds" \
+  --service web-app="The guest-facing site" \
+  --topic payments=refund,charge,card,deposit \
+  --topic booking-flow="booking page,time picker,slot"
+dumen product                        # show it
+```
+
+A topic need not be declared: its own name is a keyword. Matching is by words, not meaning.
 
 ## Sources of truth
 
