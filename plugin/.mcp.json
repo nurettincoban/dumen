@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "dumen": {
+      "command": "dumen",
+      "args": ["mcp"]
+    }
+  }
+}
