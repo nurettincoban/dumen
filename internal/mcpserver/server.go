@@ -573,7 +573,7 @@ func (s *Server) DecisionsForPath(ctx context.Context, in pathIn) (string, error
 		n++
 	}
 	for _, d := range c.DecisionsFor(rel) {
-		fmt.Fprintf(&b, "- %s %s\n", d.ID, render.Label(d.Title, render.MaxLabel))
+		fmt.Fprintf(&b, "- %s%s %s\n", d.ID, kindTag(d.Kind), render.Label(d.Headline(), model.MaxRule))
 		n++
 	}
 	for _, r := range c.RefsFor(rel) {
@@ -862,6 +862,7 @@ func New(s *Server) *mcp.Server {
 	add(srv, s, "search_decisions", "Search team decisions by words in the rule, title, kind, topics, services or paths. Returns ids and rules.", false, s.SearchDecisions)
 	add(srv, s, "get_decision", "Get one decision in full: status, body, linked sources. Also returns a source-of-truth link when given its R- id.", false, s.GetDecision)
 	add(srv, s, "decisions_for_path", "List approved decisions, blocking directives and source-of-truth links for a file path.", false, s.DecisionsForPath)
+	add(srv, s, "decisions_for_topic", "List approved decisions on a topic (payments, booking-flow, ...) or on the topics a piece of text mentions, such as a plan or a question you are about to ask. Use it before asking your human a product, UX, UI, architecture or technical question.", false, s.DecisionsForTopic)
 	add(srv, s, "draft_decision", "Record a proposed decision for a lasting choice of any kind: product, UX, UI, architecture or technical. Give a one-sentence rule others will follow. The person who owns that kind approves it later.", false, s.DraftDecision)
 	add(srv, s, "record_answer", "Save your human's answer to a question you asked them (with the question tool or in the chat) as a team decision, so no teammate or agent is asked again. Only for lasting choices of any kind: product, UX, UI, architecture or technical.", false, s.RecordAnswer)
 	add(srv, s, "approve", "Approve a proposed decision. Human action: the person is asked to confirm.", true, s.Approve)

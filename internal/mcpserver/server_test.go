@@ -145,7 +145,7 @@ func TestToolList(t *testing.T) {
 		}
 	}
 	sort.Strings(names)
-	want := "ack_directive activity add_ref approve decisions_for_path directives draft_decision get_decision log_event propose_directive publish_directive record_answer search_decisions supersede"
+	want := "ack_directive activity add_ref approve decisions_for_path decisions_for_topic directives draft_decision get_decision log_event propose_directive publish_directive record_answer search_decisions supersede"
 	if got := strings.Join(names, " "); got != want {
 		t.Fatalf("tools:\n got %s\nwant %s", got, want)
 	}

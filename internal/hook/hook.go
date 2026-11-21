@@ -41,6 +41,7 @@ type Input struct {
 	AgentID        string `json:"agent_id"` // set when the event comes from a subagent
 
 	Source string `json:"source"` // SessionStart
+	Prompt string `json:"prompt"` // UserPromptSubmit; read, never stored
 	Reason string `json:"reason"` // SessionEnd
 
 	ToolName     string          `json:"tool_name"` // PreToolUse, PostToolUse
@@ -224,13 +225,16 @@ func directiveLine(d cache.Directive) string {
 
 func decisionLine(d cache.Decision) string {
 	tag := ""
+	if d.Kind != "" {
+		tag = " [" + render.Label(d.Kind, 20) + "]"
+	}
 	if d.Area != "" {
 		tag = " [" + render.Label(d.Area, 30) + "]"
 	}
 	if d.Contested {
 		tag += " [contested]"
 	}
-	return fmt.Sprintf("- %s%s %s", d.ID, tag, render.Label(d.Title, render.MaxLabel))
+	return fmt.Sprintf("- %s%s %s", d.ID, tag, render.Label(d.Headline(), model.MaxRule))
 }
 
 func refLine(ref model.Ref) string {
@@ -306,7 +310,7 @@ func (r *runCtx) log(kind, text string, ids ...string) {
 func (r *runCtx) sessionStart() *Output {
 	// After compaction or /clear the earlier context is gone, so everything is shown again.
 	r.sess.Delivered, r.sess.SubDelivered = nil, nil
-	r.sess.Reminded = nil
+	r.sess.Reminded, r.sess.Noted = nil, nil
 	r.sess.Finished = false
 	if r.sess.Started == "" {
 		r.sess.Started = model.FormatTime(r.now)
@@ -316,7 +320,7 @@ func (r *runCtx) sessionStart() *Output {
 	}
 
 	ds := r.undelivered()
-	relevant := r.c.DecisionsForRepo(r.proj.Repo)
+	relevant := r.startDecisions()
 	total := len(relevant)
 	all := r.c.RefsForRepo(r.proj.Repo)
 	block := func(nDec, nRef int) string {
@@ -334,13 +338,7 @@ func (r *runCtx) sessionStart() *Output {
 			b.WriteString("Each directive is acknowledged once with the ack_directive tool. Edits under a [deny] directive are blocked.\n")
 		}
 
-		shown := relevant[:nDec]
-		if total > 0 {
-			fmt.Fprintf(&b, "\nAPPROVED DECISIONS (%d of %d, newest first)\n", len(shown), total)
-			for _, d := range shown {
-				b.WriteString(decisionLine(d) + "\n")
-			}
-		}
+		b.WriteString(r.decisionsBlock(relevant, nDec))
 		if len(all) > 0 {
 			refs := all[:nRef]
 			fmt.Fprintf(&b, "\nSOURCES OF TRUTH (%d of %d; links only, not fetched automatically)\n", len(refs), len(all))
@@ -348,7 +346,7 @@ func (r *runCtx) sessionStart() *Output {
 				b.WriteString(refLine(ref) + "\n")
 			}
 		}
-		fmt.Fprintf(&b, "\nDrafts awaiting review: %d\n", r.c.Drafts)
+		fmt.Fprintf(&b, "\nProposed decisions awaiting approval: %d\n", r.c.Drafts)
 		if r.c.UnverifiedRefs > 0 {
 			fmt.Fprintf(&b, "Links added by agents, awaiting a human check (`dumen ref check`): %d\n", r.c.UnverifiedRefs)
 		}
@@ -380,6 +378,9 @@ func (r *runCtx) sessionStart() *Output {
 		text = block(nDec, nRef)
 	}
 
+	for _, d := range relevant[:nDec] {
+		r.sess.Noted = session.Add(r.sess.Noted, d.ID)
+	}
 	_, err := os.Stat(r.proj.PrivateMarker())
 	r.sess.Private = err == nil
 	r.sess.Save()
@@ -415,7 +416,17 @@ func (r *runCtx) userPromptSubmit() *Output {
 		r.log(model.EventProgress, "continuing after a new prompt")
 	}
 	ds := r.undelivered()
-	if len(ds) == 0 {
+	var parts []string
+	if len(ds) > 0 {
+		parts = append(parts, newDirectivesBlock(ds))
+	}
+	if note := r.topicNote(r.in.Prompt, "your human's message"); note != "" {
+		if len(parts) == 0 {
+			parts = append(parts, header)
+		}
+		parts = append(parts, note)
+	}
+	if len(parts) == 0 {
 		if r.stale != "" {
 			return &Output{SystemMessage: r.stale}
 		}
@@ -424,7 +435,7 @@ func (r *runCtx) userPromptSubmit() *Output {
 	r.sess.Save()
 	return &Output{
 		SystemMessage:      r.stale,
-		HookSpecificOutput: &Specific{HookEventName: "UserPromptSubmit", AdditionalContext: newDirectivesBlock(ds)},
+		HookSpecificOutput: &Specific{HookEventName: "UserPromptSubmit", AdditionalContext: strings.Join(parts, "\n")},
 	}
 }
 
@@ -619,6 +630,10 @@ func (r *runCtx) preToolUse() *Output {
 	case QuestionTool:
 		if reason := r.holdBack(); reason != "" {
 			return deny(reason)
+		}
+	case PlanTool:
+		if note := r.planNote(); note != "" {
+			extra = append(extra, note)
 		}
 	case "Bash", "PowerShell":
 		cmd := ti.Command

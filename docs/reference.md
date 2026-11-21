@@ -95,6 +95,7 @@ Claude Code starts `dumen mcp` for each session. Through the plugin the tools ar
 | `search_decisions` | Search decisions by words in the title, area or paths. | nobody |
 | `get_decision` | Get one decision in full. Given a link id (`R-...`), it returns that link, once a person has confirmed it. | nobody |
 | `decisions_for_path` | Approved decisions, blocking directives and links for a file path. | nobody |
+| `decisions_for_topic` | Approved decisions on a topic (`topic`), or on the topics a text mentions (`text`, such as a plan or a question). Decisions for other services are left out unless `all` is set. | nobody |
 | `record_answer` | Save the human's answer to a question the agent asked as a proposed team decision, with the question, the options and the pick. Lists similar decisions instead of saving unless `new` is set (proposed ones by id, kind and topics only). Never approves. | nobody |
 | `draft_decision` | Record a proposed decision for a lasting choice of any kind, with its rule, kind, services and topics. | nobody |
 | `approve` | Approve a proposed decision. | **the person** |
@@ -111,9 +112,9 @@ refused. See [Security model](security.md).
 
 | Claude Code event | What dumen does |
 | --- | --- |
-| `SessionStart` | Injects the block of team records, kept under 8,000 characters: active directives first, then the approved decisions that apply, links and the role. Logs `started`. |
-| `UserPromptSubmit` | Injects directives that arrived since the last prompt. |
-| `PreToolUse` (every tool) | Hands over new directives, blocks `Edit`, `Write`, `MultiEdit`, `NotebookEdit` and, on a best effort, the file-writing tools of other MCP servers under a `deny` directive, sends human actions to the permission prompt, and blocks shell commands that would take a human action. Reminds the agent once about an unacknowledged directive. Holds back an `AskUserQuestion` once when an approved decision may already answer it (two topic keywords, or one keyword of a decision made for this service); asking again goes through. |
+| `SessionStart` | Injects the block of team records, kept under 8,000 characters: active directives first, then the approved decisions that apply (those for this service first, then product-wide ones, as id, kind and rule), the topics in use, links and the role. Logs `started`. |
+| `UserPromptSubmit` | Injects directives that arrived since the last prompt, and names up to three approved decisions on the topics of the prompt that the session has not been shown. The prompt is never stored. |
+| `PreToolUse` (every tool) | Hands over new directives, blocks `Edit`, `Write`, `MultiEdit`, `NotebookEdit` and, on a best effort, the file-writing tools of other MCP servers under a `deny` directive, sends human actions to the permission prompt, and blocks shell commands that would take a human action. Reminds the agent once about an unacknowledged directive. Holds back an `AskUserQuestion` once when an approved decision may already answer it (two topic keywords, or one keyword of a decision made for this service); asking again goes through. On `ExitPlanMode`, adds the approved decisions on the plan's topics as context, without blocking. |
 | `PostToolUse` (`AskUserQuestion`) | Keeps the question, its options and what Claude Code returned, so that `record_answer` can tell an answer the human picked from one the agent only reports, and reminds the agent to save lasting choices. |
 | `Stop` | Logs `progress` with a one-line summary of the agent's last message. When a deny directive is active, also looks at the work tree and at the commits made since the session began that are on no remote yet (`git status` and `git log`, cut off after 2 seconds together) and logs a `violation` for changes made under the directive. |
 | `SessionEnd` | Logs `finished`. |

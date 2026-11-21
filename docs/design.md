@@ -146,14 +146,18 @@ ACTIVE DIRECTIVES (2)
 - Y-7K2M [deny] paths: src/auth/** | until 2026-11-27 | Release week: do not touch src/auth
 - Y-Q9XD [context] scope: role backend | until 2026-12-01 | All new endpoints use requireAuth
 
-APPROVED DECISIONS relevant to this repo (3 of 14)
-- D-4HTR [api] Pagination uses opaque cursors
+APPROVED DECISIONS (3 of 14; follow them, and do not ask your human again what they settle)
+For booking-svc:
+- D-4HTR [product] A booking is held for 10 minutes while the guest pays
+Product-wide:
+- D-7PQA [architecture] Only billing-svc talks to the payment provider
 - ...
+Decision topics: booking-flow, payments, ...
 
 SOURCES OF TRUTH (links only, do not fetch automatically)
 - R-M3VZ [design] Checkout flow: <url> | governs: checkout screens
 
-Drafts awaiting review: 4
+Proposed decisions awaiting approval: 4
 dumen session: abc123
 ```
 
@@ -408,3 +412,15 @@ These were decided during the build, each at the owner's request or forced by a 
     services, topics and kinds one entry at a time. Deviation from the critic's plan: a
     verified answer from the kind's owner is still saved as proposed, not approved, to keep
     the rule that agent-written text reaches other agents only after a person read it.
+16. **Finding decisions (decisions-first redesign, PR 3).** An agent asks less when it sees
+    what is settled before it asks. The session-start block groups the approved decisions
+    into those for this service (they name it, or are linked to its paths) and the
+    product-wide ones, shows each as id, kind and rule, and lists the topics in use. A
+    `UserPromptSubmit` note names up to three approved decisions on the topics of the
+    human's message that the session has not been shown yet; the prompt is matched in
+    memory and never stored or logged. When the agent leaves plan mode (`ExitPlanMode`),
+    `PreToolUse` adds up to five approved decisions on the plan's topics as context and
+    never blocks the plan: a plan gate was rejected in the critic's review, because a
+    keyword match is too weak to refuse work on. `decisions_for_topic` lists approved
+    decisions by topic name or by the topics of a text. Proposed decisions never appear in
+    any of these.

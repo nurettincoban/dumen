@@ -16,6 +16,9 @@ func (d Decision) model() model.Decision {
 // ForService reports whether the decision applies to the service (see model.Decision).
 func (d Decision) ForService(service string) bool { return d.model().ForService(service) }
 
+// ProductWide reports whether the decision names no particular service.
+func (d Decision) ProductWide() bool { return d.model().ProductWide() }
+
 // Topics returns the decision's topics, counting its area as one.
 func (d Decision) Topics() []string { return d.model().Topics() }
 

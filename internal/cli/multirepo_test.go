@@ -99,11 +99,14 @@ func TestSeveralRepositoriesShareOneStore(t *testing.T) {
 	if !strings.Contains(startB, "billing auth is frozen") || !strings.Contains(startB, "This repository: billing-svc") {
 		t.Errorf("billing session start: %s", startB)
 	}
+	if !strings.Contains(startO, "Product-wide:") || !strings.Contains(startO, "Only billing-svc talks") || strings.Contains(startB, "Creating an order is idempotent") {
+		t.Errorf("product-wide decisions go to every service, service decisions only to theirs:\n%s\n%s", startB, startO)
+	}
 	if strings.Contains(startO, "billing auth is frozen") || !strings.Contains(startO, "structured logger") {
 		t.Errorf("orders session must get the team-wide directive but not billing's freeze: %s", startO)
 	}
-	if strings.Contains(startB, "Orders are paginated") || !strings.Contains(startO, "Orders are paginated") {
-		t.Errorf("decisions shown at session start must be the ones relevant to the repository")
+	if strings.Contains(startB, "opaque cursors") || !strings.Contains(startO, "For orders-svc:") || !strings.Contains(startO, "[technical] List endpoints page with opaque cursors") {
+		t.Errorf("decisions shown at session start must be the ones relevant to the repository:\n%s\n---\n%s", startB, startO)
 	}
 	if got := edit(billing, "sess-billing"); !strings.Contains(got, `"deny"`) {
 		t.Errorf("edit in the frozen service must be denied: %s", got)

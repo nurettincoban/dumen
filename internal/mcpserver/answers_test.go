@@ -130,3 +130,25 @@ func TestRecordAnswerUsesStructuredPick(t *testing.T) {
 		t.Fatal("an answer that differs from the structured pick was marked verified")
 	}
 }
+
+// decisions_for_topic lists approved decisions by topic or by the topics of a text, and
+// never proposed ones.
+func TestDecisionsForTopic(t *testing.T) {
+	w := setup(t)
+	id := w.saved(w.ok("record_answer", map[string]any{"question": "Refunds?", "answer": "Card", "kind": "product",
+		"rule": "Refunds go back to the card", "topics": []string{"payments"}, "new": true})).ID
+	if got := w.ok("decisions_for_topic", map[string]any{"topic": "payments"}); strings.Contains(got, id) || !strings.Contains(got, "No approved decision") {
+		t.Fatalf("a proposed decision was listed: %s", got)
+	}
+	if text, isErr := w.confirmed("approve", map[string]any{"id": id}); isErr {
+		t.Fatal(text)
+	}
+	for _, in := range []map[string]any{{"topic": "Payments"}, {"text": "Plan: add partial refunds to the payments page"}} {
+		if got := w.ok("decisions_for_topic", in); !strings.Contains(got, id+" [product] Refunds go back to the card") || !strings.Contains(got, "product-wide") {
+			t.Fatalf("%v: %s", in, got)
+		}
+	}
+	if _, isErr := w.call("decisions_for_topic", map[string]any{}); !isErr {
+		t.Fatal("no topic and no text was accepted")
+	}
+}
