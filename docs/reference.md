@@ -41,10 +41,10 @@ Every command accepts `--help`. Ids look like `Y-2APW` (directive), `D-PG18` (de
 
 | Command | What it does |
 | --- | --- |
-| `dumen decide --title T [-m BODY \| --file F] [--paths a,b] [--area AREA] [--sources R-1,R-2] [--approve]` | Record a decision. It is a draft unless `--approve` is given by someone who may approve. |
-| `dumen decisions [PATH] [--drafts] [--all]` | List approved decisions, optionally those that govern a path. |
+| `dumen decide --title T --rule R --kind K [--services a,b] [--topics a,b] [--owner EMAIL] [-m BODY \| --file F] [--paths a,b] [--sources R-1,R-2] [--approve]` | Record a decision. The rule is the one sentence agents see first; the kind is `product`, `ux`, `ui`, `architecture`, `technical` or a kind from `dumen.yml`. Without `--services` it applies to the whole product. It is proposed unless `--approve` is given by someone who may approve. |
+| `dumen decisions [PATH] [--service S] [--topic T] [--kind K] [--proposed] [--all]` | List approved decisions by rule, optionally filtered by path, service, topic or kind. |
 | `dumen show ID` | Show a decision, directive or link in full. |
-| `dumen approve ID`, `dumen reject ID` | Approve or reject a draft. |
+| `dumen approve ID`, `dumen reject ID` | Approve or reject a proposed decision. Publishers (`pm`, `lead`) may approve any kind; otherwise the role that owns the kind does (`designer` for `ux` and `ui` by default). |
 | `dumen supersede ID --title T [-m BODY \| --file F]` | Replace an approved decision with a new one. |
 | `dumen ref add URL [--kind design\|artifact\|mr\|doc] --title T [--governs TEXT] [--paths a,b] [--area AREA]` | Record a link to a source of truth. |
 | `dumen ref check ID`, `dumen ref list` | Confirm a link, list links. |
@@ -93,8 +93,8 @@ Claude Code starts `dumen mcp` for each session. Through the plugin the tools ar
 | `search_decisions` | Search decisions by words in the title, area or paths. | nobody |
 | `get_decision` | Get one decision in full. Given a link id (`R-...`), it returns that link, once a person has confirmed it. | nobody |
 | `decisions_for_path` | Approved decisions, blocking directives and links for a file path. | nobody |
-| `draft_decision` | Record a draft decision for a lasting choice. | nobody |
-| `approve` | Approve a draft decision. | **the person** |
+| `draft_decision` | Record a proposed decision for a lasting choice of any kind, with its rule, kind, services and topics. | nobody |
+| `approve` | Approve a proposed decision. | **the person** |
 | `supersede` | Replace an approved decision with a new approved one. | **the person** |
 | `add_ref` | Record a link. It stays unverified until a person runs `dumen ref check`. | nobody |
 | `log_event` | Log where the session stands: `asking_human`, `blocked`, `progress`, `finished` or `decision_read`. | nobody |
@@ -129,13 +129,36 @@ most once every 30 seconds. A hook that fails for any reason lets the tool call 
 **The store** is a branch (default `dumen`) that shares no history with your code:
 
 ```
-dumen.yml                     roles, areas, settings, schema version
+dumen.yml                     product, services, topics, kinds, roles, areas, settings, schema version
 directives/Y-2APW-<slug>.md   one file per directive
 decisions/D-PG18-<slug>.md    one file per decision
 refs/                         one file per link
 activity/<date>/<session>.jsonl   one line per event
 DECISIONS.md, ACTIVITY.md     generated, readable in your git host's web UI
 ```
+
+The parts of `dumen.yml` that shape decisions, all optional:
+
+```yaml
+product: Reservations
+services:                 # repository names, as in each .dumen file
+  booking-svc: Creates, changes and cancels bookings
+  billing-svc: Payments and refunds; the only service that talks to the payment provider
+topics:                   # topic -> keywords that bring its decisions to an agent's attention
+  payments: [payment, charge, refund, card, stripe]
+  booking-flow: [booking page, checkout, time picker, slot]
+kinds:                    # default when absent; teams may add their own
+  product:      { owner_role: pm }
+  ux:           { owner_role: designer }
+  ui:           { owner_role: designer }
+  architecture: { owner_role: lead }
+  technical:    { owner_role: lead }
+```
+
+When `services` is set, a decision may only name those services. A topic need not be
+declared; an undeclared topic is matched by its own name. Store version 2 renamed the
+`draft` status to `proposed`; this build reads both and raises an older store to version 2
+on its first decision write.
 
 Every write is fetch, apply, commit, fast-forward-only push. If somebody else pushed first,
 dumen fetches again and re-applies the operation on the new head, up to five times. Text is

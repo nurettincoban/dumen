@@ -369,3 +369,13 @@ These were decided during the build, each at the owner's request or forced by a 
     budget of 8,000 characters: links are dropped first, then decisions, never directives.
     (d) Temporary files carry the process id; git is run with `GCM_INTERACTIVE=never`, and
     network commands with ssh in batch mode unless the person configured an ssh command.
+
+13. **Decisions of every kind (decisions-first redesign, PR 1).** The owner re-centred dumen on
+    high-level decisions about the product, its UX and UI, its architecture and its
+    technology, captured from the questions Claude Code already asks. Design and the
+    critic's decisions: https://claude.ai/artifact/KRrGk5UV3ptRj9PecWZrd4. This step adds the
+    model: a decision has a one-sentence `rule`, a `kind` (default kinds `product`, `ux`,
+    `ui`, `architecture`, `technical`, each owned by a role), and `applies_to` services and
+    topics. `dumen.yml` gains `product`, `services`, `topics` and `kinds`. The role that owns
+    a kind may approve decisions of that kind. `draft` is now `proposed`; store version 2.
+    Areas and paths stay: an area counts as a topic, and paths link a decision to files.

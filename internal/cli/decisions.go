@@ -18,12 +18,12 @@ import (
 
 func init() {
 	commands = append(commands,
-		command{"decide", `decide --title T [-m BODY | --file F] [--area A] [--paths P1,P2] [--sources R-1,R-2] [--approve]`, "record a decision (a draft unless --approve)", cmdDecide},
-		command{"decisions", "decisions [path] [--drafts] [--all]", "list approved decisions, optionally those linked to a path", cmdDecisions},
+		command{"decide", `decide --title T --rule R --kind K [--services S1,S2] [--topics T1,T2] [--owner EMAIL] [-m BODY | --file F] [--paths P1,P2] [--sources R-1,R-2] [--approve]`, "record a decision (proposed unless --approve)", cmdDecide},
+		command{"decisions", "decisions [path] [--service S] [--topic T] [--kind K] [--proposed] [--all]", "list approved decisions, optionally filtered", cmdDecisions},
 		command{"show", "show <id>", "show a decision, directive or ref in full", cmdShow},
-		command{"approve", "approve <id>", "approve a draft decision", func(a *app, args []string) error { return resolve(a, args, model.StatusApproved) }},
-		command{"reject", "reject <id>", "reject a draft decision", func(a *app, args []string) error { return resolve(a, args, model.StatusRejected) }},
-		command{"supersede", `supersede <id> --title T [-m BODY | --file F]`, "replace an approved decision with a new one", cmdSupersede},
+		command{"approve", "approve <id>", "approve a proposed decision", func(a *app, args []string) error { return resolve(a, args, model.StatusApproved) }},
+		command{"reject", "reject <id>", "reject a proposed decision", func(a *app, args []string) error { return resolve(a, args, model.StatusRejected) }},
+		command{"supersede", `supersede <id> --title T --rule R [-m BODY | --file F]`, "replace an approved decision with a new one", cmdSupersede},
 		command{"ref", `ref add <url> --kind design|artifact|mr|doc --title T [--governs G] [--area A] [--paths P] | ref check <id> | ref list`, "manage links to sources of truth", cmdRef},
 	)
 }
@@ -49,17 +49,22 @@ func Anchor(root string) string {
 }
 
 type decisionFlags struct {
-	title, body, file, area, paths, sources *string
+	title, rule, kind, services, topics, owner, body, file, area, paths, sources *string
 }
 
 func addDecisionFlags(fs *flag.FlagSet) decisionFlags {
 	return decisionFlags{
-		title:   fs.String("title", "", "one-line title"),
-		body:    fs.String("m", "", "body: the decision, why, rejected alternatives"),
-		file:    fs.String("file", "", "read the body from a file (\"-\" for stdin)"),
-		area:    fs.String("area", "", "area from dumen.yml"),
-		paths:   fs.String("paths", "", "comma-separated paths the decision governs"),
-		sources: fs.String("sources", "", "comma-separated ref ids"),
+		title:    fs.String("title", "", "one-line title"),
+		rule:     fs.String("rule", "", "the rule agents see first, one sentence (at most 300 characters)"),
+		kind:     fs.String("kind", "", "product, ux, ui, architecture, technical, or a kind from dumen.yml"),
+		services: fs.String("services", "", "comma-separated services it applies to (default: the whole product)"),
+		topics:   fs.String("topics", "", "comma-separated topics, e.g. payments,capacity"),
+		owner:    fs.String("owner", "", "git email of the person to ask about it"),
+		body:     fs.String("m", "", "body: why, what is allowed and not allowed, rejected alternatives"),
+		file:     fs.String("file", "", "read the body from a file (\"-\" for stdin)"),
+		area:     fs.String("area", "", "area from dumen.yml"),
+		paths:    fs.String("paths", "", "comma-separated paths the decision governs"),
+		sources:  fs.String("sources", "", "comma-separated ref ids"),
 	}
 }
 
@@ -82,10 +87,16 @@ func (f decisionFlags) build(a *app, p *project.Project) (model.Decision, string
 	if strings.TrimSpace(*f.title) == "" {
 		return model.Decision{}, "", fmt.Errorf("--title is required")
 	}
-	if strings.TrimSpace(body) == "" {
-		return model.Decision{}, "", fmt.Errorf("a body is required (-m or --file): the decision, why, and rejected alternatives")
+	if strings.TrimSpace(*f.rule) == "" {
+		return model.Decision{}, "", fmt.Errorf("--rule is required: the one sentence agents see first")
 	}
-	d := model.Decision{ID: model.NewID(model.PrefixDecision), Title: strings.TrimSpace(*f.title), Area: *f.area,
+	if strings.TrimSpace(body) == "" {
+		return model.Decision{}, "", fmt.Errorf("a body is required (-m or --file): why, what is allowed and not allowed, and rejected alternatives")
+	}
+	d := model.Decision{ID: model.NewID(model.PrefixDecision), Title: strings.TrimSpace(*f.title),
+		Rule: strings.Join(strings.Fields(*f.rule), " "), Kind: strings.ToLower(strings.TrimSpace(*f.kind)),
+		AppliesTo: model.AppliesTo{Services: splitList(*f.services), Topics: splitList(strings.ToLower(*f.topics))},
+		Owner:     strings.ToLower(strings.TrimSpace(*f.owner)), Area: *f.area,
 		Sources: splitList(strings.ToUpper(*f.sources)), AnchoredAt: Anchor(root)}
 	for _, x := range splitList(*f.paths) {
 		d.Paths = append(d.Paths, policy.Qualify(p.Repo, x)) // paths typed inside a repository belong to it
@@ -111,11 +122,14 @@ func cmdDecide(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
+	if d.Kind == "" {
+		return fmt.Errorf("--kind is required: product, ux, ui, architecture, technical, or a kind from dumen.yml")
+	}
 	out, err := a.submit(p, &op.CreateDecision{Decision: d, Body: body, Approve: *approve})
 	if err != nil {
 		return err
 	}
-	state := "draft"
+	state := "proposed"
 	if *approve {
 		state = "approved"
 	}
@@ -183,8 +197,12 @@ func locked(a *app, p *project.Project, f func(root string) error) error {
 
 func cmdDecisions(a *app, args []string) error {
 	fs := a.flags("decisions")
-	drafts := fs.Bool("drafts", false, "list drafts instead of approved decisions")
-	all := fs.Bool("all", false, "include drafts, rejected and superseded decisions")
+	drafts := fs.Bool("proposed", false, "list proposed decisions instead of approved ones")
+	fs.BoolVar(drafts, "drafts", false, "same as --proposed")
+	all := fs.Bool("all", false, "include proposed, rejected and superseded decisions")
+	service := fs.String("service", "", "only decisions that apply to this service")
+	topic := fs.String("topic", "", "only decisions on this topic")
+	kind := fs.String("kind", "", "only decisions of this kind")
 	// Allow the path before or after the flags.
 	var path string
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
@@ -228,7 +246,7 @@ func cmdDecisions(a *app, args []string) error {
 			switch {
 			case *all:
 			case *drafts:
-				if d.Status != model.StatusDraft {
+				if d.Status != model.StatusProposed {
 					continue
 				}
 			case state != model.StatusApproved && state != "contested":
@@ -237,8 +255,12 @@ func cmdDecisions(a *app, args []string) error {
 			if rel != "" && !policy.MatchAny(d.Paths, rel) && !(d.Area != "" && policy.InArea(cfg, d.Area, rel)) {
 				continue
 			}
+			if (*service != "" && !d.ForService(*service)) || (*kind != "" && d.Kind != *kind) ||
+				(*topic != "" && !contains(d.Topics(), *topic)) {
+				continue
+			}
 			n++
-			fmt.Fprintf(a.out, "%s  %-10s %-12s %s\n", d.ID, state, clip(orDash(d.Area), 12), clip(d.Title, 100))
+			fmt.Fprintf(a.out, "%s  %-10s %-12s %s\n", d.ID, state, clip(orDash(d.Kind), 12), clip(d.Headline(), 110))
 		}
 		if n == 0 {
 			fmt.Fprintln(a.out, "No matching decisions.")
@@ -285,6 +307,8 @@ func cmdShow(a *app, args []string) error {
 			} else if len(by) > 1 {
 				fmt.Fprintf(a.out, "contested   superseded by %s\n", strings.Join(by, " and "))
 			}
+			fmt.Fprintf(a.out, "rule        %s\nkind        %s\nservices    %s\ntopics      %s\nowner       %s\n",
+				orDash(d.Rule), orDash(d.Kind), services(d), orDash(strings.Join(d.Topics(), ", ")), orDash(d.Owner))
 			fmt.Fprintf(a.out, "area        %s\npaths       %s\nsources     %s\nauthor      %s (%s)\napproved by %s\nsupersedes  %s\nanchored at %s\ncreated     %s\nfile        %s\n\n%s\n",
 				orDash(d.Area), orDash(strings.Join(d.Paths, ", ")), orDash(strings.Join(d.Sources, ", ")), d.Author, d.AuthorKind,
 				orDash(d.ApprovedBy), orDash(strings.Join(d.Supersedes, ", ")), orDash(shortAnchor(d.AnchoredAt)), d.Created, rel, d.Body)
@@ -376,4 +400,21 @@ func cmdRef(a *app, args []string) error {
 		})
 	}
 	return fmt.Errorf("usage: dumen ref add <url> ... | ref check <id> | ref list")
+}
+
+func contains(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
+// services renders the services a decision applies to.
+func services(d model.Decision) string {
+	if d.ProductWide() {
+		return "all (product-wide)"
+	}
+	return strings.Join(d.AppliesTo.Services, ", ")
 }

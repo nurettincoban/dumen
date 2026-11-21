@@ -24,12 +24,40 @@ const (
 	KindAgent = "agent"
 )
 
-// Decision statuses.
+// Decision statuses. A proposed decision is in use by the session that wrote it and
+// waits for a person to approve it. Stores written before version 2 call it "draft";
+// the store reads that spelling as StatusProposed.
 const (
-	StatusDraft    = "draft"
+	StatusProposed = "proposed"
 	StatusApproved = "approved"
 	StatusRejected = "rejected"
+
+	LegacyStatusDraft = "draft"
 )
+
+// Default decision kinds and the role that owns each. A team can add its own kinds,
+// or change the owner role, under `kinds` in dumen.yml.
+const (
+	KindProduct      = "product"
+	KindUX           = "ux"
+	KindUI           = "ui"
+	KindArchitecture = "architecture"
+	KindTechnical    = "technical"
+)
+
+// DefaultKinds is used when dumen.yml declares no kinds.
+func DefaultKinds() map[string]KindConfig {
+	return map[string]KindConfig{
+		KindProduct:      {OwnerRole: "pm"},
+		KindUX:           {OwnerRole: "designer"},
+		KindUI:           {OwnerRole: "designer"},
+		KindArchitecture: {OwnerRole: "lead"},
+		KindTechnical:    {OwnerRole: "lead"},
+	}
+}
+
+// MaxRule is the maximum length of a decision's rule, in characters.
+const MaxRule = 300
 
 // Directive kinds and statuses.
 const (
@@ -67,11 +95,47 @@ const MaxEventText = 200
 
 // Config is dumen.yml.
 type Config struct {
-	Version  int               `yaml:"version"`
-	Project  string            `yaml:"project"`
-	Roles    map[string]string `yaml:"roles"` // git email -> role
-	Areas    map[string]Area   `yaml:"areas,omitempty"`
-	Settings Settings          `yaml:"settings"`
+	Version int               `yaml:"version"`
+	Project string            `yaml:"project"`
+	Product string            `yaml:"product,omitempty"` // what the team builds, one line
+	Roles   map[string]string `yaml:"roles"`             // git email -> role
+	// Services names the repositories of the product, each with a one-line description.
+	// Decisions apply to services by these names (the `repo` of each .dumen file).
+	Services map[string]string `yaml:"services,omitempty"`
+	// Topics are words from the product's language. Each maps to the keywords that
+	// bring its decisions to an agent's attention when a request mentions them.
+	Topics map[string][]string `yaml:"topics,omitempty"`
+	// Kinds are the kinds of decision the team records, each with the role that owns
+	// it. Empty means DefaultKinds.
+	Kinds    map[string]KindConfig `yaml:"kinds,omitempty"`
+	Areas    map[string]Area       `yaml:"areas,omitempty"`
+	Settings Settings              `yaml:"settings"`
+}
+
+// KindConfig says who owns a kind of decision.
+type KindConfig struct {
+	OwnerRole string `yaml:"owner_role"`
+}
+
+// KindsOrDefault returns the configured kinds, or DefaultKinds when none are declared.
+func (c Config) KindsOrDefault() map[string]KindConfig {
+	if len(c.Kinds) > 0 {
+		return c.Kinds
+	}
+	return DefaultKinds()
+}
+
+// KnownKind reports whether kind is one of the team's decision kinds.
+func (c Config) KnownKind(kind string) bool {
+	_, ok := c.KindsOrDefault()[kind]
+	return ok
+}
+
+// OwnsKind reports whether email holds the role that owns decisions of this kind.
+func (c Config) OwnsKind(email, kind string) bool {
+	k, ok := c.KindsOrDefault()[kind]
+	role := c.Role(email)
+	return ok && role != "" && k.OwnerRole == role
 }
 
 // Area maps a named part of the product to path prefixes and owners.
@@ -92,7 +156,7 @@ type Settings struct {
 // DefaultConfig returns the configuration written by `dumen init`.
 func DefaultConfig(project string) Config {
 	return Config{
-		Version: 1,
+		Version: SchemaVersion,
 		Project: project,
 		Roles:   map[string]string{},
 		Settings: Settings{
@@ -123,10 +187,13 @@ func (c Config) CanPublish(email string) bool {
 	return false
 }
 
-// CanApprove reports whether email may approve a decision in the given area:
-// publisher roles, plus the owners of that area.
-func (c Config) CanApprove(email, area string) bool {
+// CanApprove reports whether email may approve a decision of the given kind in the
+// given area: publisher roles, the role that owns the kind, and the owners of the area.
+func (c Config) CanApprove(email, kind, area string) bool {
 	if c.CanPublish(email) {
+		return true
+	}
+	if kind != "" && c.OwnsKind(email, kind) {
 		return true
 	}
 	email = strings.ToLower(strings.TrimSpace(email))
@@ -146,11 +213,19 @@ type Actor struct {
 	Kind  string `json:"kind" yaml:"kind"` // human | agent
 }
 
-// Decision is a team decision. The body holds: decision, why, rejected alternatives.
+// Decision is a team decision about the product, its UX and UI, its architecture or its
+// technology. Rule is the one sentence agents see first. The body holds why, what is
+// allowed and not allowed (with examples), and the alternatives that were not taken.
 type Decision struct {
-	ID         string   `yaml:"id"`
-	Title      string   `yaml:"title"`
-	Status     string   `yaml:"status"`
+	ID        string    `yaml:"id"`
+	Title     string    `yaml:"title"`
+	Rule      string    `yaml:"rule,omitempty"`
+	Kind      string    `yaml:"kind,omitempty"`
+	Status    string    `yaml:"status"`
+	AppliesTo AppliesTo `yaml:"applies_to,omitempty"`
+	Owner     string    `yaml:"owner,omitempty"` // git email of the person to ask about it
+	// Area and Paths are the version 1 scope. An area also counts as a topic; paths
+	// link the decision to files and act as its path guard.
 	Area       string   `yaml:"area,omitempty"`
 	Paths      []string `yaml:"paths,omitempty"`
 	Sources    []string `yaml:"sources,omitempty"` // ref ids
@@ -163,6 +238,82 @@ type Decision struct {
 	Body       string   `yaml:"-"`
 }
 
+// AppliesTo scopes a decision to services and topics. No services, or "*", means the
+// whole product.
+type AppliesTo struct {
+	Services []string `yaml:"services,omitempty"`
+	Topics   []string `yaml:"topics,omitempty"`
+}
+
+// IsZero lets yaml omit an empty scope.
+func (a AppliesTo) IsZero() bool { return len(a.Services) == 0 && len(a.Topics) == 0 }
+
+// ProductWide reports whether the decision applies to every service.
+func (d Decision) ProductWide() bool {
+	if len(d.AppliesTo.Services) == 0 {
+		return true
+	}
+	for _, s := range d.AppliesTo.Services {
+		if s == "*" {
+			return true
+		}
+	}
+	return false
+}
+
+// ForService reports whether the decision applies to the named service (a repository
+// name from .dumen). An empty name, as in a single-repository project, matches all.
+func (d Decision) ForService(service string) bool {
+	if service == "" || d.ProductWide() {
+		return true
+	}
+	for _, s := range d.AppliesTo.Services {
+		if s == service {
+			return true
+		}
+	}
+	return false
+}
+
+// Topics returns the decision's topics, counting its version 1 area as one.
+func (d Decision) Topics() []string {
+	out := append([]string(nil), d.AppliesTo.Topics...)
+	if d.Area != "" {
+		dup := false
+		for _, t := range out {
+			dup = dup || t == d.Area
+		}
+		if !dup {
+			out = append(out, d.Area)
+		}
+	}
+	return out
+}
+
+// Headline is what agents see first: the rule, or the title for decisions without one.
+func (d Decision) Headline() string {
+	if d.Rule != "" {
+		return d.Rule
+	}
+	return d.Title
+}
+
+// ValidName reports whether s is a usable kind, topic or service name: lower-case
+// letters, digits, '-' and '_', at most 40 characters.
+func ValidName(s string) bool {
+	if s == "" || len(s) > 40 {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // Validate checks field-level rules.
 func (d Decision) Validate() error {
 	if !ValidID(d.ID, PrefixDecision) {
@@ -171,8 +322,24 @@ func (d Decision) Validate() error {
 	if strings.TrimSpace(d.Title) == "" {
 		return fmt.Errorf("decision %s: title is required", d.ID)
 	}
+	if utf8.RuneCountInString(d.Rule) > MaxRule {
+		return fmt.Errorf("decision %s: rule is longer than %d characters", d.ID, MaxRule)
+	}
+	if d.Kind != "" && !ValidName(d.Kind) {
+		return fmt.Errorf("decision %s: invalid kind %q", d.ID, d.Kind)
+	}
+	for _, s := range d.AppliesTo.Services {
+		if s != "*" && !ValidName(s) {
+			return fmt.Errorf("decision %s: invalid service %q", d.ID, s)
+		}
+	}
+	for _, t := range d.AppliesTo.Topics {
+		if !ValidName(t) {
+			return fmt.Errorf("decision %s: invalid topic %q", d.ID, t)
+		}
+	}
 	switch d.Status {
-	case StatusDraft, StatusApproved, StatusRejected:
+	case StatusProposed, StatusApproved, StatusRejected:
 	default:
 		return fmt.Errorf("decision %s: invalid status %q", d.ID, d.Status)
 	}
@@ -384,7 +551,10 @@ var RefKinds = []string{"design", "artifact", "mr", "doc"}
 // higher version was written by a newer dumen: this build still reads it, skipping what
 // it cannot parse, but refuses to write, because rewriting a record would silently drop
 // the fields it does not know.
-const SchemaVersion = 1
+//
+// Version 2 added decision rules, kinds, services and topics, and renamed the "draft"
+// status to "proposed".
+const SchemaVersion = 2
 
 type Ref struct {
 	ID        string   `yaml:"id"`

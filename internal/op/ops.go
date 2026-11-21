@@ -123,7 +123,7 @@ func (o *CreateDecision) Check() error {
 	if strings.TrimSpace(d.Title) == "" {
 		return fmt.Errorf("decision: title is required")
 	}
-	return secrets.Scan(d.Title, o.Body, d.Area, strings.Join(d.Paths, "\n"))
+	return secrets.Scan(d.Title, d.Rule, o.Body, d.Area, strings.Join(d.Paths, "\n"))
 }
 
 func (o *CreateDecision) Apply(tx *Tx) error {
@@ -131,7 +131,7 @@ func (o *CreateDecision) Apply(tx *Tx) error {
 	d.Body = o.Body
 	d.Author = tx.Actor.Email
 	d.AuthorKind = tx.Actor.Kind
-	d.Status = model.StatusDraft
+	d.Status = model.StatusProposed
 	d.ApprovedBy = ""
 	if d.Created == "" {
 		d.Created = model.FormatTime(tx.Now)
@@ -149,21 +149,38 @@ func (o *CreateDecision) Apply(tx *Tx) error {
 			return fmt.Errorf("decision: cannot supersede %s: not found", s)
 		}
 	}
+	if len(d.Supersedes) == 1 {
+		// A replacement keeps the kind, scope and owner of the decision it replaces
+		// unless it says otherwise.
+		old := byID[d.Supersedes[0]]
+		if d.Kind == "" {
+			d.Kind = old.Kind
+		}
+		if d.AppliesTo.IsZero() {
+			d.AppliesTo = old.AppliesTo
+		}
+		if d.Owner == "" {
+			d.Owner = old.Owner
+		}
+	}
 	for _, s := range d.Sources {
 		if !store.Exists(tx.Root, s) {
 			return fmt.Errorf("decision: source %s not found", s)
 		}
 	}
+	cfg, err := tx.Config()
+	if err != nil {
+		return err
+	}
+	if err := checkScope(cfg, d); err != nil {
+		return err
+	}
 	if o.Approve {
 		if err := requireHuman(tx, "approve decisions"); err != nil {
 			return err
 		}
-		cfg, err := tx.Config()
-		if err != nil {
-			return err
-		}
-		if !cfg.CanApprove(tx.Actor.Email, d.Area) {
-			return fmt.Errorf("%w: %s may not approve decisions in area %q", ErrForbidden, tx.Actor.Email, d.Area)
+		if !cfg.CanApprove(tx.Actor.Email, d.Kind, d.Area) {
+			return fmt.Errorf("%w: %s may not approve %s", ErrForbidden, tx.Actor.Email, what(d))
 		}
 		for _, s := range d.Supersedes {
 			if byID[s].Status != model.StatusApproved {
@@ -181,9 +198,52 @@ func (o *CreateDecision) Apply(tx *Tx) error {
 	if err := policy.SupersedeCycle(append(all, d)); err != nil {
 		return err
 	}
+	if err := upgradeSchema(tx, cfg); err != nil {
+		return err
+	}
 	tx.RecordID = d.ID
 	_, err = store.WriteDecision(tx.Root, d)
 	return err
+}
+
+// checkScope checks a decision's kind and services against dumen.yml. Topics need not
+// be declared: an undeclared topic is matched by its own name.
+func checkScope(cfg model.Config, d model.Decision) error {
+	if d.Kind != "" && !cfg.KnownKind(d.Kind) {
+		return fmt.Errorf("decision: unknown kind %q (known: %s)", d.Kind,
+			strings.Join(model.SortedKeys(cfg.KindsOrDefault()), ", "))
+	}
+	if len(cfg.Services) > 0 {
+		for _, s := range d.AppliesTo.Services {
+			if _, ok := cfg.Services[s]; !ok && s != "*" {
+				return fmt.Errorf("decision: unknown service %q (known: %s)", s,
+					strings.Join(model.SortedKeys(cfg.Services), ", "))
+			}
+		}
+	}
+	return nil
+}
+
+// upgradeSchema raises dumen.yml to version 2 the first time this build writes a
+// decision, so that an older dumen, which knows neither the "proposed" status nor the
+// new fields and would drop them when rewriting a record, stops writing to this store.
+func upgradeSchema(tx *Tx, cfg model.Config) error {
+	if cfg.Version >= 2 {
+		return nil
+	}
+	cfg.Version = 2
+	return store.WriteConfig(tx.Root, cfg)
+}
+
+// what names a decision for an error message.
+func what(d model.Decision) string {
+	switch {
+	case d.Kind != "":
+		return d.Kind + " decisions"
+	case d.Area != "":
+		return fmt.Sprintf("decisions in area %q", d.Area)
+	}
+	return "decisions"
 }
 
 // ResolveDecision approves or rejects a draft. Approved bodies are immutable afterwards.
@@ -216,10 +276,10 @@ func (o *ResolveDecision) Apply(tx *Tx) error {
 	if err != nil {
 		return err
 	}
-	if !cfg.CanApprove(tx.Actor.Email, d.Area) {
-		return fmt.Errorf("%w: %s may not approve or reject decisions in area %q", ErrForbidden, tx.Actor.Email, d.Area)
+	if !cfg.CanApprove(tx.Actor.Email, d.Kind, d.Area) {
+		return fmt.Errorf("%w: %s may not approve or reject %s", ErrForbidden, tx.Actor.Email, what(d))
 	}
-	if d.Status != model.StatusDraft {
+	if d.Status != model.StatusProposed {
 		return fmt.Errorf("decision %s is already %s", d.ID, d.Status)
 	}
 	all, err := store.ListDecisions(tx.Root)
@@ -245,6 +305,9 @@ func (o *ResolveDecision) Apply(tx *Tx) error {
 	if err := d.Validate(); err != nil {
 		return err
 	}
+	if err := upgradeSchema(tx, cfg); err != nil {
+		return err
+	}
 	tx.RecordID = d.ID
 	_, err = store.WriteDecision(tx.Root, d)
 	return err
@@ -267,7 +330,7 @@ func (o *ArchiveStaleDrafts) Apply(tx *Tx) error {
 	}
 	cutoff := tx.Now.Add(-time.Duration(cfg.Settings.DraftArchiveDays) * 24 * time.Hour)
 	for _, d := range all {
-		if d.Status != model.StatusDraft {
+		if d.Status != model.StatusProposed {
 			continue
 		}
 		created, err := model.ParseTime(d.Created)
@@ -420,6 +483,9 @@ func (o *SetDirectiveStatus) Apply(tx *Tx) error {
 	}
 	d.Status = o.Status
 	if err := d.Validate(); err != nil {
+		return err
+	}
+	if err := upgradeSchema(tx, cfg); err != nil {
 		return err
 	}
 	tx.RecordID = d.ID
