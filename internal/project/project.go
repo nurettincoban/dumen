@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nurettincoban/dumen/internal/cache"
+	"github.com/nurettincoban/dumen/internal/model"
 	"github.com/nurettincoban/dumen/internal/op"
 	"github.com/nurettincoban/dumen/internal/render"
 	"github.com/nurettincoban/dumen/internal/store"
@@ -62,6 +63,14 @@ func ReadFile(path string) (name, spec, repo string, err error) {
 	}
 	if name == "" {
 		return "", "", "", fmt.Errorf("%s: missing project name", path)
+	}
+	if err := model.CheckName("project", name); err != nil {
+		return "", "", "", fmt.Errorf("%s: %v", path, err)
+	}
+	if repo != "" {
+		if err := model.CheckName("repo", repo); err != nil {
+			return "", "", "", fmt.Errorf("%s: %v", path, err)
+		}
 	}
 	return name, spec, repo, sc.Err()
 }

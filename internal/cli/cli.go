@@ -235,6 +235,11 @@ func cmdInit(a *app, args []string) error {
 	if *name == "" {
 		*name = store.ProjectName(remote)
 	}
+	if *repoName != "" {
+		if err := model.CheckName("repo", *repoName); err != nil {
+			return err
+		}
+	}
 	ctx, cancel := longCtx()
 	defer cancel()
 	s, res, err := store.Setup(ctx, remote, branch, *name, true, me)

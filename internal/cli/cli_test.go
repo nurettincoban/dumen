@@ -545,3 +545,97 @@ func TestJoinWorkspaceUsesTheStoreProjectName(t *testing.T) {
 		t.Fatalf("workspace %s was not created: %v", want, err)
 	}
 }
+
+// Gauntlet S1: a store remote from a `.dumen` file somebody else wrote must never reach
+// git as an option or as a remote-helper command.
+func TestJoinRefusesARemoteThatGitWouldReadAsAnOption(t *testing.T) {
+	testutil.Home(t)
+	t.Setenv("CLAUDECODE", "")
+	t.Setenv("DUMEN_WORKSPACES", t.TempDir())
+	marker := filepath.Join(t.TempDir(), "PWNED")
+	evil := "--upload-pack=touch " + marker + ";"
+	dir := t.TempDir()
+	for _, args := range [][]string{{"init", "-q"}, {"config", "user.email", testutil.Lead.Email}, {"config", "user.name", "Lead"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	t.Chdir(dir)
+	for _, remote := range []string{evil, "ext::sh -c touch% " + marker} {
+		if err := os.WriteFile(filepath.Join(dir, project.File), []byte("project = demo\nstore = "+remote+"#dumen\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		for _, args := range [][]string{{"join"}, {"status"}, {"sync"}, {"join", "--", remote}} {
+			if out, code := runErr(args...); code == 0 {
+				t.Errorf("dumen %v with remote %q should fail:\n%s", args, remote, out)
+			}
+			if _, err := os.Stat(marker); err == nil {
+				t.Fatalf("dumen %v ran a command taken from the remote %q", args, remote)
+			}
+		}
+	}
+	os.Remove(filepath.Join(dir, project.File))
+	for _, remote := range []string{evil, "ext::sh -c touch% " + marker} {
+		if out, code := runErr("init", "--store", remote+"#dumen"); code == 0 || !strings.Contains(out, "refusing store remote") {
+			t.Errorf("init with remote %q should be refused:\n%s", remote, out)
+		}
+	}
+	if out, code := runErr("init", "--store", testutil.BareRemote(t)+"#-x"); code == 0 || !strings.Contains(out, "refusing store branch") {
+		t.Errorf("a branch that starts with \"-\" should be refused:\n%s", out)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("dumen init ran a command taken from the remote")
+	}
+}
+
+// Gauntlet S2: a project or repo name from a `.dumen` file is one plain path element, so
+// local state can never be created, or removed, outside the dumen home.
+func TestProjectNameCannotLeaveTheDumenHome(t *testing.T) {
+	_, p := repo(t)
+	remote := p.Store.Remote
+	home := testutil.Home(t) // another machine
+	victim := filepath.Join(filepath.Dir(home), "victim", "store")
+	if err := os.MkdirAll(victim, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	keep := filepath.Join(victim, "keep.txt")
+	if err := os.WriteFile(keep, []byte("mine"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	for _, args := range [][]string{{"init", "-q"}, {"config", "user.email", testutil.Lead.Email}, {"config", "user.name", "Lead"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	t.Chdir(dir)
+	for _, body := range []string{
+		"project = ../victim\nstore = " + remote + "#dumen\n",
+		"project = a/b\nstore = " + remote + "#dumen\n",
+		"project = ..\nstore = " + remote + "#dumen\n",
+		"project = ok\nrepo = ../x\nstore = " + remote + "#dumen\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, project.File), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if out, code := runErr("join"); code == 0 || !strings.Contains(out, "invalid") {
+			t.Errorf("join should refuse %q:\n%s", body, out)
+		}
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatal("dumen join removed a directory outside the dumen home")
+	}
+	os.Remove(filepath.Join(dir, project.File))
+	for _, args := range [][]string{{"init", "--project", "../victim"}, {"init", "--repo", "../x"}, {"sync", "--project", "../victim"}} {
+		if out, code := runErr(args...); code == 0 {
+			t.Errorf("dumen %v should fail:\n%s", args, out)
+		}
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatal("dumen removed a directory outside the dumen home")
+	}
+}
