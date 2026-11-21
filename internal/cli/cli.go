@@ -497,6 +497,7 @@ func cmdSync(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
+	p.Store.Maintain(ctx) // best effort, at most once a day
 	if len(rep.Outcomes) == 0 && !rep.Offline {
 		if _, err := p.Refresh(ctx); err != nil {
 			return err

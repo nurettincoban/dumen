@@ -739,3 +739,42 @@ func TestSessionStartBlockHasASizeBudget(t *testing.T) {
 		t.Errorf("the session id must stay the last line")
 	}
 }
+
+// Gauntlet O5: a subagent shares the session id but not the context. A directive handed
+// to a subagent's tool call must still reach the main agent, and each agent gets it once.
+func TestSubagentDoesNotUseUpTheMainAgentsNotice(t *testing.T) {
+	f := newFixture(t)
+	f.run(SessionStart, map[string]any{"source": "startup"})
+	id := f.directive(model.DirectiveContext, model.Scope{All: true}, "Use the structured logger")
+	f.proj.Refresh(context.Background())
+	tool := func(agent string) string {
+		in := map[string]any{"tool_name": "Read", "permission_mode": "default", "tool_input": map[string]any{"file_path": "a.go"}}
+		if agent != "" {
+			in["agent_id"] = agent
+		}
+		o := f.run(PreToolUse, in)
+		if o == nil || o.HookSpecificOutput == nil {
+			return ""
+		}
+		return o.HookSpecificOutput.AdditionalContext
+	}
+	if got := tool("sub-1"); !strings.Contains(got, id) {
+		t.Fatalf("the subagent should be told about the new directive: %q", got)
+	}
+	if got := tool("sub-1"); strings.Contains(got, id) {
+		t.Errorf("the subagent was told twice: %q", got)
+	}
+	if got := tool(""); !strings.Contains(got, id) || !strings.Contains(got, "NEW DIRECTIVES") {
+		t.Fatalf("the main agent must still be told after a subagent was: %q", got)
+	}
+	if got := tool("sub-2"); !strings.Contains(got, id) {
+		t.Errorf("another subagent has its own context too: %q", got)
+	}
+	// The one-time acknowledgement reminder is for the main agent.
+	if got := tool("sub-2"); strings.Contains(got, "not acknowledged") || strings.Contains(got, "ack_directive") {
+		t.Errorf("a subagent must not use up the reminder: %q", got)
+	}
+	if got := tool(""); !strings.Contains(got, id) {
+		t.Errorf("the main agent should get the acknowledgement reminder: %q", got)
+	}
+}

@@ -370,7 +370,17 @@ These were decided during the build, each at the owner's request or forced by a 
     (d) Temporary files carry the process id; git is run with `GCM_INTERACTIVE=never`, and
     network commands with ssh in batch mode unless the person configured an ssh command.
 
-13. **Decisions of every kind (decisions-first redesign, PR 1).** The owner re-centred dumen on
+13. **Medium findings O2, O3 and O5.** (a) The store lock is an operating system lock on an open file (`flock`, `LockFileEx` on
+    Windows). The kernel releases it when its holder ends, however it ends, so nothing
+    expires and nothing is taken over; the pid in the file is for a person who looks.
+    Setting a store up (`dumen init`, `dumen join`) takes the same lock. Whoever takes
+    the lock removes git lock files a killed git left in the clone. (b) `dumen sync` packs the clone once a day (`git gc`), under the lock;
+    automatic collection stays off so that it can never start in the middle of a write.
+    (c) Delivery of directives is tracked per agent (`agent_id` in the hook input), so a
+    subagent's tool call does not use up the notice for the main agent. The one-time
+    acknowledgement reminder goes to the main agent only.
+
+14. **Decisions of every kind (decisions-first redesign, PR 1).** The owner re-centred dumen on
     high-level decisions about the product, its UX and UI, its architecture and its
     technology, captured from the questions Claude Code already asks. Design and the
     critic's decisions: https://claude.ai/artifact/KRrGk5UV3ptRj9PecWZrd4. This step adds the

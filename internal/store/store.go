@@ -3,13 +3,13 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nurettincoban/dumen/internal/gitx"
@@ -169,6 +169,13 @@ func Setup(ctx context.Context, remote, branch, project string, create bool, fou
 		return nil, res, err
 	}
 	s := &Store{Home: filepath.Join(base, project), Local: Local{Project: project, Remote: remote, Branch: branch, Email: strings.ToLower(founder.Email)}}
+	// Everything below runs git in the clone, and may wipe and rebuild it: it must not
+	// happen while another dumen process on this machine is working there.
+	unlock, err := s.Lock(ctx)
+	if err != nil {
+		return nil, res, err
+	}
+	defer unlock()
 	if prev, err := Open(project); err == nil {
 		s.Roots = prev.Roots
 		if prev.Remote != remote || prev.Branch != branch {
@@ -438,27 +445,76 @@ func (s *Store) HasMergeCommits(ctx context.Context) (bool, error) {
 
 // Lock takes the store's exclusive lock, waiting until ctx is done.
 // Only one process at a time may sync, apply and push in a local store.
+//
+// It is an operating system lock on an open file (flock, LockFileEx), held for as long as
+// the operation runs. The kernel releases it when the process ends, however it ends, so
+// there is nothing to expire, refresh or take over. The file itself stays; the pid in it
+// is for a person who looks, not for dumen.
 func (s *Store) Lock(ctx context.Context) (unlock func(), err error) {
-	path := filepath.Join(s.Home, "lock")
-	const stale = 2 * time.Minute
+	if err := os.MkdirAll(s.Home, 0o755); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(filepath.Join(s.Home, "lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, err
+	}
 	for {
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-		if err == nil {
-			f.WriteString(strconv.Itoa(os.Getpid()))
+		ok, err := tryFlock(f)
+		if err != nil {
 			f.Close()
-			return func() { os.Remove(path) }, nil
-		}
-		if !errors.Is(err, os.ErrExist) {
 			return nil, err
 		}
-		if st, serr := os.Stat(path); serr == nil && time.Since(st.ModTime()) > stale {
-			os.Remove(path) // the holder died; a live holder finishes well within the limit
-			continue
+		if ok {
+			break
 		}
 		select {
 		case <-ctx.Done():
+			f.Close()
 			return nil, fmt.Errorf("dumen store is busy: %w", ctx.Err())
 		case <-time.After(15 * time.Millisecond):
 		}
 	}
+	f.Truncate(0)
+	f.WriteAt([]byte(strconv.Itoa(os.Getpid())+"\n"), 0)
+	s.clearGitLocks()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			unFlock(f)
+			f.Close()
+		})
+	}, nil
+}
+
+// clearGitLocks removes lock files a killed git left in the store's clone. Every git
+// command in the clone runs under the store lock, so whoever holds that lock knows that
+// no git process is working there.
+func (s *Store) clearGitLocks() {
+	gitDir := filepath.Join(s.Root(), ".git")
+	for _, name := range []string{"index.lock", "HEAD.lock", "config.lock", "shallow.lock", "packed-refs.lock"} {
+		os.Remove(filepath.Join(gitDir, name))
+	}
+	branch := filepath.Join(gitDir, "refs", "heads", filepath.FromSlash(s.Branch)+".lock")
+	os.Remove(branch)
+}
+
+// Maintain packs the clone's loose objects when that has not been done for a day. Every
+// record is a commit and automatic garbage collection is off in the clone (it must never
+// start in the middle of a write), so without this the clone grows without bound. The
+// caller holds no lock; Maintain takes it.
+func (s *Store) Maintain(ctx context.Context) error {
+	marker := filepath.Join(s.Home, "maintained")
+	if st, err := os.Stat(marker); err == nil && time.Since(st.ModTime()) < 24*time.Hour {
+		return nil
+	}
+	unlock, err := s.Lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err := os.WriteFile(marker, nil, 0o644); err != nil { // first: a failing gc is not retried in a loop
+		return err
+	}
+	_, err = s.git().Run(ctx, "gc", "--quiet")
+	return err
 }
