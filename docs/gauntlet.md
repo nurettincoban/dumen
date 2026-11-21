@@ -65,7 +65,7 @@ A broken setup step or a false claim is High. Personal data in the repository is
 ```sh
 export DUMEN_HOME=$(mktemp -d) && cd "$(mktemp -d)"
 git init -q --bare remote.git
-git init -q code && cd code && git remote add origin ../remote.git
+git init -q code && cd code && git remote add origin "$OLDPWD/remote.git"
 env -u CLAUDECODE dumen init
 env -u CLAUDECODE dumen direct --deny --paths 'src/auth/**' "frozen"
 # drive a hook by hand
