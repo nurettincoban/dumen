@@ -145,7 +145,7 @@ func TestToolList(t *testing.T) {
 		}
 	}
 	sort.Strings(names)
-	want := "ack_directive activity add_ref approve decisions_for_path decisions_for_topic directives draft_decision get_decision log_event propose_directive publish_directive record_answer search_decisions supersede"
+	want := "ack_directive activity add_ref approve check_ref decisions_for_path decisions_for_topic directives draft_decision get_decision log_event news propose_directive publish_directive record_answer reject search_decisions set_private set_product set_role supersede withdraw_directive"
 	if got := strings.Join(names, " "); got != want {
 		t.Fatalf("tools:\n got %s\nwant %s", got, want)
 	}
@@ -160,9 +160,15 @@ func TestAgentCannotApproveOrPublishWithoutHumanConfirmation(t *testing.T) {
 	}
 	// Straight calls, as an agent would make them with no hook involved: refused.
 	for name, args := range map[string]map[string]any{
-		"approve":           {"id": id},
-		"publish_directive": {"text": "do x", "all": true},
-		"supersede":         {"id": id, "title": "t", "body": "b"},
+		"approve":            {"id": id},
+		"publish_directive":  {"text": "do x", "all": true},
+		"supersede":          {"id": id, "title": "t", "body": "b"},
+		"reject":             {"id": id},
+		"withdraw_directive": {"id": "Y-0000"},
+		"set_role":           {"email": "x@example.com", "role": "lead"},
+		"set_product":        {"name": "x"},
+		"check_ref":          {"id": "R-0000"},
+		"set_private":        {"on": true},
 	} {
 		if text, isErr := w.call(name, args); !isErr || !strings.Contains(text, "human action") {
 			t.Errorf("%s without confirmation must be refused, got %q (error=%v)", name, text, isErr)

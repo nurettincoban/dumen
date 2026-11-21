@@ -205,8 +205,8 @@ func cmdPrivate(a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	if os.Getenv("CLAUDECODE") != "" {
-		return fmt.Errorf("forbidden: only a human can turn monitoring off; ask your human to run this in their own terminal")
+	if os.Getenv("CLAUDECODE") != "" || !humanAtTerminal {
+		return fmt.Errorf("forbidden: only a human can turn monitoring off; the agent asks them first and they confirm the prompt")
 	}
 	marker := p.PrivateMarker()
 	mode := "on"

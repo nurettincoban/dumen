@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/nurettincoban/dumen/internal/gitx"
@@ -836,5 +837,47 @@ func TestAnotherRepositoryWithTheSameProjectNameIsNotTheProject(t *testing.T) {
 	if os.Symlink(dir, link) == nil {
 		t.Chdir(link)
 		run(t, "status")
+	}
+}
+
+// Gauntlet S3: a human action from a command without a terminal is an agent's, whatever
+// the environment says, so an agent's shell cannot pose as a person.
+func TestHumanActionsNeedATerminal(t *testing.T) {
+	repo(t)
+	t.Setenv("CLAUDECODE", "")
+	isTerminal = func(io.Reader) bool { return false }
+	defer func() { isTerminal = func(io.Reader) bool { return true } }()
+	// There is no runtime opt-out: an old flag is an unknown command, and /dev/null and
+	// /dev/zero are character devices but not terminals.
+	if out, code := runErr("--no-terminal", "approve", "D-0000"); code == 0 {
+		t.Errorf("--no-terminal must not exist: %s", out)
+	}
+	isTerminal = realIsTerminal
+	for _, dev := range []string{os.DevNull, "/dev/zero"} {
+		f, err := os.Open(dev)
+		if err != nil {
+			continue
+		}
+		var o, e bytes.Buffer
+		code := Main([]string{"decide", "--title", "t", "--rule", "r", "--kind", "product", "-m", "b", "--approve"}, f, &o, &e)
+		f.Close()
+		if code == 0 || !strings.Contains(e.String(), "no terminal") {
+			t.Errorf("decide --approve with stdin %s: exit %d\n%s%s", dev, code, o.String(), e.String())
+		}
+	}
+	isTerminal = func(io.Reader) bool { return false }
+	out, _ := runErr("decide", "--title", "x; y", "--rule", "r", "--kind", "product", "-m", "b") // proposing is an agent's action too
+	id := out[strings.Index(out, "D-") : strings.Index(out, "D-")+6]
+	for _, args := range [][]string{
+		{"approve", id}, {"reject", id},
+		{"decide", "--title", "t", "--rule", "r", "--kind", "product", "-m", "b", "--approve"},
+		{"direct", "--all", "x"},
+		{"role", "set", "someone@example.com", "dev"},
+		{"product", "--name", "x"},
+	} {
+		var o, e bytes.Buffer
+		if code := Main(args, strings.NewReader(""), &o, &e); code == 0 || !strings.Contains(e.String(), "no terminal") {
+			t.Errorf("%v without a terminal: exit %d\n%s%s", args, code, o.String(), e.String())
+		}
 	}
 }

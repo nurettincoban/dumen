@@ -457,9 +457,15 @@ func (r *runCtx) userPromptSubmit() *Output {
 // ---- PreToolUse ----
 
 var guardedTools = map[string]string{
-	"approve":           "approving a decision",
-	"supersede":         "superseding a decision",
-	"publish_directive": "publishing a directive",
+	"approve":            "approving a decision",
+	"supersede":          "superseding a decision",
+	"publish_directive":  "publishing a directive",
+	"reject":             "rejecting a decision",
+	"withdraw_directive": "withdrawing a directive",
+	"set_role":           "changing who is on the team",
+	"set_product":        "changing the product's services, topics and kinds",
+	"check_ref":          "confirming a link",
+	"set_private":        "turning monitoring of this machine's sessions on or off",
 }
 
 // guardedMCP reports whether name is one of dumen's human-only MCP tools, whether the
@@ -476,7 +482,9 @@ func guardedMCP(name string) (action string, ok bool) {
 
 var (
 	// decideApproved catches `dumen decide ... --approve`: it puts a decision in force.
-	decideApproved = regexp.MustCompile(`(?i)\bdumen(\.exe)?['"]?\s+decide\b[^;&|\n]*\s-{1,2}approve\b`)
+	// It does not stop at ; & or |, which can sit inside a quoted title: a false refusal
+	// costs an agent nothing it may do.
+	decideApproved = regexp.MustCompile(`(?is)\bdumen(\.exe)?['"]?\s+decide\b.*-{1,2}approve\b`)
 	// envMarker catches a command that names dumen and also touches CLAUDECODE, the
 	// variable by which the CLI knows it runs inside an agent's session.
 	envMarker = regexp.MustCompile(`(?i)CLAUDECODE`)
@@ -659,7 +667,7 @@ func (r *runCtx) preToolUse() *Output {
 		cmd := ti.Command
 		if humanCmd.MatchString(cmd) || decideApproved.MatchString(cmd) ||
 			(envMarker.MatchString(cmd) && strings.Contains(strings.ToLower(cmd), "dumen")) {
-			return deny("dumen: approving, rejecting, superseding, publishing, withdrawing, changing roles, confirming links and marking a session private are human actions, and `dumen mcp` and `dumen hook` are started by Claude Code only. Ask your human to run this in their own terminal.")
+			return deny("dumen: approving, rejecting, superseding, publishing, withdrawing, changing roles, confirming links and marking a session private are human actions, and `dumen mcp` and `dumen hook` are started by Claude Code only. Call the matching dumen tool instead (approve, reject, supersede, publish_directive, withdraw_directive, set_role, set_product, check_ref, set_private) only when your human agrees: they confirm it in the permission prompt. If no prompt appears, ask them to switch to a mode that asks (shift+tab) or to reconnect dumen with /mcp.")
 		}
 		if storeRef.MatchString(cmd) || (base != "" && mentionsPath(cmd, base)) {
 			return deny("dumen: the dumen store is managed by the dumen tools and is not read or changed from the shell. Use the dumen MCP tools, or ask your human.")
@@ -678,12 +686,12 @@ func (r *runCtx) preToolUse() *Output {
 			switch r.in.PermissionMode {
 			case "default", "acceptEdits", "plan":
 			default:
-				return deny(fmt.Sprintf("dumen: %s%s is a human action and this session's permission mode (%s) does not put the prompt in front of a person, so it cannot be confirmed here. Ask your human to run it in their own terminal.", action, target, render.Label(r.in.PermissionMode, 30)))
+				return deny(fmt.Sprintf("dumen: %s%s is a human action, confirmed in Claude Code's permission prompt, and this session's permission mode (%s) does not show that prompt to a person. Tell your human: switch to a mode that asks (shift+tab, for example default or accept edits), then ask you again. As a last resort they can run the dumen command in their own terminal.", action, target, render.Label(r.in.PermissionMode, 30)))
 			}
 			// The MCP server only acts on a call that carries this proof of having been
 			// asked, and only the server Claude Code started for this session can spend it.
 			if err := session.GrantTicket(r.proj.Store.SessionsDir(), r.in.ToolName, r.in.ToolInput, r.env.ParentPID, r.sess.Session); err != nil {
-				return deny(fmt.Sprintf("dumen: %s%s is a human action and the dumen server of this session is not running, so it cannot be confirmed here. Ask your human to run it in their own terminal.", action, target))
+				return deny(fmt.Sprintf("dumen: %s%s is a human action, confirmed in Claude Code's permission prompt, and this session's dumen MCP server is not running, so the prompt cannot be offered. Tell your human: run /mcp and reconnect dumen, then ask you again. As a last resort they can run the dumen command in their own terminal.", action, target))
 			}
 			spec.PermissionDecision, spec.PermissionDecisionReason = "ask", reason
 		}

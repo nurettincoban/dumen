@@ -65,6 +65,10 @@ func init() {
 // Main runs the CLI and returns the process exit code.
 func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	a := &app{in: stdin, out: stdout, err: stderr}
+	// Human actions belong in the permission prompt inside Claude Code. The CLI accepts
+	// one only at a real terminal, which an agent's shell tool does not have. There is no
+	// flag or variable that turns this off; tests replace isTerminal in-process.
+	humanAtTerminal = isTerminal(stdin)
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
 		a.help()
 		return 0
@@ -76,6 +80,9 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 					return 0
 				}
 				fmt.Fprintln(stderr, "dumen:", err)
+				if errors.Is(err, op.ErrForbidden) && !humanAtTerminal && os.Getenv("CLAUDECODE") == "" {
+					fmt.Fprintln(stderr, "dumen: this command has no terminal, so dumen treats it as an agent's. In Claude Code, the agent calls the matching dumen tool and you confirm the prompt.")
+				}
 				var coded *exitError
 				if errors.As(err, &coded) {
 					return coded.code
@@ -135,10 +142,20 @@ func actor(dir string, s *store.Store) model.Actor {
 		email = s.Email
 	}
 	kind := model.KindHuman
-	if os.Getenv("CLAUDECODE") != "" {
+	if os.Getenv("CLAUDECODE") != "" || !humanAtTerminal {
 		kind = model.KindAgent
 	}
 	return model.Actor{Email: email, Kind: kind}
+}
+
+// humanAtTerminal is set by Main: the command's stdin is a real terminal.
+var humanAtTerminal bool
+
+// isTerminal reports whether r is a real terminal. A character device is not enough:
+// /dev/null and /dev/zero are character devices. Tests replace it.
+var isTerminal = func(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	return ok && ttyFD(f.Fd())
 }
 
 func openProject() (*project.Project, error) {

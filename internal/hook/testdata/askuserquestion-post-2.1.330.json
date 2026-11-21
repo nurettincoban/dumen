@@ -1,0 +1,56 @@
+{
+ "permission_mode": "default",
+ "effort": {
+  "level": "medium"
+ },
+ "hook_event_name": "PostToolUse",
+ "tool_name": "AskUserQuestion",
+ "tool_input": {
+  "questions": [
+   {
+    "question": "Which queue should orders use?",
+    "header": "Queue",
+    "options": [
+     {
+      "label": "NATS",
+      "description": "Use NATS as the message queue for orders."
+     },
+     {
+      "label": "Kafka",
+      "description": "Use Kafka as the message queue for orders."
+     }
+    ],
+    "multiSelect": false
+   }
+  ],
+  "answers": {
+   "Which queue should orders use?": "Kafka"
+  },
+  "annotations": {}
+ },
+ "tool_response": {
+  "questions": [
+   {
+    "question": "Which queue should orders use?",
+    "header": "Queue",
+    "options": [
+     {
+      "label": "NATS",
+      "description": "Use NATS as the message queue for orders."
+     },
+     {
+      "label": "Kafka",
+      "description": "Use Kafka as the message queue for orders."
+     }
+    ],
+    "multiSelect": false
+   }
+  ],
+  "answers": {
+   "Which queue should orders use?": "Kafka"
+  },
+  "annotations": {}
+ },
+ "tool_use_id": "toolu_01EgmvseY6WBV2M82mc77Dio",
+ "duration_ms": 1
+}
