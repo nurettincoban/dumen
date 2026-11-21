@@ -325,6 +325,9 @@ func cmdJoin(a *app, args []string) error {
 // or designer): the project file and the Claude Code configuration, and nothing else.
 func joinWorkspace(a *app, spec string) error {
 	remote, branch := store.ParseSpec(spec)
+	if err := gitx.CheckStore(remote, branch); err != nil {
+		return err // before anything is created on disk
+	}
 	ctx, cancel := longCtx()
 	defer cancel()
 	// The project is called what its store says, so that a workspace and the code

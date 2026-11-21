@@ -551,7 +551,13 @@ func TestJoinWorkspaceUsesTheStoreProjectName(t *testing.T) {
 func TestJoinRefusesARemoteThatGitWouldReadAsAnOption(t *testing.T) {
 	testutil.Home(t)
 	t.Setenv("CLAUDECODE", "")
-	t.Setenv("DUMEN_WORKSPACES", t.TempDir())
+	spaces := t.TempDir()
+	t.Setenv("DUMEN_WORKSPACES", spaces)
+	defer func() {
+		if left, _ := os.ReadDir(spaces); len(left) > 0 {
+			t.Errorf("a refused join left a workspace behind: %v", left)
+		}
+	}()
 	marker := filepath.Join(t.TempDir(), "PWNED")
 	evil := "--upload-pack=touch " + marker + ";"
 	dir := t.TempDir()
