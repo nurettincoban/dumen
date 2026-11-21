@@ -32,6 +32,11 @@ type Decision struct {
 	Sources   []string        `json:"sources,omitempty"`
 	Created   string          `json:"created"`
 	Contested bool            `json:"contested,omitempty"`
+	// For news: when and by whom it came into force, where it was made, what it retired.
+	ApprovedAt string   `json:"approved_at,omitempty"`
+	ApprovedBy string   `json:"approved_by,omitempty"`
+	Repo       string   `json:"repo,omitempty"`
+	Supersedes []string `json:"supersedes,omitempty"`
 }
 
 // Directive mirrors model.Directive with its text.
@@ -58,7 +63,7 @@ type Cache struct {
 	Proposed       int `json:"proposed"` // proposed directives waiting for a publisher
 }
 
-const version = 2
+const version = 3
 
 // Build reads the checkout at root into a snapshot.
 func Build(root, head string, now time.Time) (*Cache, error) {
@@ -100,7 +105,8 @@ func Build(root, head string, now time.Time) (*Cache, error) {
 			}
 			c.Decisions = append(c.Decisions, Decision{ID: d.ID, Title: d.Title, Rule: d.Rule, Kind: d.Kind,
 				AppliesTo: d.AppliesTo, Owner: d.Owner, Area: d.Area, Paths: d.Paths,
-				Sources: d.Sources, Created: d.Created, Contested: derived.Contested[d.ID]})
+				Sources: d.Sources, Created: d.Created, Contested: derived.Contested[d.ID],
+				ApprovedAt: d.ApprovedAt, ApprovedBy: d.ApprovedBy, Repo: d.Repo, Supersedes: d.Supersedes})
 		}
 	}
 	sort.SliceStable(c.Decisions, func(i, j int) bool {

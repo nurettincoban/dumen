@@ -427,3 +427,19 @@ These were decided during the build, each at the owner's request or forced by a 
     hold-back, use one rule for whether a decision concerns a repository: it names the
     service or none, and its paths, if any, include paths of that repository. Proposed
     decisions never appear in any of these.
+17. **Binding but changeable: alignment over gating (owner decision, 2026-11-21).** Several
+    developers run Claude Code at the same time on different parts of one product. The
+    risk is not that a decision is made without a committee; it is that the other parts
+    never hear about it. So any team member's approval puts a decision in force, anyone on
+    the team can change it with `supersede`, and every approval reaches the agents of the
+    services it concerns as `DECISION NEWS` on their next step, with who approved it, in
+    which repository, and what it replaced. A new session also opens with what changed
+    since the previous session in that repository, and `dumen news` lists the changes for
+    people. The default kinds have no owner role any more; a team that wants a gate for a
+    kind sets `owner_role`. The rule that agent-written text reaches other agents only
+    after a person has read it still holds: news carries approved decisions only. Example:
+    Ayşe (booking-svc) answers her agent's question "refund to the card or as store
+    credit?" with store credit and approves it; Mehmet's agent in billing-svc gets
+    "DECISION NEWS (1): D-7K2P [product] Cancelled bookings are refunded as store credit
+    (approved by ayse@example.com; in booking-svc)" on its next tool call. If Mehmet
+    disagrees, he supersedes it and Ayşe's agent gets that change the same way.

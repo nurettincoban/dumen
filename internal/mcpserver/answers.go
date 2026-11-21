@@ -91,7 +91,9 @@ func (s *Server) RecordAnswer(ctx context.Context, in answerIn) (string, error) 
 				for _, x := range approved {
 					fmt.Fprintf(&b, "- %s %s\n", x.ID, render.Label(x.Headline(), model.MaxRule))
 				}
-				b.WriteString("If one of these covers the answer, do not save it again; follow that decision.\n")
+				b.WriteString("If one of these covers the answer, do not save it again; follow that decision. " +
+					"If your human's answer differs from one, the team decided otherwise: tell your human, and if they want it changed, " +
+					"call supersede with that id and the new rule (they confirm), so every agent gets the change.\n")
 			}
 			if len(proposed) > 0 {
 				// Gauntlet H1: the title and rule of a proposed decision are agent-written
@@ -129,6 +131,7 @@ func (s *Server) RecordAnswer(ctx context.Context, in answerIn) (string, error) 
 	if w := strings.TrimSpace(in.Why); w != "" {
 		body.WriteString("\n## Why\n" + w + "\n")
 	}
+	d.Repo = p.Repo
 	out, note, err := s.submit(ctx, p, s.agent(p), &op.CreateDecision{Decision: d, Body: body.String()})
 	if err != nil {
 		return "", err
@@ -139,9 +142,16 @@ func (s *Server) RecordAnswer(ctx context.Context, in answerIn) (string, error) 
 	return fmt.Sprintf("Saved as %s (proposed, %s). Tell your human in one line. %s%s", out.RecordID, d.Kind, owners(c.Config, d.Kind, p.Store.Email), note), nil
 }
 
-// owners says who approves a kind of decision, and whether the session's person can.
+// owners says who can put a decision in force, and whether the session's person can.
 func owners(cfg model.Config, kind, me string) string {
+	if cfg.CanApprove(me, kind, "") {
+		return "Your human can put it in force now: offer it, and if they agree call approve with this id (they confirm the prompt). " +
+			"Once approved it is binding for every agent, and the agents on the services it concerns get it as news. Anyone on the team can change it later with supersede."
+	}
 	role := cfg.KindsOrDefault()[kind].OwnerRole
+	if role == "" {
+		return "Your human has no role in dumen yet, so they cannot approve it; a lead can add them with `dumen role set`. Until it is approved other agents do not follow it."
+	}
 	var people []string
 	for email, r := range cfg.Roles {
 		if r == role {
@@ -149,14 +159,10 @@ func owners(cfg model.Config, kind, me string) string {
 		}
 	}
 	sort.Strings(people)
-	switch {
-	case cfg.CanApprove(me, kind, ""):
-		return fmt.Sprintf("Your human may approve %s decisions: if they want it in force for everyone now, they can approve it (the approve tool asks them to confirm).", kind)
-	case len(people) == 0:
-		return fmt.Sprintf("No one has the %q role that approves %s decisions yet; a lead or PM can approve it.", role, kind)
-	default:
-		return fmt.Sprintf("It goes to %s (%s) for approval; until then other agents do not follow it.", strings.Join(people, ", "), role)
+	if len(people) == 0 {
+		return fmt.Sprintf("This team lets the %q role approve %s decisions and no one has it yet; a lead or PM can approve it.", role, kind)
 	}
+	return fmt.Sprintf("This team lets %s (%s) approve %s decisions; until then other agents do not follow it.", strings.Join(people, ", "), role, kind)
 }
 
 // findAsked looks for the question in the question-tool calls this session's hook saw,

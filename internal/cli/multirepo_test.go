@@ -83,6 +83,16 @@ func TestSeveralRepositoriesShareOneStore(t *testing.T) {
 	// Gauntlet G1: a decision limited by paths to one repository stays there in every view.
 	run(t, "decide", "--title", "Refunds", "--rule", "Refunds are issued by the refund worker only", "--kind", "technical",
 		"--paths", "src/**", "--topics", "payments", "-m", "Why.", "--approve")
+	news := run(t, "news")
+	if !strings.Contains(news, "refund worker") || !strings.Contains(news, "approved by "+testutil.Lead.Email+" in billing-svc") || strings.Contains(news, "idempotent") {
+		t.Fatalf("news in billing-svc:\n%s", news)
+	}
+	if all := run(t, "news", "--all"); !strings.Contains(all, "idempotent") || !strings.Contains(all, "in orders-svc") {
+		t.Fatalf("news for the project:\n%s", all)
+	}
+	if other := run(t, "news", "--repo", "orders-svc"); strings.Contains(other, "refund worker") {
+		t.Fatalf("billing-svc's path decision in orders-svc news:\n%s", other)
+	}
 	if list := run(t, "decisions", "src/api/list.go"); strings.Contains(list, "Orders are paginated") {
 		t.Fatalf("a decision about orders-svc leaked into billing-svc: %s", list)
 	}

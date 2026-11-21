@@ -44,7 +44,7 @@ func TestRecordAnswerVerified(t *testing.T) {
 		len(d.Origin.Options) != 2 || !strings.Contains(d.Body, "- Slot buttons (picked)") {
 		t.Fatalf("saved decision: %+v\n%s", d, d.Body)
 	}
-	if !strings.Contains(text, "may approve ui decisions") {
+	if !strings.Contains(text, "Your human can put it in force now") {
 		t.Fatalf("the lead should be told they can approve it: %s", text)
 	}
 	// Saving the same choice again lists it instead.

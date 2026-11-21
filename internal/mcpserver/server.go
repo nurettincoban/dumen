@@ -604,6 +604,7 @@ func (s *Server) DraftDecision(ctx context.Context, in decisionIn) (string, erro
 	if strings.TrimSpace(in.Body) == "" {
 		return "", fmt.Errorf("body is required: why, what is allowed and not allowed, and the rejected alternatives")
 	}
+	d.Repo = p.Repo
 	out, note, err := s.submit(ctx, p, s.agent(p), &op.CreateDecision{Decision: d, Body: in.Body})
 	if err != nil {
 		return "", err
@@ -704,6 +705,7 @@ func (s *Server) Supersede(ctx context.Context, in decisionIn) (string, error) {
 	if d.Rule == "" {
 		return "", fmt.Errorf("rule is required: the one sentence other agents will follow")
 	}
+	d.Repo = p.Repo
 	out, note, err := s.submit(ctx, p, s.human(p), &op.CreateDecision{Decision: d, Body: in.Body, Approve: true})
 	if err != nil {
 		return "", err

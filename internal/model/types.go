@@ -48,11 +48,11 @@ const (
 // DefaultKinds is used when dumen.yml declares no kinds.
 func DefaultKinds() map[string]KindConfig {
 	return map[string]KindConfig{
-		KindProduct:      {OwnerRole: "pm"},
-		KindUX:           {OwnerRole: "designer"},
-		KindUI:           {OwnerRole: "designer"},
-		KindArchitecture: {OwnerRole: "lead"},
-		KindTechnical:    {OwnerRole: "lead"},
+		KindProduct:      {},
+		KindUX:           {},
+		KindUI:           {},
+		KindArchitecture: {},
+		KindTechnical:    {},
 	}
 }
 
@@ -190,23 +190,25 @@ func (c Config) CanPublish(email string) bool {
 }
 
 // CanApprove reports whether email may approve a decision of the given kind in the
-// given area: publisher roles, the role that owns the kind, and the owners of the area.
+// given area, or retire one by superseding it. Decisions are binding but changeable, so
+// by default every team member (anyone with a role) may approve. A team that sets an
+// owner role for a kind limits that kind to the role, the publishers and the area owners.
 func (c Config) CanApprove(email, kind, area string) bool {
 	if c.CanPublish(email) {
 		return true
 	}
-	if kind != "" && c.OwnsKind(email, kind) {
-		return true
-	}
-	email = strings.ToLower(strings.TrimSpace(email))
+	low := strings.ToLower(strings.TrimSpace(email))
 	if a, ok := c.Areas[area]; ok {
 		for _, o := range a.Owners {
-			if strings.ToLower(o) == email {
+			if strings.ToLower(o) == low {
 				return true
 			}
 		}
 	}
-	return false
+	if k := c.KindsOrDefault()[kind]; k.OwnerRole != "" {
+		return c.OwnsKind(email, kind)
+	}
+	return c.Role(email) != ""
 }
 
 // Actor is who performs an operation.
@@ -234,6 +236,9 @@ type Decision struct {
 	Author     string   `yaml:"author"`
 	AuthorKind string   `yaml:"author_kind"`
 	ApprovedBy string   `yaml:"approved_by,omitempty"`
+	ApprovedAt string   `yaml:"approved_at,omitempty"` // when it came into force
+	// Repo is the repository the decision was made in, so that news can say where.
+	Repo       string   `yaml:"repo,omitempty"`
 	Supersedes []string `yaml:"supersedes,omitempty"`
 	AnchoredAt string   `yaml:"anchored_at,omitempty"` // main sha
 	Created    string   `yaml:"created"`
@@ -344,6 +349,9 @@ func ValidService(s string) bool {
 func (d Decision) Validate() error {
 	if !ValidID(d.ID, PrefixDecision) {
 		return fmt.Errorf("decision: invalid id %q", d.ID)
+	}
+	if d.Repo != "" && !ValidService(d.Repo) {
+		return fmt.Errorf("decision %s: invalid repository name %q", d.ID, d.Repo)
 	}
 	if strings.TrimSpace(d.Title) == "" {
 		return fmt.Errorf("decision %s: title is required", d.ID)

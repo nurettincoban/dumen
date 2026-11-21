@@ -25,11 +25,13 @@ type State struct {
 	LastSummary  string              `json:"last_summary,omitempty"`  // sanitized tail of the last assistant message
 	Private      bool                `json:"private,omitempty"`       // session is not monitored
 	Finished     bool                `json:"finished,omitempty"`
-	Asking       bool                `json:"asking,omitempty"`   // the agent said it is waiting for its human
-	Violated     []string            `json:"violated,omitempty"` // "<directive id> <file>" already reported as changed under a deny directive
-	Held         []string            `json:"held,omitempty"`     // keys of questions held back once because a decision may answer them
-	Answers      []Answer            `json:"answers,omitempty"`  // the last questions the agent asked its human, with the raw answer
-	Noted        []string            `json:"noted,omitempty"`    // decision ids already in the agent's context (session start, topic notes)
+	Asking       bool                `json:"asking,omitempty"`    // the agent said it is waiting for its human
+	Violated     []string            `json:"violated,omitempty"`  // "<directive id> <file>" already reported as changed under a deny directive
+	Held         []string            `json:"held,omitempty"`      // keys of questions held back once because a decision may answer them
+	Answers      []Answer            `json:"answers,omitempty"`   // the last questions the agent asked its human, with the raw answer
+	Noted        []string            `json:"noted,omitempty"`     // decision ids already in the agent's context (session start, topic notes)
+	NewsBase     bool                `json:"news_base,omitempty"` // Known holds the baseline, so later decisions are news
+	Known        []string            `json:"known,omitempty"`     // decision ids in force when the session started, or delivered as news since
 
 	path string
 }
