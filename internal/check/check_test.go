@@ -6,7 +6,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
+	"time"
+
+	"github.com/nurettincoban/dumen/internal/cache"
+	"github.com/nurettincoban/dumen/internal/model"
 )
 
 func git(t *testing.T, dir string, args ...string) {
@@ -65,5 +70,25 @@ func TestChangedFiles(t *testing.T) {
 	}
 	if _, err := DiffFiles(ctx, root, "--output=/tmp/x", "HEAD"); err == nil {
 		t.Error("a revision that looks like an option must be an error")
+	}
+}
+
+// Gauntlet P1: a file whose name contains a newline is still found under a glob.
+func TestViolationsWithANewlineInTheName(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file names cannot contain a newline on Windows")
+	}
+	top := t.TempDir()
+	git(t, top, "init", "-q")
+	write(t, top, "src/auth/a\nb.go")
+	files, err := WorktreeFiles(context.Background(), top)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &cache.Cache{Directives: []cache.Directive{{Directive: model.Directive{ID: "Y-AAAA", Kind: model.DirectiveDeny,
+		Status: model.DirectiveActive, Scope: model.Scope{Paths: []string{"src/auth/**"}},
+		Starts: model.FormatTime(time.Now().Add(-time.Hour)), Expires: model.FormatTime(time.Now().Add(time.Hour))}}}}
+	if vs := Violations(c, "", files, time.Now()); len(vs) != 1 || vs[0].File != "src/auth/a\nb.go" {
+		t.Fatalf("files %q, violations %+v", files, vs)
 	}
 }

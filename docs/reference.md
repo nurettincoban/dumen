@@ -55,7 +55,7 @@ Every command accepts `--help`. Ids look like `Y-2APW` (directive), `D-PG18` (de
 | --- | --- |
 | `dumen activity [--since WHEN] [--person P] [--repo R] [--kind K] [--events] [--json]` | Counts, sessions, who is stuck, who has not acknowledged. `--since` takes `today`, `yesterday`, `2h`, `7d`, a date or an RFC 3339 time. |
 | `dumen watch [--since 10m] [--interval 5s] [--once]` | Live tail of activity. |
-| `dumen check [BASE..HEAD]` | Fail (exit 1) when a change touches a path under an active deny directive. Without a range it checks the work tree against HEAD. `BASE HEAD` as two arguments also works. |
+| `dumen check [BASE..HEAD]` | Exit 1 when a change touches a path under an active deny directive, 2 when the check could not be made. Without a range it checks the work tree against HEAD. With one it checks what HEAD changed since it forked from BASE. `BASE...HEAD` and `BASE HEAD` as two arguments also work. |
 | `dumen private [on\|off]` | Stop or resume activity from your new sessions. |
 
 ### For Claude Code, not for people

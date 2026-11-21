@@ -763,11 +763,12 @@ func (r *runCtx) reportViolations() {
 	}
 	for _, id := range model.SortedKeys(byDirective) {
 		files := byDirective[id]
-		text := "changed " + files[0]
+		// The count comes first so that a long file name cannot cut it off.
+		text := "1 file changed under a deny directive: " + files[0]
 		if len(files) > 1 {
-			text += fmt.Sprintf(" and %d more", len(files)-1)
+			text = fmt.Sprintf("%d files changed under a deny directive: %s and %d more", len(files), files[0], len(files)-1)
 		}
-		r.log(model.EventViolation, text+" under a deny directive", id)
+		r.log(model.EventViolation, text, id)
 	}
 }
 

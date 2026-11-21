@@ -13,6 +13,11 @@ func TestMatchPath(t *testing.T) {
 		want          bool
 	}{
 		{"src/auth/**", "src/auth/login.ts", true},
+		// Gauntlet P1: a newline in a file name must not take the file out of a glob.
+		{"src/auth/**", "src/auth/a\nb.go", true},
+		{"src/**/secrets.*", "src/x\ny/secrets.a\nb", true},
+		{"src/*.go", "src/a\nb.go", true},
+		{"src/auth/**", "src/web/a\nsrc/auth/b.go", false},
 		{"src/auth/**", "src/auth/oauth/google.ts", true},
 		{"src/auth/**", "src/authz/x.ts", false},
 		{"src/auth", "src/auth/login.ts", true},

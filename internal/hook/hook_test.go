@@ -598,7 +598,7 @@ func TestStopReportsChangesUnderADenyDirective(t *testing.T) {
 		t.Fatalf("want one violation event, got %d: %+v", len(found), found)
 	}
 	e := found[0]
-	if len(e.IDs) != 1 || e.IDs[0] != id || !strings.Contains(e.Text, "src/auth/login.go and 1 more") {
+	if len(e.IDs) != 1 || e.IDs[0] != id || !strings.Contains(e.Text, "2 files changed under a deny directive: src/auth/login.go and 1 more") {
 		t.Errorf("violation event: %+v", e)
 	}
 	if strings.Contains(e.Text, "old.go") || strings.Contains(e.Text, "orders.go") {

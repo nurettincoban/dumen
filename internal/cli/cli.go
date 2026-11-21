@@ -76,6 +76,10 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 					return 0
 				}
 				fmt.Fprintln(stderr, "dumen:", err)
+				var coded *exitError
+				if errors.As(err, &coded) {
+					return coded.code
+				}
 				return 1
 			}
 			return 0
@@ -84,6 +88,15 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stderr, "dumen: unknown command %q (run `dumen help`)\n", args[0])
 	return 2
 }
+
+// exitError is an error with an exit status other than 1.
+type exitError struct {
+	code int
+	err  error
+}
+
+func (e *exitError) Error() string { return e.err.Error() }
+func (e *exitError) Unwrap() error { return e.err }
 
 func (a *app) help() {
 	fmt.Fprintln(a.out, "dumen steers and monitors your team's Claude Code agents through your git remote.")

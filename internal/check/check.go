@@ -4,6 +4,7 @@ package check
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -27,14 +28,29 @@ func prefix(ctx context.Context, root string) (string, error) {
 	return strings.TrimSpace(out), err
 }
 
-// DiffFiles lists the files that differ between two commits, relative to root. Both
-// sides of a rename are listed.
+// DiffFiles lists the files head changed since it forked from base, relative to root:
+// the diff from the merge base of the two to head, as a pull request shows it. Commits
+// that base gained in the meantime are not the branch's changes. Both sides of a rename
+// are listed.
 func DiffFiles(ctx context.Context, root, base, head string) ([]string, error) {
 	pre, err := prefix(ctx, root)
 	if err != nil {
 		return nil, err
 	}
-	out, err := gitx.Git{Dir: root}.Run(ctx, "diff", "--name-only", "--no-renames", "-z", "--end-of-options", base, head, "--")
+	g := gitx.Git{Dir: root}
+	var shas [2]string
+	for i, rev := range []string{base, head} {
+		out, err := g.Run(ctx, "rev-parse", "--verify", "--quiet", "--end-of-options", rev+"^{commit}")
+		if err != nil {
+			return nil, fmt.Errorf("%q is not a commit in this repository", rev)
+		}
+		shas[i] = strings.TrimSpace(out)
+	}
+	mb, err := g.Run(ctx, "merge-base", shas[0], shas[1])
+	if err != nil || strings.TrimSpace(mb) == "" {
+		return nil, fmt.Errorf("%s and %s have no common ancestor here; in a shallow clone, fetch the full history first (git fetch --unshallow)", base, head)
+	}
+	out, err := g.Run(ctx, "diff", "--name-only", "--no-renames", "-z", strings.TrimSpace(mb), shas[1], "--")
 	if err != nil {
 		return nil, err
 	}
