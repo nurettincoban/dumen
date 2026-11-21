@@ -44,9 +44,10 @@ Every command accepts `--help`. Ids look like `Y-2APW` (directive), `D-PG18` (de
 | `dumen decide --title T --rule R --kind K [--services a,b] [--topics a,b] [--owner EMAIL] [-m BODY \| --file F] [--paths a,b] [--sources R-1,R-2] [--approve]` | Record a decision. The rule is the one sentence agents see first; the kind is `product`, `ux`, `ui`, `architecture`, `technical` or a kind from `dumen.yml`. Without `--services` it applies to the whole product. It is proposed unless `--approve` is given by someone who may approve. |
 | `dumen decisions [PATH] [--service S] [--topic T] [--kind K] [--proposed] [--all]` | List approved decisions by rule, optionally filtered by path, service, topic or kind. |
 | `dumen show ID` | Show a decision, directive or link in full. |
-| `dumen questions [--all]` | List proposed decisions waiting for you: answers agents saved and decisions they drafted, in the kinds your role may approve, with the question that was asked and the option that was picked. |
+| `dumen questions [--all]` | List proposed decisions you may approve: answers agents saved and decisions they drafted, with the question that was asked and the option that was picked. |
+| `dumen news [--since 7d] [--repo NAME] [--all]` | List decisions that came into force recently for this repository (or another, or all), newest first, with who approved them, where, and what they replaced. |
 | `dumen product [--name TEXT] [--service NAME=DESCRIPTION]... [--topic NAME=KEYWORD,KEYWORD]... [--kind NAME=ROLE]...` | Without flags, show the product, services, topics and decision kinds. With flags, change one entry each (publishers only); an empty value removes the entry. |
-| `dumen approve ID`, `dumen reject ID` | Approve or reject a proposed decision. Publishers (`pm`, `lead`) may approve any kind; otherwise the role that owns the kind does (`designer` for `ux` and `ui` by default). |
+| `dumen approve ID`, `dumen reject ID` | Approve or reject a proposed decision. Any team member (anyone with a role) may approve; a team that sets an `owner_role` for a kind limits that kind to the role and the publishers. Approving puts the decision in force for every agent, and the agents on the services it concerns get it as news. |
 | `dumen supersede ID --title T [-m BODY \| --file F]` | Replace an approved decision with a new one. |
 | `dumen ref add URL [--kind design\|artifact\|mr\|doc] --title T [--governs TEXT] [--paths a,b] [--area AREA]` | Record a link to a source of truth. |
 | `dumen ref check ID`, `dumen ref list` | Confirm a link, list links. |
@@ -112,8 +113,8 @@ refused. See [Security model](security.md).
 
 | Claude Code event | What dumen does |
 | --- | --- |
-| `SessionStart` | Injects the block of team records, kept under 8,000 characters: active directives first, then the approved decisions that apply (those for this service first, then product-wide ones, as id, kind and rule), the topics in use, links and the role. Logs `started`. |
-| `UserPromptSubmit` | Injects directives that arrived since the last prompt, and names up to three approved decisions on the topics of the prompt that the session has not been shown. The prompt is never stored. |
+| `SessionStart` | Injects the block of team records, kept under 8,000 characters: active directives first, then the decisions that came into force since the last session in this repository on this machine (`CHANGED SINCE THE LAST SESSION HERE`), then the approved decisions that apply (those for this service first, then product-wide ones, as id, kind and rule), the topics in use, links and the role. Logs `started`. |
+| `UserPromptSubmit` | Injects directives that arrived since the last prompt and `DECISION NEWS` (decisions approved by a teammate since the session started, with who, where and what they replaced; also given on the next `PreToolUse`), and names up to three approved decisions on the topics of the prompt that the session has not been shown. The prompt is never stored. |
 | `PreToolUse` (every tool) | Hands over new directives, blocks `Edit`, `Write`, `MultiEdit`, `NotebookEdit` and, on a best effort, the file-writing tools of other MCP servers under a `deny` directive, sends human actions to the permission prompt, and blocks shell commands that would take a human action. Reminds the agent once about an unacknowledged directive. Holds back an `AskUserQuestion` once when an approved decision may already answer it (two topic keywords, or one keyword of a decision made for this service); asking again goes through. On `ExitPlanMode`, adds the approved decisions on the plan's topics as context, without blocking. |
 | `PostToolUse` (`AskUserQuestion`) | Keeps the question, its options and what Claude Code returned, so that `record_answer` can tell an answer the human picked from one the agent only reports, and reminds the agent to save lasting choices. |
 | `Stop` | Logs `progress` with a one-line summary of the agent's last message. When a deny directive is active, also looks at the work tree and at the commits made since the session began that are on no remote yet (`git status` and `git log`, cut off after 2 seconds together) and logs a `violation` for changes made under the directive. |
@@ -152,12 +153,9 @@ services:                 # repository names, as in each .dumen file
 topics:                   # topic -> keywords that bring its decisions to an agent's attention
   payments: [payment, charge, refund, card, stripe]
   booking-flow: [booking page, checkout, time picker, slot]
-kinds:                    # default when absent; teams may add their own
-  product:      { owner_role: pm }
-  ux:           { owner_role: designer }
-  ui:           { owner_role: designer }
-  architecture: { owner_role: lead }
-  technical:    { owner_role: lead }
+kinds:                    # optional: the five default kinds need no entry
+  architecture: { owner_role: lead }   # only leads (and publishers) approve architecture
+  pricing: {}                          # a kind of the team's own, any member approves
 ```
 
 When `services` is set, a decision may only name those services. A topic need not be

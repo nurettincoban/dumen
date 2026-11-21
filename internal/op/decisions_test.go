@@ -18,8 +18,8 @@ func decision(title, rule, kind string, services ...string) *CreateDecision {
 		Kind: kind, AppliesTo: model.AppliesTo{Services: services}}, Body: "Why.\n\n## Allowed\n- x\n\n## Not allowed\n- y"}
 }
 
-// The person who owns a kind of decision approves it; other people do not, publishers
-// approve any kind.
+// A team that sets an owner role for a kind limits approval of that kind to the role,
+// and publishers still approve any kind.
 func TestKindOwnerApproves(t *testing.T) {
 	a, _, _ := setup(t)
 	designer := model.Actor{Email: "sofia@example.com", Kind: model.KindHuman}
@@ -27,6 +27,9 @@ func TestKindOwnerApproves(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := a.Submit(ctx, testutil.Lead, &SetRole{Email: dev.Email, Role: "backend"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Submit(ctx, testutil.Lead, &SetProduct{Kinds: map[string]string{"ui": "designer", "ux": "designer", "architecture": "lead"}}); err != nil {
 		t.Fatal(err)
 	}
 	ui, err := a.Submit(ctx, agent, decision("Time slots", "Guests pick a time from slot buttons", model.KindUI, "web-app"))
@@ -150,6 +153,9 @@ func TestSupersedeNeedsRightsOverTheRetiredDecision(t *testing.T) {
 	if _, err := a.Submit(ctx, testutil.Lead, &SetRole{Email: designer.Email, Role: "designer"}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := a.Submit(ctx, testutil.Lead, &SetProduct{Kinds: map[string]string{"ui": "designer", "ux": "designer", "architecture": "lead"}}); err != nil {
+		t.Fatal(err)
+	}
 	arch := decision("Payments", "Only billing-svc talks to the payment provider", model.KindArchitecture)
 	arch.Approve = true
 	out, err := a.Submit(ctx, testutil.Lead, arch)
@@ -191,5 +197,38 @@ func TestServiceNamesFollowRepositoryNames(t *testing.T) {
 	}
 	if _, err := a.Submit(ctx, agent, decision("x", "r", model.KindProduct, "Billing.Svc")); err == nil {
 		t.Fatal("an upper-case service name was accepted; .dumen stores repository names in lower case")
+	}
+}
+
+// Decisions are binding but changeable: by default any team member approves, and an
+// approval says when and where the decision came into force.
+func TestAnyMemberApprovesByDefault(t *testing.T) {
+	a, _, _ := setup(t)
+	dev := model.Actor{Email: "ayse@example.com", Kind: model.KindHuman}
+	if _, err := a.Submit(ctx, testutil.Lead, &SetRole{Email: dev.Email, Role: "backend"}); err != nil {
+		t.Fatal(err)
+	}
+	d := decision("Refunds", "Cancelled bookings are refunded as store credit", model.KindProduct, "booking-svc", "billing-svc")
+	d.Decision.Repo = "booking-svc"
+	prop, err := a.Submit(ctx, agent, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stranger := model.Actor{Email: "someone@example.com", Kind: model.KindHuman}
+	if _, err := a.Submit(ctx, stranger, &ResolveDecision{ID: prop.RecordID, Status: model.StatusApproved}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("a person with no role approved: %v", err)
+	}
+	if _, err := a.Submit(ctx, dev, &ResolveDecision{ID: prop.RecordID, Status: model.StatusApproved}); err != nil {
+		t.Fatalf("a developer could not approve: %v", err)
+	}
+	got, _, err := store.ReadDecision(a.Store.Root(), prop.RecordID)
+	if err != nil || got.ApprovedBy != dev.Email || got.ApprovedAt == "" || got.Repo != "booking-svc" {
+		t.Fatalf("approved decision: %+v %v", got, err)
+	}
+	// Anyone on the team may change it again.
+	change := decision("Refunds", "Cancelled bookings are refunded to the card", model.KindProduct)
+	change.Decision.Supersedes, change.Approve = []string{prop.RecordID}, true
+	if _, err := a.Submit(ctx, model.Actor{Email: testutil.Lead.Email, Kind: model.KindHuman}, change); err != nil {
+		t.Fatalf("supersede by another member: %v", err)
 	}
 }

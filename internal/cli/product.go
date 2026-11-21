@@ -60,7 +60,11 @@ func cmdProduct(a *app, args []string) error {
 			}
 			kk := cfg.KindsOrDefault()
 			for _, k := range model.SortedKeys(kk) {
-				fmt.Fprintf(a.out, "kind      %-16s approved by role %s\n", k, kk[k].OwnerRole)
+				who := "any team member"
+				if r := kk[k].OwnerRole; r != "" {
+					who = "role " + r
+				}
+				fmt.Fprintf(a.out, "kind      %-16s approved by %s\n", k, who)
 			}
 			return nil
 		})

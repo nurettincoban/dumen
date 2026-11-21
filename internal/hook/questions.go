@@ -112,6 +112,7 @@ func (r *runCtx) holdBack() string {
 		fmt.Fprintf(&b, "- %s%s %s\n", d.ID, kind, render.Label(d.Headline(), model.MaxRule))
 	}
 	b.WriteString("If one of them answers your question, follow it and tell your human which decision you followed; do not ask. " +
+		"If your human wants it changed, that is a supersede, which every agent then gets as news. " +
 		"If none does, ask your question again unchanged and it will go through. Use get_decision for the full text.")
 	r.log(model.EventDecisionRead, "question held back: a team decision may answer it", ids...)
 	return b.String()

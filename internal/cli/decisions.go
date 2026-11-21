@@ -20,7 +20,7 @@ func init() {
 	commands = append(commands,
 		command{"decide", `decide --title T --rule R --kind K [--services S1,S2] [--topics T1,T2] [--owner EMAIL] [-m BODY | --file F] [--paths P1,P2] [--sources R-1,R-2] [--approve]`, "record a decision (proposed unless --approve)", cmdDecide},
 		command{"decisions", "decisions [path] [--service S] [--topic T] [--kind K] [--proposed] [--all]", "list approved decisions, optionally filtered", cmdDecisions},
-		command{"questions", "questions [--all]", "list proposed decisions waiting for you: answers agents saved, in the kinds your role approves", cmdQuestions},
+		command{"questions", "questions [--all]", "list proposed decisions you may approve, such as answers agents saved", cmdQuestions},
 		command{"show", "show <id>", "show a decision, directive or ref in full", cmdShow},
 		command{"approve", "approve <id>", "approve a proposed decision", func(a *app, args []string) error { return resolve(a, args, model.StatusApproved) }},
 		command{"reject", "reject <id>", "reject a proposed decision", func(a *app, args []string) error { return resolve(a, args, model.StatusRejected) }},
@@ -126,6 +126,7 @@ func cmdDecide(a *app, args []string) error {
 	if d.Kind == "" {
 		return fmt.Errorf("--kind is required: product, ux, ui, architecture, technical, or a kind from dumen.yml")
 	}
+	d.Repo = p.Repo
 	out, err := a.submit(p, &op.CreateDecision{Decision: d, Body: body, Approve: *approve})
 	if err != nil {
 		return err
@@ -157,6 +158,7 @@ func cmdSupersede(a *app, args []string) error {
 		return err
 	}
 	d.Supersedes = []string{old}
+	d.Repo = p.Repo
 	out, err := a.submit(p, &op.CreateDecision{Decision: d, Body: body, Approve: true})
 	if err != nil {
 		return err

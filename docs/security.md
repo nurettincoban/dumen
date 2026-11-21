@@ -57,11 +57,14 @@ What you do get:
 - Text from the store is injected into agent context as data with a clear header, as ids and
   sanitized one-line labels, never as free-form instructions.
 - Every record is a git commit. `git log` on the `dumen` branch is the audit trail.
-- Who may approve a decision follows its kind: publishers (`pm`, `lead`) approve any kind,
-  and the role that owns a kind (`designer` for `ux` and `ui` by default) approves that
-  kind. The kind is chosen by whoever wrote the decision, so a person who owns `ux` can
-  approve any decision that is labelled `ux`; read what you approve. Approving a decision
-  that supersedes others also needs the right to approve each decision it retires.
+- Decisions are binding but changeable, so by default any team member (anyone with a role
+  in `dumen.yml`) approves or supersedes one. A team can limit a kind to a role with
+  `owner_role`; publishers (`pm`, `lead`) and area owners may always approve. The kind is
+  chosen by whoever wrote the decision, so read what you approve. Approving a decision
+  that supersedes others also needs the right to approve each decision it retires. What
+  keeps the team safe is visibility rather than a gate: every approval and every change
+  reaches the agents on the services it concerns as news, `dumen news` lists them for
+  people, and `git log` on the store shows who approved what.
 
 ## What to protect
 

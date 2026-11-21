@@ -137,7 +137,7 @@ func (o *CreateDecision) Apply(tx *Tx) error {
 	d.Author = tx.Actor.Email
 	d.AuthorKind = tx.Actor.Kind
 	d.Status = model.StatusProposed
-	d.ApprovedBy = ""
+	d.ApprovedBy, d.ApprovedAt = "", ""
 	if d.Created == "" {
 		d.Created = model.FormatTime(tx.Now)
 	}
@@ -196,7 +196,7 @@ func (o *CreateDecision) Apply(tx *Tx) error {
 			return err
 		}
 		d.Status = model.StatusApproved
-		d.ApprovedBy = tx.Actor.Email
+		d.ApprovedBy, d.ApprovedAt = tx.Actor.Email, model.FormatTime(tx.Now)
 	}
 	d.ID = freshID(tx, d.ID, model.PrefixDecision)
 	o.Decision.ID = d.ID
@@ -326,7 +326,7 @@ func (o *ResolveDecision) Apply(tx *Tx) error {
 		if err := policy.SupersedeCycle(all); err != nil {
 			return err
 		}
-		d.ApprovedBy = tx.Actor.Email
+		d.ApprovedBy, d.ApprovedAt = tx.Actor.Email, model.FormatTime(tx.Now)
 	}
 	d.Status = o.Status
 	if err := d.Validate(); err != nil {

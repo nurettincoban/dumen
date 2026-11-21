@@ -310,7 +310,7 @@ func (r *runCtx) log(kind, text string, ids ...string) {
 func (r *runCtx) sessionStart() *Output {
 	// After compaction or /clear the earlier context is gone, so everything is shown again.
 	r.sess.Delivered, r.sess.SubDelivered = nil, nil
-	r.sess.Reminded, r.sess.Noted = nil, nil
+	r.sess.Reminded, r.sess.Noted, r.sess.Known = nil, nil, nil
 	r.sess.Finished = false
 	if r.sess.Started == "" {
 		r.sess.Started = model.FormatTime(r.now)
@@ -320,6 +320,11 @@ func (r *runCtx) sessionStart() *Output {
 	}
 
 	ds := r.undelivered()
+	for _, d := range r.c.Decisions {
+		r.sess.Known = append(r.sess.Known, d.ID)
+	}
+	r.sess.NewsBase = true
+	changed := r.sinceLastSession()
 	relevant := r.startDecisions()
 	total := len(relevant)
 	all := r.c.RefsForRepo(r.proj.Repo)
@@ -338,6 +343,7 @@ func (r *runCtx) sessionStart() *Output {
 			b.WriteString("Each directive is acknowledged once with the ack_directive tool. Edits under a [deny] directive are blocked.\n")
 		}
 
+		b.WriteString(changed)
 		b.WriteString(r.decisionsBlock(relevant, nDec))
 		if len(all) > 0 {
 			refs := all[:nRef]
@@ -419,6 +425,12 @@ func (r *runCtx) userPromptSubmit() *Output {
 	var parts []string
 	if len(ds) > 0 {
 		parts = append(parts, newDirectivesBlock(ds))
+	}
+	if news := r.newsBlock(); news != "" {
+		if len(parts) == 0 {
+			parts = append(parts, header)
+		}
+		parts = append(parts, news)
 	}
 	if note := r.topicNote(r.in.Prompt, "your human's message"); note != "" {
 		if len(parts) == 0 {
@@ -678,6 +690,9 @@ func (r *runCtx) preToolUse() *Output {
 	}
 	if ds := r.undelivered(); len(ds) > 0 {
 		parts = append(parts, newDirectivesBlock(ds))
+	}
+	if news := r.newsBlock(); news != "" {
+		extra = append(extra, news)
 	}
 	if len(nudge) > 0 {
 		extra = append(extra, "Reminder: you have not acknowledged "+strings.Join(nudge, ", ")+
