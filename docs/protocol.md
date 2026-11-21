@@ -167,11 +167,16 @@ Every change is a transaction:
    one to supersede still `approved`, the question to answer still `open`, a new id is free,
    and the record the person confirmed is byte for byte the one there now.
 3. Write the files, and commit once.
-4. Push, fast-forward only. If the push is rejected because someone pushed first, throw the
-   commit away and go back to step 1. Never merge, never force.
-5. If the push fails without a clear answer (a timeout, a dropped connection), fetch and check
-   whether the commit reached the remote before doing anything else, so that a change is never
-   made twice.
+   If nothing is left to commit although the change wrote something, the local copy was
+   changed under the transaction: go back to step 1. Only a change that itself finds the
+   outcome already there (the same summary again, a decision already approved) succeeds
+   without a commit.
+4. Push the commit by its id (`<commit>:refs/heads/<branch>`), fast-forward only. If the push
+   is rejected because someone pushed first, throw the commit away and go back to step 1.
+   Never merge, never force.
+5. Fetch, and report success only when the remote branch contains the commit. If the push
+   failed without a clear answer (a timeout, a dropped connection), this check also tells
+   whether the commit got there, so that a change is never made twice.
 
 A change either reaches the remote or did not happen. There is no local-only state, no outbox,
 and no "approved here, not yet shared": when the remote cannot be reached, the person is told
@@ -183,8 +188,10 @@ The other's retry finds the new state and fails with what happened, such as
 `D-7K2P was already replaced by D-9QXA; nothing was changed`, or succeeds if the outcome is the
 same (approving a decision that was just approved reports who approved it).
 
-**Locally,** one process at a time runs git in the local copy, under a lock that holds its pid;
-a lock whose holder is gone is taken over. A process killed in the middle leaves at most an
+**Locally,** one process at a time runs git in the local copy, under a lock that holds its pid.
+The lock is created whole (a file with the pid, linked into place), and is taken over only when
+its holder's process is gone, however long it has been held. A takeover runs under a file of its
+own and removes the lock only if it is still the one judged dead. A process killed in the middle leaves at most an
 unpushed commit or loose files, which the next transaction's step 1 throws away.
 
 **Commits** are authored with the person's git `user.email` and `user.name`. The subject names

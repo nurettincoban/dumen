@@ -209,9 +209,9 @@ test('superseding retires the old decision in the same commit; others hear "repl
   assert.doesNotMatch(dumen(repos['booking-svc'], 'list'), new RegExp(old));
 });
 
-function run(cwd, args) {
+function run(cwd, args, envExtra = {}) {
   return new Promise((resolve) => {
-    const p = spawn('node', [DUMEN, ...args], { cwd });
+    const p = spawn('node', [DUMEN, ...args], { cwd, env: { ...process.env, ...envExtra } });
     let out = '', err = '';
     p.stdout.on('data', (d) => (out += d));
     p.stderr.on('data', (d) => (err += d));
@@ -284,8 +284,8 @@ test('a lock left by a killed process is taken over', () => {
   const r = repos['web-app'];
   fs.writeFileSync(path.join(r, '.git', 'dumen', 'state', 'lock'), '999999 dead');
   assert.match(dumen(r, 'propose', ...slotRule), /Proposed D-/);
-  // An empty lock is one being taken right now (its pid is not written yet): it is waited for,
-  // never taken over at once, or two writers would share the store.
+  // dumen never leaves an empty lock (it links a written file into place), so an empty one is
+  // junk: it is taken over, but not at once.
   fs.writeFileSync(path.join(r, '.git', 'dumen', 'state', 'lock'), '');
   const t0 = Date.now();
   assert.match(dumen(r, 'propose', '--kind', 'ui', '--rule', 'Another rule'), /Proposed D-/);
@@ -520,4 +520,51 @@ test('"--ticket" is only refused beside a dumen command, in a dumen project; a c
   assert.equal(echoed.permissionDecision, 'deny');
   assert.match(echoed.permissionDecisionReason, /holds the word dumen followed by approve/);
   assert.equal(decide(r, 'Bash', { command: `dumen approve ${id}` }), 'ask');
+});
+
+// gitShim puts a git first on PATH that undoes the store's work tree just before the git
+// command named, the way a second writer sharing the lock would.
+function gitShim(tmp, store, before) {
+  const real = execFileSync(process.platform === 'win32' ? 'where' : 'which', ['git'], { encoding: 'utf8' }).split(/\r?\n/)[0].trim();
+  const dir = fs.mkdtempSync(path.join(tmp, 'shim-'));
+  fs.writeFileSync(path.join(dir, 'git'), `#!/bin/sh\ncase " $* " in *" ${before} "*) "${real}" -C "${store}" reset -q --hard refs/remotes/origin/dumen; "${real}" -C "${store}" clean -fdxq;; esac\nexec "${real}" "$@"\n`, { mode: 0o755 });
+  return { PATH: `${dir}${path.delimiter}${process.env.PATH}` };
+}
+const onRemote = (store, id) => execFileSync('git', ['--git-dir', store, 'ls-tree', '-r', '--name-only', 'dumen'], { encoding: 'utf8' }).includes(`decisions/${id}.md`);
+// The shim is a shell script, which git on Windows does not run in place of git.exe.
+const shimmed = { skip: process.platform === 'win32' && 'the git shim is a shell script' };
+
+test('a change undone just before the push still reaches the remote, or is not reported', shimmed, () => {
+  const { tmp, store, repos } = team(['web-app', 'sofia@example.com']);
+  const r = repos['web-app'];
+  const id = idOf(dumenEnv(r, gitShim(tmp, path.join(r, '.git', 'dumen', 'store'), 'push'), 'propose', ...slotRule));
+  assert.ok(onRemote(store, id), `${id} was reported but is not on the remote`);
+});
+
+test('a change undone before it is staged is never reported as done', shimmed, () => {
+  const { tmp, store, repos } = team(['web-app', 'sofia@example.com']);
+  const r = repos['web-app'];
+  let err = '';
+  try { dumenEnv(r, gitShim(tmp, path.join(r, '.git', 'dumen', 'store'), 'add'), 'propose', ...slotRule); } catch (e) { err = String(e.stderr); }
+  assert.match(err, /nothing was changed/);
+  assert.equal(execFileSync('git', ['--git-dir', store, 'ls-tree', '-r', '--name-only', 'dumen'], { encoding: 'utf8' }).includes('decisions/D-'), false);
+});
+
+test('a lock is never taken from a live process, however old; of three racing for a dead one, one holds it at a time', async () => {
+  const { tmp, repos } = team(['web-app', 'sofia@example.com']);
+  const r = repos['web-app'];
+  const f = path.join(r, '.git', 'dumen', 'state', 'lock');
+  fs.writeFileSync(f, `${process.pid} alive`);
+  const old = new Date(Date.now() - 60 * 60 * 1000);
+  fs.utimesSync(f, old, old);
+  assert.match((() => { try { dumenEnv(r, { DUMEN_LOCK_WAIT_MS: '1500' }, 'propose', ...slotRule); } catch (e) { return String(e.stderr); } return 'taken'; })(), /busy/);
+  assert.equal(fs.readFileSync(f, 'utf8'), `${process.pid} alive`);
+  fs.writeFileSync(f, '999999 dead');
+  const log = path.join(tmp, 'holds.log');
+  const res = await Promise.all([0, 1, 2].map((i) => run(r, ['propose', '--kind', 'ui', '--rule', `Racing rule ${i}`], { DUMEN_LOCK_LOG: log })));
+  for (const x of res) assert.equal(x.code, 0, x.err);
+  const holds = fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => l.split(' ').map(Number)).sort((a, b) => a[1] - b[1]);
+  assert.equal(holds.length, 3);
+  for (let i = 1; i < holds.length; i++) assert.ok(holds[i][1] >= holds[i - 1][2], `two holders at once: ${JSON.stringify(holds)}`);
+  assert.equal(dumen(r, 'list', '--status', 'proposed').split('\n').length, 3);
 });
