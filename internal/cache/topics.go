@@ -16,6 +16,22 @@ func (d Decision) model() model.Decision {
 // ForService reports whether the decision applies to the service (see model.Decision).
 func (d Decision) ForService(service string) bool { return d.model().ForService(service) }
 
+// ProductWide reports whether the decision names no particular service.
+func (d Decision) ProductWide() bool { return d.model().ProductWide() }
+
+// ScopeLabel says where a decision applies: its services, its paths, or the whole product.
+func (d Decision) ScopeLabel() string {
+	switch {
+	case !d.ProductWide():
+		return strings.Join(d.AppliesTo.Services, ", ")
+	case len(d.Paths) > 0:
+		return "paths " + strings.Join(d.Paths, ", ")
+	case d.Area != "":
+		return "area " + d.Area
+	}
+	return "product-wide"
+}
+
 // Topics returns the decision's topics, counting its area as one.
 func (d Decision) Topics() []string { return d.model().Topics() }
 
@@ -50,7 +66,7 @@ func (c *Cache) MatchText(text, service string) []Match {
 	hay := normalize(text)
 	var out []Match
 	for _, d := range c.Decisions {
-		if service != "" && !d.ForService(service) {
+		if !c.Concerns(d, service) {
 			continue
 		}
 		var hits []string
@@ -62,7 +78,7 @@ func (c *Cache) MatchText(text, service string) []Match {
 		if len(hits) == 0 {
 			continue
 		}
-		this := service != "" && !d.model().ProductWide()
+		this := service != "" && (!d.model().ProductWide() || len(d.Paths) > 0)
 		out = append(out, Match{Decision: d, Hits: hits, ThisService: this})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return len(out[i].Hits) > len(out[j].Hits) })

@@ -63,7 +63,7 @@ func isDumen(g any) bool {
 // AgentTools are the MCP tools an agent may call without asking its human.
 var AgentTools = []string{
 	"directives", "ack_directive", "propose_directive",
-	"search_decisions", "get_decision", "decisions_for_path", "draft_decision", "record_answer",
+	"search_decisions", "get_decision", "decisions_for_path", "decisions_for_topic", "draft_decision", "record_answer",
 	"add_ref", "log_event", "activity",
 }
 

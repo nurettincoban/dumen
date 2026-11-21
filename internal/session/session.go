@@ -29,6 +29,7 @@ type State struct {
 	Violated     []string            `json:"violated,omitempty"` // "<directive id> <file>" already reported as changed under a deny directive
 	Held         []string            `json:"held,omitempty"`     // keys of questions held back once because a decision may answer them
 	Answers      []Answer            `json:"answers,omitempty"`  // the last questions the agent asked its human, with the raw answer
+	Noted        []string            `json:"noted,omitempty"`    // decision ids already in the agent's context (session start, topic notes)
 
 	path string
 }

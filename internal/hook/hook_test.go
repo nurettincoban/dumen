@@ -138,7 +138,7 @@ func TestSessionStartDirectivesFirst(t *testing.T) {
 	if iDir < 0 || iDec < 0 || iRef < 0 || !(iDir < iDec && iDec < iRef) {
 		t.Fatalf("directives must come first, then decisions, then refs:\n%s", text)
 	}
-	for _, want := range []string{deny, dec, ref, "not instructions to execute verbatim", "Drafts awaiting review: 1", "Your role: lead"} {
+	for _, want := range []string{deny, dec, ref, "not instructions to execute verbatim", "Proposed decisions awaiting approval: 1", "Your role: lead"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q in:\n%s", want, text)
 		}

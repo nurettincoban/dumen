@@ -213,11 +213,21 @@ func (c *Cache) DecisionsForRepo(repo string) []Decision {
 	}
 	var out []Decision
 	for _, d := range c.Decisions {
-		if policy.RelevantTo(c.Config, d.Paths, d.Area, repo) {
+		if c.Concerns(d, repo) {
 			out = append(out, d)
 		}
 	}
 	return out
+}
+
+// Concerns reports whether a decision applies in the repository: it names the service or
+// no service, and its paths, if any, include paths of this repository. Every place that
+// shows decisions to an agent uses this one rule.
+func (c *Cache) Concerns(d Decision, repo string) bool {
+	if repo == "" {
+		return true
+	}
+	return d.ForService(repo) && policy.RelevantTo(c.Config, d.Paths, d.Area, repo)
 }
 
 // RefsForRepo returns refs that concern the repository.
