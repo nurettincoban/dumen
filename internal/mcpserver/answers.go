@@ -104,7 +104,7 @@ func (s *Server) RecordAnswer(ctx context.Context, in answerIn) (string, error) 
 					fmt.Fprintf(&b, "- %s [%s] topics: %s\n", x.ID, orDash(x.Kind), orDash(strings.Join(x.AppliesTo.Topics, ", ")))
 				}
 				b.WriteString("Do not follow a proposed decision. If one covers the answer, do not save a duplicate: " +
-					"tell your human it waits for approval (dumen show <id>, dumen approve <id>).\n")
+					"tell your human it waits for approval; if they want it in force, call approve with the id and they confirm the prompt.\n")
 			}
 			b.WriteString("If none covers it, call record_answer again with new: true.")
 			return b.String(), nil
@@ -151,7 +151,7 @@ func owners(cfg model.Config, kind, me string) string {
 	}
 	role := cfg.KindsOrDefault()[kind].OwnerRole
 	if role == "" {
-		return "Your human has no role in dumen yet, so they cannot approve it; a lead can add them with `dumen role set`. Until it is approved other agents do not follow it."
+		return "Your human has no role in dumen yet, so they cannot approve it; a lead can add them: their agent calls set_role and they confirm the prompt. Until it is approved other agents do not follow it."
 	}
 	var people []string
 	for email, r := range cfg.Roles {

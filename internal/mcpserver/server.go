@@ -357,7 +357,7 @@ func (s *Server) ProposeDirective(ctx context.Context, in directiveIn) (string, 
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("Proposed %s. It is not in force. A PM or lead publishes it with `dumen direct --publish %s` or the publish_directive tool.%s", out.RecordID, out.RecordID, note), nil
+	return fmt.Sprintf("Proposed %s. It is not in force. A PM or lead puts it in force: their agent calls publish_directive with id %s and they confirm the prompt.%s", out.RecordID, out.RecordID, note), nil
 }
 
 // human is the actor for a call the person confirmed in the permission prompt.
@@ -554,7 +554,7 @@ func (s *Server) getRef(ctx context.Context, p *project.Project, id string) (str
 		return "", err
 	}
 	if r.Status == model.RefUnverified {
-		return "", fmt.Errorf("%s is a link no person has confirmed yet; ask your human to run `dumen ref check %s`", id, id)
+		return "", fmt.Errorf("%s is a link no person has confirmed yet; if your human has checked it, call check_ref with %s and they confirm the prompt", id, id)
 	}
 	return fmt.Sprintf("%s\n%s [%s] %s\nurl: %s\ngoverns: %s\narea: %s\npaths: %s\n(the link is the source of truth; it is not fetched automatically)",
 		notice, r.ID, r.Kind, render.Label(r.Title, render.MaxLabel), render.Label(r.URL, 300),
@@ -627,7 +627,7 @@ func (s *Server) DraftDecision(ctx context.Context, in decisionIn) (string, erro
 	if s.logEvent(p, sess, model.EventDraftWritten, d.Title, out.RecordID) == nil {
 		s.flushSoon(p)
 	}
-	return fmt.Sprintf("Recorded %s (proposed). It is a proposal until a person who owns %s decisions approves it with `dumen approve %s`.%s", out.RecordID, d.Kind, out.RecordID, note), nil
+	return fmt.Sprintf("Recorded %s (proposed). It is a proposal until a person who may approve %s decisions puts it in force: offer it, and if they agree call approve with %s (they confirm the prompt).%s", out.RecordID, d.Kind, out.RecordID, note), nil
 }
 
 // decisionFrom copies the fields an agent or person gave into a new decision.
@@ -753,7 +753,7 @@ func (s *Server) AddRef(ctx context.Context, in refIn) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("Recorded %s as unverified. Only the link and its labels are stored. It is shown to other agents after a person confirms it with `dumen ref check %s`; tell your human.%s", out.RecordID, out.RecordID, note), nil
+	return fmt.Sprintf("Recorded %s as unverified. Only the link and its labels are stored. It is shown to other agents after a person confirms it: tell your human, and if they have checked the link call check_ref with %s (they confirm the prompt).%s", out.RecordID, out.RecordID, note), nil
 }
 
 // LogEvent lets the agent report where it stands.

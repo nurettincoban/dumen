@@ -236,3 +236,18 @@ func TestAgentSetsUpTheTeam(t *testing.T) {
 		t.Errorf("ayse was not added:\n%s", out)
 	}
 }
+
+// A person who chose "always allow" for a human-action tool still gets the prompt: the
+// hook's "ask" is not settled by an allow rule. Headless, nobody answers, so the call
+// must not go through.
+func TestAlwaysAllowDoesNotSkipThePrompt(t *testing.T) {
+	w := setup(t)
+	id := firstID(w.dumen("decide", "--title", "Orders API uses opaque cursors", "--rule", "The orders API pages with opaque cursors", "--kind", "technical", "-m", "Decision. Why."))
+	w.write(".claude/settings.local.json", `{"permissions":{"allow":["mcp__dumen__approve"]}}`)
+	_, tr := w.claudeRecorded("My human asked me to approve decision "+id+". Call the dumen `approve` tool with id "+id+" once and report the result.",
+		"--allowedTools", "mcp__dumen__approve")
+	record(t, "always-allow", tr)
+	if show := w.dumen("show", id); !strings.Contains(show, "status      proposed") {
+		t.Errorf("an allow rule settled a human action without a person:\n%s\n%s", show, tr)
+	}
+}
