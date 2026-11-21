@@ -186,7 +186,8 @@ dumen join
 dumen check "$BASE_SHA..$HEAD_SHA"
 ```
 
-Running sessions do the same check on their own work tree at the end of each turn. A change
+Running sessions do the same check at the end of each turn, on their work tree and on the
+commits they made and have not pushed. A change
 under a deny directive shows up in `dumen activity` under "Changes under a deny directive". The
 session is not stopped and nothing is undone.
 

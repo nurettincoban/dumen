@@ -748,6 +748,14 @@ func (r *runCtx) reportViolations() {
 	if err != nil {
 		return
 	}
+	// An agent that commits in the same turn leaves a clean work tree: the commits it made
+	// since the session began, and that are on no remote yet, are looked at as well.
+	committed, _ := check.CommittedFiles(ctx, r.proj.Root, started)
+	for _, f := range model.SortedKeys(committed) {
+		if !session.Has(files, f) {
+			files = append(files, f)
+		}
+	}
 	byDirective := map[string][]string{}
 	for _, v := range check.Violations(r.c, r.proj.Repo, files, r.now) {
 		since := started
@@ -755,7 +763,8 @@ func (r *runCtx) reportViolations() {
 			since = from // a change made before the freeze began is not a violation
 		}
 		key := v.Directive.ID + " " + v.File
-		if session.Has(r.sess.Violated, key) || !check.ChangedSince(r.proj.Root, v.File, since) {
+		inCommit := !committed[v.File].IsZero() && !committed[v.File].Before(since.Truncate(time.Second))
+		if session.Has(r.sess.Violated, key) || (!inCommit && !check.ChangedSince(r.proj.Root, v.File, since)) {
 			continue
 		}
 		r.sess.Violated = append(r.sess.Violated, key)

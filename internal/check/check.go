@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -75,6 +76,41 @@ func WorktreeFiles(ctx context.Context, root string) ([]string, error) {
 		}
 	}
 	return under(pre, files), nil
+}
+
+// CommittedFiles lists the files changed by commits that are on HEAD, are on no remote
+// yet, and were committed at or after since, relative to root, each with the time of the
+// latest such commit. These are the commits a session made and has not pushed.
+func CommittedFiles(ctx context.Context, root string, since time.Time) (map[string]time.Time, error) {
+	pre, err := prefix(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	// One record per commit: \x01<committer time>\x00\n followed by NUL-terminated paths.
+	out, err := gitx.Git{Dir: root}.Run(ctx, "log", "--no-merges", "--no-renames", "--name-only", "-z",
+		"--format=%x01%ct", "--since="+since.UTC().Format(time.RFC3339), "HEAD", "--not", "--remotes", "--")
+	if err != nil {
+		return nil, err
+	}
+	files := map[string]time.Time{}
+	for _, rec := range strings.Split(out, "\x01") {
+		parts := strings.Split(rec, "\x00")
+		secs, err := strconv.ParseInt(strings.TrimSpace(parts[0]), 10, 64)
+		if err != nil {
+			continue
+		}
+		when := time.Unix(secs, 0)
+		paths := parts[1:]
+		if len(paths) > 0 {
+			paths[0] = strings.TrimPrefix(paths[0], "\n") // git ends the format line with a newline
+		}
+		for _, f := range under(pre, paths) {
+			if when.After(files[f]) {
+				files[f] = when
+			}
+		}
+	}
+	return files, nil
 }
 
 // under keeps the paths below prefix and makes them relative to it.

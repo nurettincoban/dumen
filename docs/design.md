@@ -354,7 +354,8 @@ These were decided during the build, each at the owner's request or forced by a 
     hooks fail open and no attempt is made to parse shell commands. What a hook cannot see
     is checked where it cannot be hidden. `dumen check <base>..<head>` fails when a diff
     touches a path under an active deny directive, and works the same in the CI of any git
-    host. The Stop hook runs the same check on the work tree and logs a `violation` event,
+    host. The Stop hook runs the same check on the work tree, and on commits made since the session
+    began that are on no remote yet, and logs a `violation` event,
     once per file and directive, for changes made after both the session and the directive
     began. It blocks nothing. The event kind is new; no version gate was added because no
     version of dumen has been released.
