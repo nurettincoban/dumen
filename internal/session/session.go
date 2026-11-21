@@ -12,19 +12,21 @@ import (
 
 // State is stored at <sessions dir>/<session id>.json.
 type State struct {
-	Session      string   `json:"session"`
-	Started      string   `json:"started,omitempty"`
-	Delivered    []string `json:"delivered,omitempty"`     // directive ids shown to the agent
-	Acked        []string `json:"acked,omitempty"`         // directive ids the agent acknowledged
-	Nudged       []string `json:"nudged,omitempty"`        // directive ids the stop hook already asked about
-	Reminded     []string `json:"reminded,omitempty"`      // paths already annotated with linked records
-	Applied      []string `json:"applied,omitempty"`       // decision ids surfaced for edited paths
-	LastProgress string   `json:"last_progress,omitempty"` // time of the last progress event
-	LastSummary  string   `json:"last_summary,omitempty"`  // sanitized tail of the last assistant message
-	Private      bool     `json:"private,omitempty"`       // session is not monitored
-	Finished     bool     `json:"finished,omitempty"`
-	Asking       bool     `json:"asking,omitempty"`   // the agent said it is waiting for its human
-	Violated     []string `json:"violated,omitempty"` // "<directive id> <file>" already reported as changed under a deny directive
+	Session   string   `json:"session"`
+	Started   string   `json:"started,omitempty"`
+	Delivered []string `json:"delivered,omitempty"` // directive ids shown to the main agent
+	// SubDelivered holds the same per subagent (by agent_id): a subagent has its own context.
+	SubDelivered map[string][]string `json:"sub_delivered,omitempty"`
+	Acked        []string            `json:"acked,omitempty"`         // directive ids the agent acknowledged
+	Nudged       []string            `json:"nudged,omitempty"`        // directive ids the stop hook already asked about
+	Reminded     []string            `json:"reminded,omitempty"`      // paths already annotated with linked records
+	Applied      []string            `json:"applied,omitempty"`       // decision ids surfaced for edited paths
+	LastProgress string              `json:"last_progress,omitempty"` // time of the last progress event
+	LastSummary  string              `json:"last_summary,omitempty"`  // sanitized tail of the last assistant message
+	Private      bool                `json:"private,omitempty"`       // session is not monitored
+	Finished     bool                `json:"finished,omitempty"`
+	Asking       bool                `json:"asking,omitempty"`   // the agent said it is waiting for its human
+	Violated     []string            `json:"violated,omitempty"` // "<directive id> <file>" already reported as changed under a deny directive
 
 	path string
 }
