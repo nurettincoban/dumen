@@ -1,0 +1,41 @@
+# A real interactive Claude Code session (v2.1.330, manual permission mode), recorded from the
+# terminal with tmux. Nothing answers in the person's place here: the person reads the prompt
+# and presses 1. Only the temporary path is shortened. The ticket in the command is one-use and
+# expired long ago. Before this prompt, the agent ran `dumen show D-ZJK2` to read the decision;
+# manual mode asked about that read too, and the person chose "don't ask again for dumen show".
+
+ ▐▛███▛█   Claude Code v2.1.330
+▝▜██████▀  Sonnet 5.5 · Claude API
+ ▝▝   ▝▝   ~/web-app
+❯ Earlier you proposed D-ZJK2 for the time picker. I agree with it: put it in force for the team.
+● Skill(dumen:dumen)
+  ⎿  Loaded skill
+● Approve decision D-ZJK2 (asks the user to confirm)
+  ⎿  $ dumen approve D-ZJK2
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+ Approve decision D-ZJK2 (asks the user to confirm)
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ dumen approve D-ZJK2 --ticket 825b3b7957fba4a727cc660e7cfea94d
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ │ Hook PreToolUse:Bash requires confirmation for this command:
+ │ dumen: it puts D-ZJK2 "Slot buttons show how many tables are left" [ui] for web-app in force for every agent on the team. It asks
+ │ booking-svc to: Return remaining tables per slot in GET /slots. It is recorded as sofia@example.com's decision. Allow only if you, the
+ │ person, agreed to it. [plugin:dumen]
+ plugin hooks.json to update hooks
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. No
+ Esc to cancel · Tab to amend
+
+# The person presses 1 (Yes).
+
+  Ran 2 shell commands, recalled 2 memories
+● D-ZJK2 is now in force for the whole team: "Slot buttons show how many tables are left" (kind: ui, service: web-app).
+  - Teammates' agents: they get it as DECISION NEWS, including mid-session.
+  - booking-svc: the decision carries a need for that service: "Return remaining tables per slot in GET /slots". Its agents will see it as
+    work to do.
+  - Proposer: dumen show lists sofia@example.com as the proposer, not me. The rule text is what you approved, but it's worth checking that
+    this is the D-ZJK2 you had in mind.
+  From here on, web-app agents follow this rule and won't ask again how the time picker should show availability.
+✻ Sautéed for 8s · done 6:05 PM

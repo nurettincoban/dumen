@@ -104,19 +104,28 @@ Before an agent asks you something, it looks in the living spec first. If a deci
 already answers it, the agent follows it and tells you which one, instead of asking again.
 
 **The prompt is the approval.** When your agent puts a decision in force, Claude Code shows you
-its exact words as they are in the store:
+its exact words as they are in the store. This is the real prompt, from an interactive session
+([interactive-approve](docs/transcripts/interactive-approve.txt)):
 
 ```text
-dumen: it puts D-9NWW "Slot buttons show how many tables are left" [ui] for web-app
-in force for every agent on the team. It asks booking-svc to: Return remaining tables per slot
-in GET /slots. It is recorded as sofia@example.com's decision. Allow only if you, the person,
-agreed to it.
+ Bash command
+ Approve decision D-ZJK2 (asks the user to confirm)
+ dumen approve D-ZJK2 --ticket 825b3b7957fba4a727cc660e7cfea94d
+ │ Hook PreToolUse:Bash requires confirmation for this command:
+ │ dumen: it puts D-ZJK2 "Slot buttons show how many tables are left" [ui] for web-app in force
+ │ for every agent on the team. It asks booking-svc to: Return remaining tables per slot in
+ │ GET /slots. It is recorded as sofia@example.com's decision. Allow only if you, the person,
+ │ agreed to it. [plugin:dumen]
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. No
 ```
 
 The command runs only after your yes, and it carries a one-use ticket that only this prompt
 gives out. An agent cannot approve on its own, chain the command behind another one, or write
 the store's files by hand: dumen refuses all of those. In a permission mode that may not ask
-you, it refuses to approve at all.
+you, it refuses to approve at all, and the agent asks you to switch modes
+([plan-mode](docs/transcripts/plan-mode.txt): a plan approved "with auto mode", then the switch).
 
 ## Real sessions
 
@@ -124,7 +133,8 @@ All of these are real headless Claude Code sessions with the plugin, run at the 
 real git repositories by [`test/live.mjs`](test/live.mjs). They are shortened, and temporary
 paths are replaced. Headless sessions have no person to see the prompt, so a hook answers Yes
 in the person's place; everything before that answer is the real path
-([how](docs/transcripts/README.md)).
+([how](docs/transcripts/README.md)). The prompt itself, answered by a person, is in the
+interactive recordings above.
 
 **The frontend needs something from the backend.** Sofia answers her agent's question about
 the time picker in `web-app`. Ayşe's agent, in the middle of its own work in `booking-svc`,
