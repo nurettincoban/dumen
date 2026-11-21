@@ -8,7 +8,7 @@ cited inline as [hooks: Section]. Local Claude Code version checked against: 2.1
 
 ## 1. Go package layout
 
-Module path: `github.com/nurettincoban/comm-pro` (see open question 4). Go 1.24. One binary, `dumen`.
+Module path: `github.com/nurettincoban/dumen` (see open question 4). Go 1.24. One binary, `dumen`.
 
 ```
 cmd/dumen/main.go          entry point; dispatches to internal/cli
@@ -284,8 +284,68 @@ writes a local file and spawns.
    prompt. I recommend one extra PreToolUse entry with matcher `*` that only delivers new directives
    (about 10 ms per tool call). Yes or no?
 3. Dependencies: `yaml.v3` plus the official MCP Go SDK, no CLI framework. OK?
-4. Module path: `github.com/nurettincoban/comm-pro`, or will the repo be renamed to `dumen`?
+4. Module path: `github.com/nurettincoban/dumen`, or will the repo be renamed to `dumen`?
 5. The repo is empty. My working branch would become the default branch on first push. May I push an
    initial commit (LICENSE and a stub README) to `main` first, and then open pull requests against it?
 6. The e2e tests run real `claude -p` in GitHub Actions, which needs an `ANTHROPIC_API_KEY` repository
    secret. They will use the smallest model to keep cost low. Can you add that secret before day 3?
+
+## 7. Changes made after approval
+
+These were decided during the build, each at the owner's request or forced by a test.
+
+1. **Multi-repo.** The team runs microservices in many repositories. One dedicated store
+   repository holds the records for all of them (`store = <remote-url>#<branch>`), and each
+   service repository's `.dumen` file names it (`repo = billing-svc`). A path may carry a
+   repository prefix: `billing-svc:src/auth/**` covers that service only, a path without a
+   prefix covers every repository, and `*:src/auth` says so explicitly. Directives limited
+   to other repositories are not delivered to a session. Paths an agent or a person
+   records from inside a repository are stored with that repository's prefix. Events carry
+   the repository, `anchored_at` is `<repo>@<sha>`, and `dumen activity --repo` and the
+   `activity` MCP tool filter by it. On one machine all repositories of a project share
+   one local store (`~/.dumen/<project>/`).
+2. **One PreToolUse handler with matcher `*`** replaces the three matcher groups in
+   section 2. The handler branches on the tool name, and new directives are delivered on
+   every tool call (open question 2).
+3. **Confirmation ticket.** When the PreToolUse hook answers "ask" for `approve`,
+   `supersede` or `publish_directive`, it leaves a single-use ticket bound to the exact
+   arguments. The MCP server refuses those tools without a fresh ticket, so a setup where
+   the hooks are missing cannot approve or publish at all. Verified with real Claude Code:
+   pre-allowing the tools with `--allowedTools` does not get past the hook's "ask" in a
+   `claude -p` run.
+4. **The CLI acts as an agent inside Claude Code.** Shells started by Claude Code have
+   `CLAUDECODE` set; with it set, `dumen approve`, `direct`, `withdraw`, `supersede` and
+   `private` are refused by the role check even if the Bash hook is bypassed.
+5. **Generated files do not depend on the clock.** DECISIONS.md lists published directives
+   with their start and expiry times instead of filtering by "now", so the same records
+   always give the same bytes.
+6. **Directives start one minute in the past** unless a start time is given, so a machine
+   whose clock runs slightly behind the publisher's sees them as active at once.
+7. **CI is off for now** (owner's request). All tests, including the `claude -p`
+   end-to-end tests (`go test -tags e2e ./test/e2e`), run locally.
+8. **Developer sync first.** The PM and designer side (`dumen join <url>` workspace, PM
+   section of the skill) exists but is not the current focus.
+9. **Findings from dogfooding (days 7-8).** The PreToolUse hook reminds a session once to
+   acknowledge directives it was shown and has not acknowledged, because agents busy with a
+   task often skipped the call. (Blocking Stop was tried and dropped: it replaces the final
+   answer of a `claude -p` run with the acknowledgement turn.) Activity summaries are the first prose paragraph of the last assistant message with
+   fenced code and long inline code removed, so that no code reaches the store. `dumen install`
+   pre-approves the ten agent tools in `permissions.allow` and never the three human actions.
+   `dumen role` and `dumen direct --publish <id>` were added because the setup and the proposal
+   flow could not be completed without them. An operation rejected while its caller is waiting is
+   no longer kept in `outbox-failed/`; only operations rejected during a background replay are.
+10. **Changes from the first review gauntlet.** (a) A confirmation ticket names the Claude
+    Code process and the session, and only the dumen MCP server that registered first for
+    that process, the one Claude Code started, can spend it. The hook answers "ask" only in
+    the `default`, `acceptEdits` and `plan` permission modes and denies in all others.
+    `dumen mcp` and `dumen hook` are blocked in the shell guard. (b) Path rules are matched
+    on the symlink-resolved file, against the repository that file is in; a session opened
+    above the repositories gets the records of the project found one level down; `.dumen`
+    is not editable by agents. (c) A link added by an agent is `unverified` and is not
+    injected until a person runs `dumen ref check`, which is now a human-only action.
+    (d) Unparseable record files are skipped and listed by `dumen status` instead of failing
+    every read and write. (e) A write whose caller is told it failed is removed from the
+    outbox. (f) `dumen.yml` `version` is checked: a store with a newer version is read-only
+    for this build; record ids may be 4 to 8 characters. (g) A push the host refuses for
+    good is reported with the host's message and is not retried. dumen is documented as a
+    guard rail, not a security boundary.
