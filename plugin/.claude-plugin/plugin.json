@@ -1,7 +1,7 @@
 {
   "name": "dumen",
   "displayName": "dumen",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Team directives, shared decisions and an activity log for every Claude Code agent on the team, synced through your own git remote. Downloads the dumen binary from the latest release, or uses one on PATH.",
   "author": { "name": "Nurettin Coban" },
   "homepage": "https://github.com/nurettincoban/dumen",

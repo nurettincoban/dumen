@@ -6,8 +6,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch",
+            "command": "node",
             "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch.cjs",
               "hook",
               "post-tool-use"
             ],
@@ -22,8 +23,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch",
+            "command": "node",
             "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch.cjs",
               "hook",
               "pre-tool-use"
             ],
@@ -37,8 +39,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch",
+            "command": "node",
             "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch.cjs",
               "hook",
               "session-end"
             ],
@@ -52,8 +55,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch",
+            "command": "node",
             "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch.cjs",
               "hook",
               "session-start"
             ],
@@ -67,8 +71,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch",
+            "command": "node",
             "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch.cjs",
               "hook",
               "stop"
             ],
@@ -82,8 +87,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch",
+            "command": "node",
             "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch.cjs",
               "hook",
               "user-prompt-submit"
             ],

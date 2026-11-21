@@ -48,7 +48,8 @@ a public repository.**
 /plugin install dumen@dumen
 ```
 
-The plugin brings the hooks, the MCP server and the skill. When Claude Code first starts
+The plugin brings the hooks, the MCP server and the skill. Its cross-platform launcher
+requires Node.js 18 or later on `PATH`. When Claude Code first starts
 the MCP server, the plugin downloads the `dumen` binary for your system from the latest
 GitHub release, checks its checksum and keeps it in the plugin's data directory; restart
 Claude Code once so the hooks use it. A `dumen` on `PATH` takes precedence. It stays silent in directories that have nothing to do with a dumen project. The
