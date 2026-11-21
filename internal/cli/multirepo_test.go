@@ -51,11 +51,33 @@ func TestSeveralRepositoriesShareOneStore(t *testing.T) {
 	run(t, "direct", "--deny", "--paths", "billing-svc:src/auth/**", "Release week: billing auth is frozen")
 	run(t, "direct", "--all", "All services log with the structured logger")
 	// A decision recorded inside a repository belongs to that repository.
-	if out := run(t, "decide", "--title", "Orders are paginated with cursors", "-m", "Decision. Why.", "--paths", "src/api", "--approve"); !strings.Contains(out, "approved") {
+	if out := run(t, "decide", "--title", "Orders are paginated with cursors", "--rule", "List endpoints page with opaque cursors", "--kind", "technical", "-m", "Decision. Why.", "--paths", "src/api", "--approve"); !strings.Contains(out, "approved") {
 		t.Fatal(out)
 	}
-	if list := run(t, "decisions", "src/api/list.go"); !strings.Contains(list, "Orders are paginated") {
+	if list := run(t, "decisions", "src/api/list.go"); !strings.Contains(list, "List endpoints page with opaque cursors") {
 		t.Fatalf("decision not linked to the path in its own repository: %s", list)
+	}
+	// Decisions are scoped to services and topics and found by kind.
+	if out, code := runErr("decide", "--title", "No kind", "--rule", "r", "-m", "b"); code == 0 || !strings.Contains(out, "--kind is required") {
+		t.Fatalf("decide without --kind: %d %s", code, out)
+	}
+	run(t, "decide", "--title", "Payments go through billing", "--rule", "Only billing-svc talks to the payment provider",
+		"--kind", "architecture", "--topics", "payments", "-m", "Why.", "--approve")
+	run(t, "decide", "--title", "Orders keep idempotency keys", "--rule", "Creating an order is idempotent",
+		"--kind", "product", "--services", "orders-svc", "--topics", "orders", "-m", "Why.", "--approve")
+	for _, c := range []struct {
+		args       []string
+		want, deny string
+	}{
+		{[]string{"decisions", "--kind", "architecture"}, "Only billing-svc", "idempotent"},
+		{[]string{"decisions", "--service", "billing-svc"}, "Only billing-svc", "idempotent"},
+		{[]string{"decisions", "--service", "orders-svc"}, "idempotent", ""},
+		{[]string{"decisions", "--topic", "orders"}, "idempotent", "Only billing-svc"},
+	} {
+		got := run(t, c.args...)
+		if !strings.Contains(got, c.want) || (c.deny != "" && strings.Contains(got, c.deny)) {
+			t.Fatalf("%v: %s", c.args, got)
+		}
 	}
 	t.Chdir(billing)
 	if list := run(t, "decisions", "src/api/list.go"); strings.Contains(list, "Orders are paginated") {

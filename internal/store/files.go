@@ -223,6 +223,9 @@ func readDecisionFile(root, rel string) (model.Decision, error) {
 	if !model.ValidID(d.ID, model.PrefixDecision) {
 		return d, fmt.Errorf("%s: missing or invalid id", rel)
 	}
+	if d.Status == model.LegacyStatusDraft {
+		d.Status = model.StatusProposed // version 1 spelling
+	}
 	d.Body = body
 	return d, nil
 }

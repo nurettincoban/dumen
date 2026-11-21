@@ -186,7 +186,7 @@ type directiveIn struct {
 
 type searchIn struct {
 	Query  string `json:"query,omitempty" jsonschema:"words to look for in titles, areas and paths; empty lists everything"`
-	Status string `json:"status,omitempty" jsonschema:"approved (default), draft or all"`
+	Status string `json:"status,omitempty" jsonschema:"approved (default), proposed or all"`
 }
 
 type pathIn struct {
@@ -196,7 +196,11 @@ type pathIn struct {
 type decisionIn struct {
 	ID         string   `json:"id,omitempty" jsonschema:"supersede only: id of the approved decision being replaced"`
 	Title      string   `json:"title" jsonschema:"one line, at most 120 characters"`
-	Body       string   `json:"body" jsonschema:"markdown: the decision, why, and the rejected alternatives; never restate the content of a Design or Artifact link"`
+	Rule       string   `json:"rule,omitempty" jsonschema:"the rule other agents will follow, one sentence, at most 300 characters"`
+	Kind       string   `json:"kind,omitempty" jsonschema:"product, ux, ui, architecture or technical (or a kind from dumen.yml); required for draft_decision, inherited on supersede"`
+	Services   []string `json:"services,omitempty" jsonschema:"services (repositories) it applies to; empty means the whole product"`
+	Topics     []string `json:"topics,omitempty" jsonschema:"topics from dumen.yml, e.g. payments, booking-flow"`
+	Body       string   `json:"body" jsonschema:"markdown: why, what is allowed and not allowed (with examples), rejected alternatives; never restate the content of a Design or Artifact link"`
 	Area       string   `json:"area,omitempty" jsonschema:"area from dumen.yml"`
 	Paths      []string `json:"paths,omitempty" jsonschema:"repo-relative paths the decision governs"`
 	Sources    []string `json:"sources,omitempty" jsonschema:"ref ids (R-XXXX) of the Design, Artifact, MR or doc links this decision points to"`
@@ -388,8 +392,11 @@ func (s *Server) SearchDecisions(ctx context.Context, in searchIn) (string, erro
 	derived := policy.Derive(decs)
 	words := strings.Fields(strings.ToLower(in.Query))
 	status := in.Status
-	if status == "" {
+	switch status {
+	case "":
 		status = model.StatusApproved
+	case model.LegacyStatusDraft:
+		status = model.StatusProposed
 	}
 	var b strings.Builder
 	n := 0
@@ -414,7 +421,8 @@ func (s *Server) SearchDecisions(ctx context.Context, in searchIn) (string, erro
 				continue
 			}
 		}
-		hay := strings.ToLower(d.ID + " " + d.Title + " " + d.Area + " " + strings.Join(d.Paths, " "))
+		hay := strings.ToLower(d.ID + " " + d.Title + " " + d.Rule + " " + d.Kind + " " + strings.Join(d.Topics(), " ") +
+			" " + strings.Join(d.AppliesTo.Services, " ") + " " + strings.Join(d.Paths, " "))
 		ok := true
 		for _, w := range words {
 			ok = ok && strings.Contains(hay, w)
@@ -427,10 +435,13 @@ func (s *Server) SearchDecisions(ctx context.Context, in searchIn) (string, erro
 			break
 		}
 		fmt.Fprintf(&b, "- %s [%s]", d.ID, state)
-		if d.Area != "" {
-			fmt.Fprintf(&b, " [%s]", render.Label(d.Area, 30))
+		if tag := d.Kind; tag != "" || d.Area != "" {
+			if tag == "" {
+				tag = d.Area
+			}
+			fmt.Fprintf(&b, " [%s]", render.Label(tag, 30))
 		}
-		fmt.Fprintf(&b, " %s\n", render.Label(d.Title, render.MaxLabel))
+		fmt.Fprintf(&b, " %s\n", render.Label(d.Headline(), 300))
 	}
 	if n == 0 {
 		return "No matching decisions.", nil
@@ -492,9 +503,16 @@ func (s *Server) GetDecision(ctx context.Context, in idIn) (string, error) {
 	default:
 		fmt.Fprintf(&b, " (CONTESTED: superseded by %s; ask your human which applies)", strings.Join(by, " and "))
 	}
-	if d.Status == model.StatusDraft {
-		b.WriteString(" (a draft is a proposal, not a team decision)")
+	if d.Status == model.StatusProposed {
+		b.WriteString(" (proposed: not yet approved by the person who owns this kind of decision)")
 	}
+	svc := "all (product-wide)"
+	if !d.ProductWide() {
+		svc = strings.Join(d.AppliesTo.Services, ", ")
+	}
+	fmt.Fprintf(&b, "\nrule: %s\nkind: %s\nservices: %s\ntopics: %s\nowner: %s",
+		dash(render.Label(d.Rule, 300)), dash(render.Label(d.Kind, 40)), render.Label(svc, 300),
+		dash(render.Label(strings.Join(d.Topics(), ", "), 300)), dash(render.Label(d.Owner, 120)))
 	fmt.Fprintf(&b, "\narea: %s\npaths: %s\nauthor: %s (%s)\napproved by: %s\nsupersedes: %s\ncreated: %s\n",
 		dash(d.Area), dash(strings.Join(d.Paths, ", ")), d.Author, d.AuthorKind, dash(d.ApprovedBy), dash(strings.Join(d.Supersedes, ", ")), d.Created)
 	for _, r := range refs {
@@ -574,11 +592,17 @@ func (s *Server) DraftDecision(ctx context.Context, in decisionIn) (string, erro
 	if err != nil {
 		return "", err
 	}
-	d := model.Decision{ID: model.NewID(model.PrefixDecision), Title: strings.TrimSpace(in.Title), Area: in.Area,
-		Paths: qualifyAll(p.Repo, in.Paths), Sources: upper(in.Sources), Supersedes: upper(in.Supersedes)}
+	d := decisionFrom(in)
+	d.Paths, d.Supersedes = qualifyAll(p.Repo, in.Paths), upper(in.Supersedes)
 	d.AnchoredAt = s.anchor(p)
+	if d.Rule == "" {
+		return "", fmt.Errorf("rule is required: the one sentence other agents will follow")
+	}
+	if d.Kind == "" {
+		return "", fmt.Errorf("kind is required: product, ux, ui, architecture or technical")
+	}
 	if strings.TrimSpace(in.Body) == "" {
-		return "", fmt.Errorf("body is required: the decision, why, and the rejected alternatives")
+		return "", fmt.Errorf("body is required: why, what is allowed and not allowed, and the rejected alternatives")
 	}
 	out, note, err := s.submit(ctx, p, s.agent(p), &op.CreateDecision{Decision: d, Body: in.Body})
 	if err != nil {
@@ -588,7 +612,33 @@ func (s *Server) DraftDecision(ctx context.Context, in decisionIn) (string, erro
 	if s.logEvent(p, sess, model.EventDraftWritten, d.Title, out.RecordID) == nil {
 		s.flushSoon(p)
 	}
-	return fmt.Sprintf("Recorded draft %s. It is a proposal until a human approves it with `dumen approve %s`.%s", out.RecordID, out.RecordID, note), nil
+	return fmt.Sprintf("Recorded %s (proposed). It is a proposal until a person who owns %s decisions approves it with `dumen approve %s`.%s", out.RecordID, d.Kind, out.RecordID, note), nil
+}
+
+// decisionFrom copies the fields an agent or person gave into a new decision.
+func decisionFrom(in decisionIn) model.Decision {
+	return model.Decision{ID: model.NewID(model.PrefixDecision), Title: strings.TrimSpace(in.Title),
+		Rule: strings.Join(strings.Fields(in.Rule), " "), Kind: strings.ToLower(strings.TrimSpace(in.Kind)),
+		AppliesTo: model.AppliesTo{Services: trimAll(lowerAll(in.Services)), Topics: trimAll(lowerAll(in.Topics))},
+		Area:      in.Area, Sources: upper(in.Sources)}
+}
+
+func trimAll(xs []string) []string {
+	var out []string
+	for _, x := range xs {
+		if x = strings.TrimSpace(x); x != "" {
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
+func lowerAll(xs []string) []string {
+	out := make([]string, len(xs))
+	for i, x := range xs {
+		out[i] = strings.ToLower(x)
+	}
+	return out
 }
 
 // qualifyAll prefixes paths an agent gave relative to its own repository with that
@@ -648,9 +698,12 @@ func (s *Server) Supersede(ctx context.Context, in decisionIn) (string, error) {
 	if !model.ValidID(old, model.PrefixDecision) {
 		return "", fmt.Errorf("id of the decision being superseded is required")
 	}
-	d := model.Decision{ID: model.NewID(model.PrefixDecision), Title: strings.TrimSpace(in.Title), Area: in.Area,
-		Paths: qualifyAll(p.Repo, in.Paths), Sources: upper(in.Sources), Supersedes: []string{old}}
+	d := decisionFrom(in)
+	d.Paths, d.Supersedes = qualifyAll(p.Repo, in.Paths), []string{old}
 	d.AnchoredAt = s.anchor(p)
+	if d.Rule == "" {
+		return "", fmt.Errorf("rule is required: the one sentence other agents will follow")
+	}
 	out, note, err := s.submit(ctx, p, s.human(p), &op.CreateDecision{Decision: d, Body: in.Body, Approve: true})
 	if err != nil {
 		return "", err
@@ -806,10 +859,10 @@ func New(s *Server) *mcp.Server {
 	add(srv, s, "ack_directive", "Acknowledge that this session received a directive. Call once for each new directive.", false, s.AckDirective)
 	add(srv, s, "propose_directive", "Propose a directive for a PM or lead to publish. A proposal is not in force.", false, s.ProposeDirective)
 	add(srv, s, "publish_directive", "Publish a directive to the team's agents. Human action: the person is asked to confirm. Only PM and lead roles.", true, s.PublishDirective)
-	add(srv, s, "search_decisions", "Search team decisions by words in the title, area or paths. Returns ids and titles.", false, s.SearchDecisions)
+	add(srv, s, "search_decisions", "Search team decisions by words in the rule, title, kind, topics, services or paths. Returns ids and rules.", false, s.SearchDecisions)
 	add(srv, s, "get_decision", "Get one decision in full: status, body, linked sources. Also returns a source-of-truth link when given its R- id.", false, s.GetDecision)
 	add(srv, s, "decisions_for_path", "List approved decisions, blocking directives and source-of-truth links for a file path.", false, s.DecisionsForPath)
-	add(srv, s, "draft_decision", "Record a draft decision for a lasting choice (library, API shape, data model, UI rule). A human approves it later.", false, s.DraftDecision)
+	add(srv, s, "draft_decision", "Record a proposed decision for a lasting choice of any kind: product, UX, UI, architecture or technical. Give a one-sentence rule others will follow. The person who owns that kind approves it later.", false, s.DraftDecision)
 	add(srv, s, "approve", "Approve a draft decision. Human action: the person is asked to confirm.", true, s.Approve)
 	add(srv, s, "supersede", "Replace an approved decision with a new approved one. Human action: the person is asked to confirm.", true, s.Supersede)
 	add(srv, s, "add_ref", "Record a link to a Design, Artifact, merge request or doc as a source of truth. Stores the link and one-line labels only.", false, s.AddRef)

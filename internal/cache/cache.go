@@ -21,13 +21,17 @@ const StaleAfter = 90 * time.Second
 
 // Decision is the part of an approved decision that hooks need. Bodies stay in the store.
 type Decision struct {
-	ID        string   `json:"id"`
-	Title     string   `json:"title"`
-	Area      string   `json:"area,omitempty"`
-	Paths     []string `json:"paths,omitempty"`
-	Sources   []string `json:"sources,omitempty"`
-	Created   string   `json:"created"`
-	Contested bool     `json:"contested,omitempty"`
+	ID        string          `json:"id"`
+	Title     string          `json:"title"`
+	Rule      string          `json:"rule,omitempty"`
+	Kind      string          `json:"kind,omitempty"`
+	AppliesTo model.AppliesTo `json:"applies_to,omitempty"`
+	Owner     string          `json:"owner,omitempty"`
+	Area      string          `json:"area,omitempty"`
+	Paths     []string        `json:"paths,omitempty"`
+	Sources   []string        `json:"sources,omitempty"`
+	Created   string          `json:"created"`
+	Contested bool            `json:"contested,omitempty"`
 }
 
 // Directive mirrors model.Directive with its text.
@@ -54,7 +58,7 @@ type Cache struct {
 	Proposed       int `json:"proposed"` // proposed directives waiting for a publisher
 }
 
-const version = 1
+const version = 2
 
 // Build reads the checkout at root into a snapshot.
 func Build(root, head string, now time.Time) (*Cache, error) {
@@ -88,13 +92,14 @@ func Build(root, head string, now time.Time) (*Cache, error) {
 	derived := policy.Derive(decs)
 	for _, d := range decs {
 		switch d.Status {
-		case model.StatusDraft:
+		case model.StatusProposed:
 			c.Drafts++
 		case model.StatusApproved:
 			if len(derived.SupersededBy[d.ID]) == 1 {
 				continue // cleanly superseded: no longer in force
 			}
-			c.Decisions = append(c.Decisions, Decision{ID: d.ID, Title: d.Title, Area: d.Area, Paths: d.Paths,
+			c.Decisions = append(c.Decisions, Decision{ID: d.ID, Title: d.Title, Rule: d.Rule, Kind: d.Kind,
+				AppliesTo: d.AppliesTo, Owner: d.Owner, Area: d.Area, Paths: d.Paths,
 				Sources: d.Sources, Created: d.Created, Contested: derived.Contested[d.ID]})
 		}
 	}

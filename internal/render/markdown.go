@@ -84,7 +84,7 @@ func Decisions(root string) ([]byte, error) {
 				continue
 			}
 			byArea[d.Area] = append(byArea[d.Area], d)
-		case model.StatusDraft:
+		case model.StatusProposed:
 			drafts = append(drafts, d)
 		}
 	}

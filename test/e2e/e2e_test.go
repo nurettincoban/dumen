@@ -271,7 +271,7 @@ func TestMidSessionDirectiveIsDeliveredAndAcknowledged(t *testing.T) {
 // (c) An agent cannot approve a decision or publish a directive.
 func TestAgentCannotApproveOrPublish(t *testing.T) {
 	w := setup(t)
-	id := firstID(w.dumen("decide", "--title", "Orders API uses opaque cursors", "-m", "Decision. Why. Rejected: offsets."))
+	id := firstID(w.dumen("decide", "--title", "Orders API uses opaque cursors", "--rule", "The orders API pages with opaque cursors", "--kind", "technical", "-m", "Decision. Why. Rejected: offsets."))
 	if id == "" {
 		t.Fatal("no decision id")
 	}
@@ -305,7 +305,7 @@ func TestHumanConfirmedApprovalGoesThrough(t *testing.T) {
 		t.Skip("uses a shell one-liner as the stand-in for the person")
 	}
 	w := setup(t)
-	id := firstID(w.dumen("decide", "--title", "Orders API uses opaque cursors", "-m", "Decision. Why. Rejected: offsets."))
+	id := firstID(w.dumen("decide", "--title", "Orders API uses opaque cursors", "--rule", "The orders API pages with opaque cursors", "--kind", "technical", "-m", "Decision. Why. Rejected: offsets."))
 	w.write(".claude/settings.local.json", `{"hooks":{"PermissionRequest":[{"matcher":"mcp__dumen__approve","hooks":[{"type":"command","command":"printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}'"}]}]}}`)
 	w.claude("My human asked me to approve decision "+id+". Call the dumen `approve` tool with id "+id+" once and report the result.", "--permission-prompts", "none")
 	if show := w.dumen("show", id); !strings.Contains(show, "status      approved") {

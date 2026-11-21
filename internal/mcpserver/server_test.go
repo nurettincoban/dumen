@@ -152,7 +152,7 @@ func TestToolList(t *testing.T) {
 
 func TestAgentCannotApproveOrPublishWithoutHumanConfirmation(t *testing.T) {
 	w := setup(t)
-	text := w.ok("draft_decision", map[string]any{"title": "Use opaque cursors", "body": "Decision.\n\nWhy.\n\nRejected: offsets.", "paths": []string{"src/api"}})
+	text := w.ok("draft_decision", map[string]any{"title": "Use opaque cursors", "rule": "List endpoints page with opaque cursors", "kind": "technical", "body": "Decision.\n\nWhy.\n\nRejected: offsets.", "paths": []string{"src/api"}})
 	id := model.NewID("D")
 	if i := strings.Index(text, "D-"); i >= 0 {
 		id = text[i : i+6]
@@ -274,11 +274,11 @@ func TestRefsAndPathLookup(t *testing.T) {
 	if _, isErr := w.call("add_ref", map[string]any{"url": "not a url", "kind": "design", "title": "x"}); !isErr {
 		t.Fatal("a ref needs an http(s) link")
 	}
-	w.ok("draft_decision", map[string]any{"title": "Checkout follows the design", "body": "Pointer decision: the design governs the checkout screens.", "sources": []string{ref}, "paths": []string{"src/ui/checkout"}})
+	w.ok("draft_decision", map[string]any{"title": "Checkout follows the design", "rule": "Checkout screens follow the linked design", "kind": "ui", "body": "Pointer decision: the design governs the checkout screens.", "sources": []string{ref}, "paths": []string{"src/ui/checkout"}})
 	if text := w.ok("search_decisions", map[string]any{"query": "checkout"}); !strings.Contains(text, "No matching") {
 		t.Fatalf("drafts must not show up as approved: %s", text)
 	}
-	if text := w.ok("search_decisions", map[string]any{"query": "checkout", "status": "draft"}); !strings.Contains(text, "Checkout follows the design") {
+	if text := w.ok("search_decisions", map[string]any{"query": "checkout", "status": "proposed"}); !strings.Contains(text, "Checkout screens follow the linked design") {
 		t.Fatalf("draft search: %s", text)
 	}
 	// Gauntlet K4: a link an agent added reaches no agent until a person has checked it.
@@ -337,7 +337,7 @@ func (w *world) connect(impl *Server) *mcp.ClientSession {
 // piping the same call into a `dumen mcp` it starts itself.
 func TestDeclinedConfirmationCannotBeSpentByAnotherServer(t *testing.T) {
 	w := setup(t)
-	text := w.ok("draft_decision", map[string]any{"title": "Agents approve their own drafts", "body": "b"})
+	text := w.ok("draft_decision", map[string]any{"title": "Agents approve their own drafts", "rule": "r", "kind": "technical", "body": "b"})
 	id := text[strings.Index(text, "D-") : strings.Index(text, "D-")+6]
 	args := map[string]any{"id": id}
 	ask := func() {
@@ -374,7 +374,7 @@ func TestDeclinedConfirmationCannotBeSpentByAnotherServer(t *testing.T) {
 	os.Remove(filepath.Join(sessions, "by-parent", strconv.Itoa(parentPID)+".mcp"))
 	session.RegisterServer(sessions, parentPID, os.Getpid())
 
-	if got := w.ok("get_decision", args); !strings.Contains(got, "status: draft") {
+	if got := w.ok("get_decision", args); !strings.Contains(got, "status: proposed") {
 		t.Fatalf("the draft was approved without a person: %s", got)
 	}
 	// The real server still works when the person does confirm.

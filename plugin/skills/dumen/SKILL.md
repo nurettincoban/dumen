@@ -46,10 +46,12 @@ that role below. Everyone follows "Always".
 
 ## Developer roles (backend, frontend, lead, and any role not listed below)
 
-- When you make a **lasting choice** (a library, an API shape, a data model, a UI rule,
-  a convention others must follow), record it with `draft_decision`: a one-line title,
-  a body with the decision, why, and the rejected alternatives, the `paths` it governs
-  and the `sources` (ref ids) it rests on. A draft is a proposal until a human approves it.
+- When you make a **lasting choice** that others will meet again (a product rule, a UX
+  flow, a UI pattern, a service boundary, a library, an API shape, a data model), record
+  it with `draft_decision`: a one-line title, a one-sentence `rule` others will follow,
+  its `kind` (`product`, `ux`, `ui`, `architecture` or `technical`), the `services` and
+  `topics` it applies to, and a body with why, what is allowed and not allowed, and the
+  rejected alternatives. It is proposed until the person who owns that kind approves it.
 - Do **not** record trivial or local details: variable names, a refactor inside one
   file, a bug fix, anything a reader gets from the diff.
 - If a decision you need already exists, follow it. If it looks wrong for the task,

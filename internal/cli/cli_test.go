@@ -794,7 +794,7 @@ func TestAnotherRepositoryWithTheSameProjectNameIsNotTheProject(t *testing.T) {
 		t.Fatalf("project.Find in the other repository: %v", err)
 	}
 	t.Chdir(other)
-	for _, args := range [][]string{{"status"}, {"directives"}, {"activity"}, {"decide", "--title", "x", "-m", "y"}} {
+	for _, args := range [][]string{{"status"}, {"directives"}, {"activity"}, {"decide", "--title", "x", "--rule", "r", "--kind", "technical", "-m", "y"}} {
 		if out, code := runErr(args...); code == 0 || !strings.Contains(out, "has not joined project") || strings.Contains(out, "structured logger") {
 			t.Errorf("dumen %v in the other repository (exit %d):\n%s", args, code, out)
 		}

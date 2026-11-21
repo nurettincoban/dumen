@@ -379,3 +379,13 @@ These were decided during the build, each at the owner's request or forced by a 
     (c) Delivery of directives is tracked per agent (`agent_id` in the hook input), so a
     subagent's tool call does not use up the notice for the main agent. The one-time
     acknowledgement reminder goes to the main agent only.
+
+14. **Decisions of every kind (decisions-first redesign, PR 1).** The owner re-centred dumen on
+    high-level decisions about the product, its UX and UI, its architecture and its
+    technology, captured from the questions Claude Code already asks. Design and the
+    critic's decisions: https://claude.ai/artifact/KRrGk5UV3ptRj9PecWZrd4. This step adds the
+    model: a decision has a one-sentence `rule`, a `kind` (default kinds `product`, `ux`,
+    `ui`, `architecture`, `technical`, each owned by a role), and `applies_to` services and
+    topics. `dumen.yml` gains `product`, `services`, `topics` and `kinds`. The role that owns
+    a kind may approve decisions of that kind. `draft` is now `proposed`; store version 2.
+    Areas and paths stay: an area counts as a topic, and paths link a decision to files.
