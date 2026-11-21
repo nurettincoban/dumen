@@ -9,6 +9,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import os from 'node:os';
 
 const VERSION = 1;
 const KINDS = ['product', 'ux', 'ui', 'architecture', 'technical'];
@@ -193,53 +194,78 @@ function ensureClone(c) {
 // lock makes sure only one process runs git in the local copy at a time. The lock file holds
 // the holder's pid; a lock whose holder is gone is moved away by rename, which only one
 // process can do, and taken again.
+// A lock names its holder: pid, where that pid means something, and a nonce. Pids mean nothing
+// across machines or pid namespaces (a dev container or WSL sharing a clone with the host), so
+// "where" is the host name plus, on Linux, the pid namespace.
+const WHERE = (() => {
+  let ns = '';
+  try { ns = fs.readlinkSync('/proc/self/ns/pid'); } catch {}
+  return `${os.hostname()}${ns ? `/${ns}` : ''}`.replace(/\s+/g, '_');
+})();
+// A holder elsewhere is judged by age alone: it touches the lock at every step of a change, so a
+// live one is never this old.
+const FOREIGN_LOCK_MS = 5 * 60 * 1000;
+
 function lock(c, wait) {
   fs.mkdirSync(c.meta, { recursive: true });
   const f = state(c, 'lock');
-  const me = `${process.pid} ${crypto.randomBytes(6).toString('hex')}`;
+  const me = `${process.pid} ${WHERE} ${crypto.randomBytes(6).toString('hex')}`;
   const deadline = Date.now() + wait;
   const log = process.env.DUMEN_LOCK_LOG;
   for (;;) {
-    // The lock is created whole: the pid is written to a file of our own, which is then linked
-    // to the lock's name. Linking fails if the name exists, so no one ever sees an empty lock.
-    const tmp = `${f}.${process.pid}.${crypto.randomBytes(4).toString('hex')}`;
-    fs.writeFileSync(tmp, me);
-    let got = false;
-    try { fs.linkSync(tmp, f); got = true; } catch (e) { if (e.code !== 'EEXIST') { fs.rmSync(tmp, { force: true }); throw e; } }
-    fs.rmSync(tmp, { force: true });
-    if (got) {
+    if (create(f, me)) {
       const t0 = Date.now();
-      return () => {
+      const unlock = () => {
         if (log) fs.appendFileSync(log, `${process.pid} ${t0} ${Date.now()}\n`);
         if (readState(c, 'lock') === me) fs.rmSync(f, { force: true });
       };
+      unlock.touch = () => { if (readState(c, 'lock') === me) { const now = new Date(); try { fs.utimesSync(f, now, now); } catch {} } };
+      return unlock;
     }
-    // A lock is taken over only when the process that holds it is gone, however long it has
-    // held it. The takeover runs under a file of its own, and removes the lock only if it is
-    // still the one judged dead, so two takers never remove a fresh lock.
+    // A lock is taken over only when its holder is gone: a process here that no longer runs,
+    // or a holder elsewhere that has not touched it for FOREIGN_LOCK_MS. The takeover runs
+    // under a file of its own and removes the lock only if it is still the one judged dead, so
+    // two takers never remove a fresh lock.
     const seen = readState(c, 'lock');
-    // An empty lock was not written by dumen (it never makes one); left there a while, it is junk.
-    let junk = false;
-    if (!seen) { try { junk = Date.now() - fs.statSync(f).mtimeMs > 5000; } catch {} }
-    if (seen ? !alive(seen) : junk) takeOver(c, f, seen);
+    let age = 0;
+    try { age = Date.now() - fs.statSync(f).mtimeMs; } catch { continue; }
+    // An empty lock is not one dumen made whole; left there a while, it is junk.
+    if (seen ? !alive(seen, age) : age > 5000) takeOver(c, f, seen);
     if (Date.now() >= deadline) return null;
     sleep(40 + crypto.randomInt(80));
   }
 }
 
-function alive(owner) {
-  const pid = Number(String(owner).split(' ')[0]);
+// create makes the lock whole: the holder is written to a file of our own, which is then linked
+// to the lock's name. Linking fails if the name exists, so no one sees a half-written lock. On a
+// file system without hard links it falls back to an exclusive create, whose short moment of an
+// empty file the junk rule above covers.
+function create(f, me) {
+  const tmp = `${f}.${process.pid}.${crypto.randomBytes(4).toString('hex')}`;
+  fs.writeFileSync(tmp, me);
+  try { fs.linkSync(tmp, f); return true; } catch (e) {
+    if (e.code === 'EEXIST') return false;
+    try { fs.writeFileSync(f, me, { flag: 'wx' }); return true; } catch (e2) { if (e2.code === 'EEXIST') return false; throw e2; }
+  } finally { fs.rmSync(tmp, { force: true }); }
+}
+
+function alive(owner, age) {
+  const [p, where] = String(owner).split(' ');
+  const pid = Number(p);
   if (!pid) return false;
+  if (where !== WHERE) return age <= FOREIGN_LOCK_MS;
   try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
 }
 
 function takeOver(c, f, seen) {
   const g = `${f}.takeover`;
-  const me = `${process.pid} ${crypto.randomBytes(6).toString('hex')}`;
+  const me = `${process.pid} ${WHERE} ${crypto.randomBytes(6).toString('hex')}`;
   try { fs.writeFileSync(g, me, { flag: 'wx' }); } catch {
-    // A taker that died while taking over leaves its file: remove it when its pid is gone.
+    // A taker that died while taking over leaves its file: remove it when it is gone.
     const other = readState(c, 'lock.takeover');
-    if (other && !alive(other)) { try { if (fs.readFileSync(g, 'utf8').trim() === other) fs.rmSync(g, { force: true }); } catch {} }
+    let age = 0;
+    try { age = Date.now() - fs.statSync(g).mtimeMs; } catch { return; }
+    if (other ? !alive(other, age) : age > 5000) { try { if (fs.readFileSync(g, 'utf8').trim() === other) fs.rmSync(g, { force: true }); } catch {} }
     return;
   }
   try { if (readState(c, 'lock') === seen) fs.rmSync(f, { force: true }); } finally { fs.rmSync(g, { force: true }); }
@@ -330,6 +356,8 @@ function transact(c, message, change) {
       if (!fetch(c, 30000)) throw new Fail(`could not reach the store ${c.url}. Nothing was changed, and nobody else sees it`);
       reset(c);
       checkVersion(c);
+      c.wrote = new Set();
+      unlock.touch();
       const done = change();
       if (done instanceof Unchanged) return done.result;
       mustBeStore(c);
@@ -338,13 +366,20 @@ function transact(c, message, change) {
       const trailer = c.session ? `\n\nDumen-Session: ${c.session}` : '';
       // Nothing staged, or the commit failing, means the change was undone before it was
       // committed: try again from the remote.
-      if (tryGit(c.store, ['diff', '--cached', '--quiet']) !== null ||
+      const staged = git(c.store, ['diff', '--cached', '--name-only', '-z']).split('\0').filter(Boolean).sort();
+      const wrote = [...c.wrote].sort();
+      if (staged.length !== wrote.length || staged.some((x, i) => x !== wrote[i])) {
+        last = 'the change was mixed with another before it was committed';
+        continue;
+      }
+      if (!staged.length ||
           tryGit(c.store, [...who, '-c', 'commit.gpgsign=false', 'commit', '-q', '--no-verify', '-m', `${message}${trailer}`]) === null) {
         last = 'the change was undone before it was committed';
         continue;
       }
       const mine = git(c.store, ['rev-parse', 'HEAD']);
       let pushed = false;
+      unlock.touch();
       try {
         // The commit itself is pushed, by its id, not whatever HEAD is by then: a push that
         // succeeds has put this very commit on the remote branch.
@@ -355,6 +390,7 @@ function transact(c, message, change) {
       // read right after a push that succeeded, the push is the proof.
       const read = fetch(c, 30000);
       if (read ? tryGit(c.store, ['merge-base', '--is-ancestor', mine, remoteRef(c)]) !== null : pushed) return done;
+      if (!read && !/rejected|non-fast-forward|fetch first/i.test(last)) throw new Fail(`the store could not be reached to confirm "${clean(message, 80)}", so it is not known whether the team sees it. Run dumen log when the remote is back; run the command again only if it is not there`);
       reset(c);
       if (last && !/rejected|fetch first|non-fast-forward|cannot lock|stale info|failed to update ref/i.test(last)) break;
       sleep(100 * attempt + crypto.randomInt(200));
@@ -437,10 +473,16 @@ function load(c, id) {
 
 function save(c, d) {
   if (d.version > VERSION) throw new Fail(`${d.meta.id} uses protocol version ${d.version}; update the plugin to change it`);
-  fs.mkdirSync(c.dir, { recursive: true });
-  const f = recordPath(c, checkId(d.meta.id));
-  fs.writeFileSync(`${f}.tmp`, serialize(d));
+  write(c, recordPath(c, checkId(d.meta.id)), serialize(d));
+}
+
+// write puts one file of a change in the store, and notes it: the commit must hold exactly the
+// files the change wrote, or the change was mixed with another and is tried again.
+function write(c, f, text) {
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(`${f}.tmp`, text);
   fs.renameSync(`${f}.tmp`, f);
+  if (c.wrote) c.wrote.add(path.relative(c.store, f).split(path.sep).join('/'));
 }
 
 function all(c) {
@@ -590,11 +632,11 @@ const commands = {
       const v = path.join(c.store, 'dumen.txt');
       const ga0 = path.join(c.store, '.gitattributes');
       if (fs.existsSync(v) && fs.existsSync(ga0) && fs.existsSync(path.join(c.dir, '.keep'))) return unchanged();
-      if (!fs.existsSync(v)) fs.writeFileSync(v, `version: ${VERSION}\nThis branch is a dumen store: the living spec of a product. See https://github.com/nurettincoban/dumen\n`);
+      if (!fs.existsSync(v)) write(c, v, `version: ${VERSION}\nThis branch is a dumen store: the living spec of a product. See https://github.com/nurettincoban/dumen\n`);
       const ga = path.join(c.store, '.gitattributes');
-      if (!fs.existsSync(ga)) fs.writeFileSync(ga, '* text=auto eol=lf\n');
+      if (!fs.existsSync(ga)) write(c, ga, '* text=auto eol=lf\n');
       fs.mkdirSync(c.dir, { recursive: true });
-      if (!fs.existsSync(path.join(c.dir, '.keep'))) fs.writeFileSync(path.join(c.dir, '.keep'), '');
+      if (!fs.existsSync(path.join(c.dir, '.keep'))) write(c, path.join(c.dir, '.keep'), '');
     });
     let where;
     if (c.url === c.origin && c.branch === 'dumen') {
@@ -744,7 +786,7 @@ const commands = {
       const was = fs.existsSync(f);
       const before = was ? fs.readFileSync(f, 'utf8') : null;
       fs.mkdirSync(path.dirname(f), { recursive: true });
-      fs.writeFileSync(f, ['---', `dumen: ${VERSION}`, `title: ${title}`, `url: ${url}`, ...(about ? [`about: ${about}`] : []), `from: ${from}`, `seen: ${seen}`, `added_by: ${c.email}`, '---', '',
+      write(c, f, ['---', `dumen: ${VERSION}`, `title: ${title}`, `url: ${url}`, ...(about ? [`about: ${about}`] : []), `from: ${from}`, `seen: ${seen}`, `added_by: ${c.email}`, '---', '',
         from === 'link'
           ? `> Summary written by ${c.email || 'a teammate'}'s agent from the link on ${seen}. The link is the source of truth.`
           : `> Summary written by ${c.email || 'a teammate'}'s agent from what ${c.email || 'its human'} said the link holds, on ${seen}. The agent did not read the link, which is the source of truth: check the summary against it.`, '', summary.replace(/\r\n/g, '\n').replace(/\s+$/, ''), ''].join('\n'));
@@ -768,8 +810,7 @@ const commands = {
       const was = fs.existsSync(f);
       const body = text.replace(/\r\n/g, '\n').replace(/\s+$/, '') + '\n';
       if (was && fs.readFileSync(f, 'utf8') === body) return unchanged(`The spec part ${name} already says this; nothing changed.`);
-      fs.mkdirSync(path.dirname(f), { recursive: true });
-      fs.writeFileSync(f, body);
+      write(c, f, body);
       return `${was ? 'Updated' : 'Wrote'} the spec part ${name} (${c.shown}/spec/${name}.md) for the whole team.`;
     });
   },
