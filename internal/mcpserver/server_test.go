@@ -41,6 +41,9 @@ func setup(t *testing.T) *world {
 	if err := project.WriteFile(root, "proj", remote+"#dumen"); err != nil {
 		t.Fatal(err)
 	}
+	if err := s.AddRoot(root); err != nil { // as `dumen join` does
+		t.Fatal(err)
+	}
 	w := &world{t: t, proj: &project.Project{Root: root, Name: "proj", Store: s}}
 	if _, err := w.proj.Refresh(context.Background()); err != nil {
 		t.Fatal(err)

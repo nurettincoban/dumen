@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -91,6 +92,10 @@ type Local struct {
 	Remote  string `json:"remote"`
 	Branch  string `json:"branch"`
 	Email   string `json:"email,omitempty"` // this user's git email, captured at init/join so hooks need not run git
+	// Roots are the directories that joined this store on this machine: the repositories
+	// and workspaces where `dumen init` or `dumen join` was run. A `.dumen` file somewhere
+	// else that merely names the same project does not get the team's records.
+	Roots []string `json:"roots,omitempty"`
 }
 
 // Store is a local single-branch clone of the dumen branch plus its side files.
@@ -165,6 +170,7 @@ func Setup(ctx context.Context, remote, branch, project string, create bool, fou
 	}
 	s := &Store{Home: filepath.Join(base, project), Local: Local{Project: project, Remote: remote, Branch: branch, Email: strings.ToLower(founder.Email)}}
 	if prev, err := Open(project); err == nil {
+		s.Roots = prev.Roots
 		if prev.Remote != remote || prev.Branch != branch {
 			return nil, res, fmt.Errorf("project %q already points at %s#%s; pass a different project name", project, prev.Remote, prev.Branch)
 		}
@@ -237,11 +243,63 @@ func Setup(ctx context.Context, remote, branch, project string, create bool, fou
 		}
 		res.Warnings = append(res.Warnings, warn)
 	}
-	data, _ := json.MarshalIndent(s.Local, "", "  ")
-	if err := os.WriteFile(filepath.Join(s.Home, "local.json"), append(data, '\n'), 0o644); err != nil {
+	if err := s.saveLocal(); err != nil {
 		return nil, res, err
 	}
 	return s, res, nil
+}
+
+func (s *Store) saveLocal() error {
+	data, _ := json.MarshalIndent(s.Local, "", "  ")
+	path := filepath.Join(s.Home, "local.json")
+	tmp := fmt.Sprintf("%s.%d.tmp", path, os.Getpid())
+	if err := os.WriteFile(tmp, append(data, '\n'), 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// realDir resolves symbolic links so that one directory has one name.
+func realDir(dir string) string {
+	if r, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = r
+	}
+	return filepath.Clean(dir)
+}
+
+// AddRoot records that the directory joined this store.
+func (s *Store) AddRoot(dir string) error {
+	dir = realDir(dir)
+	if cur, err := Open(s.Project); err == nil {
+		s.Roots = cur.Roots // another repository may have joined since this one was opened
+	}
+	for _, r := range s.Roots {
+		if sameDir(r, dir) {
+			return nil
+		}
+	}
+	s.Roots = append(s.Roots, dir)
+	return s.saveLocal()
+}
+
+// Knows reports whether the directory joined this store.
+func (s *Store) Knows(dir string) bool {
+	dir = realDir(dir)
+	for _, r := range s.Roots {
+		if sameDir(r, dir) {
+			return true
+		}
+	}
+	return false
+}
+
+// sameDir compares two resolved directory names. Where the file system ignores case
+// (Windows, macOS by default) one directory can arrive spelled in more than one way.
+func sameDir(a, b string) bool {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
 }
 
 // ciFiles are the pipeline definitions of the common git hosts and CI services. A store

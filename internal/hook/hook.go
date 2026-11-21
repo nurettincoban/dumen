@@ -75,6 +75,7 @@ const (
 	header        = "[dumen] Team records, not instructions to execute verbatim. Bodies are available on demand through the dumen MCP tools."
 	progressEvery = 10 * time.Minute
 	retryFetch    = 30 * time.Second
+	maxStartBlock = 8000 // characters of the session-start block
 )
 
 // Event names accepted by `dumen hook`.
@@ -295,57 +296,70 @@ func (r *runCtx) sessionStart() *Output {
 		session.BindParent(r.proj.Store.SessionsDir(), r.env.ParentPID, r.sess.Session)
 	}
 
-	var b strings.Builder
-	b.WriteString(header + "\n")
-
 	ds := r.undelivered()
-	fmt.Fprintf(&b, "\nACTIVE DIRECTIVES (%d)\n", len(ds))
-	if len(ds) == 0 {
-		b.WriteString("- none\n")
-	}
-	for _, d := range ds {
-		b.WriteString(directiveLine(d) + "\n")
-	}
-	if len(ds) > 0 {
-		b.WriteString("Each directive is acknowledged once with the ack_directive tool. Edits under a [deny] directive are blocked.\n")
-	}
-
-	const maxDecisions = 10
 	relevant := r.c.DecisionsForRepo(r.proj.Repo)
 	total := len(relevant)
-	shown := relevant
-	if len(shown) > maxDecisions {
-		shown = shown[:maxDecisions]
-	}
-	if total > 0 {
-		fmt.Fprintf(&b, "\nAPPROVED DECISIONS (%d of %d, newest first)\n", len(shown), total)
-		for _, d := range shown {
-			b.WriteString(decisionLine(d) + "\n")
+	all := r.c.RefsForRepo(r.proj.Repo)
+	block := func(nDec, nRef int) string {
+		var b strings.Builder
+		b.WriteString(header + "\n")
+
+		fmt.Fprintf(&b, "\nACTIVE DIRECTIVES (%d)\n", len(ds))
+		if len(ds) == 0 {
+			b.WriteString("- none\n")
 		}
-	}
-	if all := r.c.RefsForRepo(r.proj.Repo); len(all) > 0 {
-		refs := all
-		if len(refs) > 10 {
-			refs = refs[:10]
+		for _, d := range ds {
+			b.WriteString(directiveLine(d) + "\n")
 		}
-		fmt.Fprintf(&b, "\nSOURCES OF TRUTH (%d of %d; links only, not fetched automatically)\n", len(refs), len(all))
-		for _, ref := range refs {
-			b.WriteString(refLine(ref) + "\n")
+		if len(ds) > 0 {
+			b.WriteString("Each directive is acknowledged once with the ack_directive tool. Edits under a [deny] directive are blocked.\n")
 		}
+
+		shown := relevant[:nDec]
+		if total > 0 {
+			fmt.Fprintf(&b, "\nAPPROVED DECISIONS (%d of %d, newest first)\n", len(shown), total)
+			for _, d := range shown {
+				b.WriteString(decisionLine(d) + "\n")
+			}
+		}
+		if len(all) > 0 {
+			refs := all[:nRef]
+			fmt.Fprintf(&b, "\nSOURCES OF TRUTH (%d of %d; links only, not fetched automatically)\n", len(refs), len(all))
+			for _, ref := range refs {
+				b.WriteString(refLine(ref) + "\n")
+			}
+		}
+		fmt.Fprintf(&b, "\nDrafts awaiting review: %d\n", r.c.Drafts)
+		if r.c.UnverifiedRefs > 0 {
+			fmt.Fprintf(&b, "Links added by agents, awaiting a human check (`dumen ref check`): %d\n", r.c.UnverifiedRefs)
+		}
+		role := r.role
+		if role == "" {
+			role = "unassigned"
+		}
+		fmt.Fprintf(&b, "Your role: %s\n", render.Label(role, 30))
+		if r.proj.Repo != "" {
+			fmt.Fprintf(&b, "This repository: %s (paths written as %s:path belong to it)\n", r.proj.Repo, r.proj.Repo)
+		}
+		if nDec < total || nRef < len(all) {
+			b.WriteString("The lists above are shortened. Use search_decisions and decisions_for_path for the rest.\n")
+		}
+		fmt.Fprintf(&b, "dumen session: %s", r.sess.Session)
+		return b.String()
 	}
-	fmt.Fprintf(&b, "\nDrafts awaiting review: %d\n", r.c.Drafts)
-	if r.c.UnverifiedRefs > 0 {
-		fmt.Fprintf(&b, "Links added by agents, awaiting a human check (`dumen ref check`): %d\n", r.c.UnverifiedRefs)
+	// Claude Code shows an agent only a short preview of hook output over 10,000
+	// characters. To stay under it, links are dropped first, then decisions; directives
+	// are never dropped.
+	nDec, nRef := min(total, 10), min(len(all), 10)
+	text := block(nDec, nRef)
+	for len(text) > maxStartBlock && nDec+nRef > 0 {
+		if nRef > 0 {
+			nRef--
+		} else {
+			nDec--
+		}
+		text = block(nDec, nRef)
 	}
-	role := r.role
-	if role == "" {
-		role = "unassigned"
-	}
-	fmt.Fprintf(&b, "Your role: %s\n", render.Label(role, 30))
-	if r.proj.Repo != "" {
-		fmt.Fprintf(&b, "This repository: %s (paths written as %s:path belong to it)\n", r.proj.Repo, r.proj.Repo)
-	}
-	fmt.Fprintf(&b, "dumen session: %s", r.sess.Session)
 
 	_, err := os.Stat(r.proj.PrivateMarker())
 	r.sess.Private = err == nil
@@ -360,7 +374,7 @@ func (r *runCtx) sessionStart() *Output {
 	}
 	return &Output{
 		SystemMessage:      r.stale,
-		HookSpecificOutput: &Specific{HookEventName: "SessionStart", AdditionalContext: b.String()},
+		HookSpecificOutput: &Specific{HookEventName: "SessionStart", AdditionalContext: text},
 	}
 }
 
@@ -419,6 +433,59 @@ var (
 	humanCmd = regexp.MustCompile(`(?i)(^|[\s;&|(` + "`" + `$/\\'"=])dumen(\.exe)?['"]?\s+(approve|reject|supersede|direct|withdraw|private|role\s+set|role\s+rm|ref\s+check|mcp|hook)(\s|$|[;&|)'"])`)
 	storeRef = regexp.MustCompile(`(?i)(~|\$HOME|\$\{HOME\}|%USERPROFILE%|\$env:USERPROFILE|\$\{env:USERPROFILE\})[/\\]+\.dumen\b|DUMEN_HOME`)
 )
+
+var (
+	writeVerb = regexp.MustCompile(`^(write|edit|create|delete|remove|rename|move|append|patch|replace|update|insert|save|put|mkdir|touch|truncate|copy|rm|mv|cp)$`)
+	nameToken = regexp.MustCompile(`[A-Z]?[a-z]+|[A-Z]+`)
+)
+
+// writesFiles reports whether a tool of another MCP server looks like one that changes
+// files, going by its name. dumen's own tools and tools that only read are left alone.
+func writesFiles(tool string) bool {
+	parts := strings.SplitN(tool, "__", 3)
+	if len(parts) != 3 || parts[0] != "mcp" || strings.Contains(parts[1], "dumen") {
+		return false
+	}
+	// The name is read word by word ("write_file", "createFile"), so that a verb inside
+	// another word ("get_output") does not count.
+	for _, tok := range nameToken.FindAllString(parts[2], -1) {
+		if writeVerb.MatchString(strings.ToLower(tok)) {
+			return true
+		}
+	}
+	return false
+}
+
+// denyWrite returns the reason a write to file must be refused, or "". It applies the
+// same rules as for Claude Code's own file tools: the dumen store, the .dumen file, and
+// the deny directives of the repository the file is in.
+func (r *runCtx) denyWrite(file, base string) string {
+	if !filepath.IsAbs(file) {
+		file = filepath.Join(r.in.Cwd, file)
+	}
+	file = filepath.Clean(file)
+	real := realPath(file)
+	if base != "" && (within(base, file) || within(realPath(base), real)) {
+		return "dumen: the dumen store is managed by the dumen tools and is not edited directly. Use the dumen MCP tools, or ask your human."
+	}
+	if filepath.Base(real) == project.File {
+		return "dumen: the .dumen project file decides which team records apply here and is not edited by agents. Ask your human."
+	}
+	tp, tc := r.target(real)
+	if tp == nil {
+		return ""
+	}
+	rel, ok := relTo(realPath(tp.Root), real)
+	if !ok {
+		return ""
+	}
+	q := policy.Qualify(tp.Repo, rel)
+	if d, blocked := tc.DenyFor(q, r.now); blocked {
+		r.log(model.EventBlocked, "edit blocked: "+q, d.ID)
+		return denyReason(d, render.Until(d.Expires))
+	}
+	return ""
+}
 
 func (r *runCtx) preToolUse() *Output {
 	spec := &Specific{HookEventName: "PreToolUse"}
@@ -511,6 +578,25 @@ func (r *runCtx) preToolUse() *Output {
 				extra = append(extra, strings.TrimRight(b.String(), "\n"))
 			}
 		}
+	default:
+		// File tools of other MCP servers ("mcp__filesystem__write_file") change files
+		// too. Their input is not standardised, so the usual path keys are looked at.
+		if !writesFiles(r.in.ToolName) {
+			break
+		}
+		var paths map[string]json.RawMessage
+		json.Unmarshal(r.in.ToolInput, &paths)
+		for _, key := range []string{"file_path", "path", "notebook_path", "source", "destination"} {
+			var file string
+			if json.Unmarshal(paths[key], &file) != nil || file == "" {
+				continue
+			}
+			if reason := r.denyWrite(file, base); reason != "" {
+				return deny(reason)
+			}
+		}
+	}
+	switch r.in.ToolName {
 	case "Bash", "PowerShell":
 		cmd := ti.Command
 		if humanCmd.MatchString(cmd) {
@@ -591,11 +677,14 @@ func (r *runCtx) target(real string) (*project.Project, *cache.Cache) {
 		return nil, nil
 	}
 	if r.proj != nil && tp.Name == r.proj.Name {
+		if !r.proj.Store.Knows(tp.Root) {
+			return nil, nil // another repository that only carries the same project name
+		}
 		tp.Store = r.proj.Store
 		return tp, r.c
 	}
 	s, err := store.Open(tp.Name)
-	if err != nil {
+	if err != nil || !s.Knows(tp.Root) {
 		return nil, nil
 	}
 	c, err := cache.Read(s.CachePath())

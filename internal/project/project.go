@@ -112,6 +112,11 @@ func Locate(dir string) (*Project, error) {
 	}
 }
 
+// ErrNotJoinedHere means the directory names a project this machine knows, but did not
+// join it: an unrelated repository whose `.dumen` carries the same project name, or a
+// repository that was moved. Nothing is read from or written to the store for it.
+var ErrNotJoinedHere = errors.New("this directory has not joined the project on this machine")
+
 // Find locates the project and opens its local store.
 func Find(dir string) (*Project, error) {
 	p, err := Locate(dir)
@@ -121,6 +126,9 @@ func Find(dir string) (*Project, error) {
 	s, err := store.Open(p.Name)
 	if err != nil {
 		return p, err
+	}
+	if !s.Knows(p.Root) {
+		return p, ErrNotJoinedHere
 	}
 	p.Store = s
 	return p, nil
@@ -156,6 +164,9 @@ func FindBelow(dir string) (*Project, error) {
 		s, err := store.Open(name)
 		if err != nil {
 			return p, err
+		}
+		if !s.Knows(filepath.Join(dir, e.Name())) {
+			continue
 		}
 		p.Store = s
 		return p, nil

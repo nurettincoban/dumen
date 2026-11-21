@@ -34,6 +34,9 @@ func TestHookLatencyP95(t *testing.T) {
 	if err := project.WriteFile(root, "proj", remote+"#dumen"); err != nil {
 		t.Fatal(err)
 	}
+	if err := s.AddRoot(root); err != nil { // as `dumen join` does
+		t.Fatal(err)
+	}
 	p := &project.Project{Root: root, Name: "proj", Store: s}
 	eng := p.Engine()
 

@@ -6,8 +6,10 @@ Everything dumen does not do, or does not do yet. dumen is early and has not bee
   instantly. An agent can start an edit in that window.
 - **`deny` covers Claude Code's file tools, not everything.** The hook blocks `Edit`, `Write`,
   `MultiEdit` and `NotebookEdit` under a denied path, following symlinks. An agent that runs
-  `sed -i`, a build script or a code generator through Bash, or that writes through another MCP
-  server's file tool, can still change those files. The directive text tells the agent not to,
+  `sed -i`, a build script or a code generator through Bash can still change those files. File
+  tools of other MCP servers are covered on a best effort: a tool whose name says it writes
+  (`write_file`, `edit_file`, `move_file` and the like) is refused when its `path`, `file_path`,
+  `notebook_path`, `source` or `destination` is under a denied path; a tool with another name or another input is not. The directive text tells the agent not to,
   and agents nearly always comply, but it is not a sandbox. dumen does not prevent or undo such a
   change. It makes it visible: at the end of a turn the session reports the change as a
   `violation` in the activity log, and `dumen check` fails on it. Run `dumen check` in CI, with
@@ -31,11 +33,15 @@ Everything dumen does not do, or does not do yet. dumen is early and has not bee
 - **Subagents share their parent's session.** A directive that arrives mid-session is shown once
   per session. If a subagent's tool call happens to receive it, the main agent only sees it at
   its next prompt.
-- **Large teams of records.** The block injected at session start has no size cap yet. With many
-  directives, decisions and links it can pass the size at which Claude Code shows the agent only
-  a preview. Keep directives few (the default limit is 10) and time-boxed.
-- **Two unrelated repositories with the same project name** in their `.dumen` files are treated
-  as one project on your machine. Choose distinct project names.
+- **Large teams of records.** The block injected at session start is kept under 8,000
+  characters, because Claude Code shows an agent only a preview of anything much longer. When it
+  does not fit, links are left out first, then decisions; the agent is told the lists are
+  shortened and finds the rest with the dumen tools. Directives are never left out, so keep them
+  few (the default limit is 10) and time-boxed.
+- **A repository has to join where it is.** dumen remembers the directories where `dumen init`
+  or `dumen join` was run. A repository that only carries the same project name in its `.dumen`
+  file gets none of the team's records. The price: after you move or re-clone a repository, run
+  `dumen join` in it again.
 - **Advisory security.** See [Security model](security.md). A colleague with push access can
   forge records.
 - **Hooks fail open.** If the binary is missing, the cache is unreadable or anything else goes

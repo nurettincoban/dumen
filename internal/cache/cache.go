@@ -4,6 +4,7 @@ package cache
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"sort"
 	"strings"
@@ -123,7 +124,7 @@ func (c *Cache) Write(path string) error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
+	tmp := fmt.Sprintf("%s.%d.tmp", path, os.Getpid()) // one name per process: two writers never share a temp file
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return err
 	}

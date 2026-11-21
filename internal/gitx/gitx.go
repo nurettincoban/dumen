@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // Git runs git commands in a directory.
@@ -41,14 +42,49 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error { return e.Err }
 
+var networkCmd = map[string]bool{"fetch": true, "push": true, "ls-remote": true, "clone": true}
+
+var (
+	sshOnce sync.Once
+	sshEnv  []string
+)
+
+// sshBatch makes ssh fail instead of asking for a passphrase or a host key, which a
+// background sync could never answer. It applies only when dumen does not run at a
+// terminal, and a person's own ssh command is left alone: it is set only when neither the
+// environment nor git's configuration names one.
+func sshBatch(dir string) []string {
+	sshOnce.Do(func() {
+		if os.Getenv("GIT_SSH_COMMAND") != "" || os.Getenv("GIT_SSH") != "" {
+			return
+		}
+		// At a terminal a person can type the passphrase of a key that is not in an
+		// agent; only a hook, the MCP server or a detached sync has nobody to ask.
+		if st, err := os.Stdin.Stat(); err == nil && st.Mode()&os.ModeCharDevice != 0 {
+			return
+		}
+		cmd := exec.Command("git", "config", "--get", "core.sshCommand")
+		cmd.Dir = dir
+		if out, _ := cmd.Output(); strings.TrimSpace(string(out)) != "" {
+			return
+		}
+		sshEnv = []string{"GIT_SSH_COMMAND=ssh -oBatchMode=yes"}
+	})
+	return sshEnv
+}
+
 // Run executes git with args and returns its stdout.
 func (g Git) Run(ctx context.Context, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = g.Dir
 	cmd.Env = append(os.Environ(),
 		"GIT_TERMINAL_PROMPT=0", // never block on a credential prompt
+		"GCM_INTERACTIVE=never", // nor open a Git Credential Manager window from a background sync
 		"LC_ALL=C",              // stable messages for classification
 	)
+	if len(args) > 0 && networkCmd[args[0]] {
+		cmd.Env = append(cmd.Env, sshBatch(g.Dir)...)
+	}
 	cmd.Env = append(cmd.Env, g.Env...)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb

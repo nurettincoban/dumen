@@ -148,6 +148,9 @@ func openProject() (*project.Project, error) {
 	}
 	p, err := project.Find(wd)
 	if err != nil {
+		if p != nil && errors.Is(err, project.ErrNotJoinedHere) {
+			return nil, fmt.Errorf("this directory has not joined project %q on this machine (another repository with the same project name, or a moved one): run `dumen join` here if it belongs to the project", p.Name)
+		}
 		if p != nil && errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("this machine has not joined project %q yet: run `dumen join`", p.Name)
 		}
@@ -275,6 +278,9 @@ func cmdInit(a *app, args []string) error {
 	if err := project.WriteFile(root, *name, *spec, *repoName); err != nil {
 		return err
 	}
+	if err := s.AddRoot(root); err != nil {
+		return err
+	}
 	p := &project.Project{Root: root, Name: *name, Spec: *spec, Repo: *repoName, Store: s}
 	if _, err := p.Refresh(ctx); err != nil {
 		return err
@@ -320,6 +326,9 @@ func cmdJoin(a *app, args []string) error {
 	defer cancel()
 	s, res, err := store.Setup(ctx, remote, branch, loc.Name, false, me)
 	if err != nil {
+		return err
+	}
+	if err := s.AddRoot(loc.Root); err != nil {
 		return err
 	}
 	loc.Store = s
@@ -374,6 +383,9 @@ func joinWorkspace(a *app, spec string) error {
 		return err
 	}
 	if err := project.WriteFile(dir, name, remote+"#"+branch); err != nil {
+		return err
+	}
+	if err := s.AddRoot(dir); err != nil {
 		return err
 	}
 	if _, err := install.All(dir, "dumen"); err != nil {
