@@ -31,6 +31,7 @@ type State struct {
 	Answers      []Answer            `json:"answers,omitempty"`   // the last questions the agent asked its human, with the raw answer
 	Noted        []string            `json:"noted,omitempty"`     // decision ids already in the agent's context (session start, topic notes)
 	NewsBase     bool                `json:"news_base,omitempty"` // Known holds the baseline, so later decisions are news
+	SubKnown     map[string][]string `json:"sub_known,omitempty"` // decision news given to each subagent (by agent_id)
 	Known        []string            `json:"known,omitempty"`     // decision ids in force when the session started, or delivered as news since
 
 	path string

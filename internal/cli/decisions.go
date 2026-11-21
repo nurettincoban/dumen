@@ -147,7 +147,11 @@ func cmdDecide(a *app, args []string) error {
 	if *approve {
 		state = "approved"
 	}
-	fmt.Fprintf(a.out, "Recorded %s (%s): %s\n", out.RecordID, state, d.Title)
+	id := out.RecordID
+	if id == "" {
+		id = "(id not reported; `dumen decisions` lists it)"
+	}
+	fmt.Fprintf(a.out, "Recorded %s (%s): %s\n", id, state, d.Title)
 	return nil
 }
 

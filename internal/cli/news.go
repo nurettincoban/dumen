@@ -79,6 +79,9 @@ func cmdNews(a *app, args []string) error {
 				made += " in " + d.Repo
 			}
 			fmt.Fprintf(a.out, "                    %s; applies to %s\n", made, services(d))
+			for _, svc := range model.SortedKeys(d.Needs) {
+				fmt.Fprintf(a.out, "                    needs from %s: %s\n", svc, clip(d.Needs[svc], 100))
+			}
 			for _, old := range d.Supersedes {
 				fmt.Fprintf(a.out, "                    replaces %s: %s\n", old, clip(byID[old].Headline(), 90))
 			}

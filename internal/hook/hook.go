@@ -312,7 +312,7 @@ func (r *runCtx) log(kind, text string, ids ...string) {
 
 func (r *runCtx) sessionStart() *Output {
 	// After compaction or /clear the earlier context is gone, so everything is shown again.
-	r.sess.Delivered, r.sess.SubDelivered = nil, nil
+	r.sess.Delivered, r.sess.SubDelivered, r.sess.SubKnown = nil, nil, nil
 	r.sess.Reminded, r.sess.Noted, r.sess.Known = nil, nil, nil
 	r.sess.Finished = false
 	if r.sess.Started == "" {
@@ -475,6 +475,11 @@ func guardedMCP(name string) (action string, ok bool) {
 }
 
 var (
+	// decideApproved catches `dumen decide ... --approve`: it puts a decision in force.
+	decideApproved = regexp.MustCompile(`(?i)\bdumen(\.exe)?['"]?\s+decide\b[^;&|\n]*\s-{1,2}approve\b`)
+	// envMarker catches a command that names dumen and also touches CLAUDECODE, the
+	// variable by which the CLI knows it runs inside an agent's session.
+	envMarker = regexp.MustCompile(`(?i)CLAUDECODE`)
 	humanCmd = regexp.MustCompile(`(?i)(^|[\s;&|(` + "`" + `$/\\'"=])dumen(\.exe)?['"]?\s+(approve|reject|supersede|direct|withdraw|private|product|role\s+set|role\s+rm|ref\s+check|mcp|hook)(\s|$|[;&|)'"])`)
 	storeRef = regexp.MustCompile(`(?i)(~|\$HOME|\$\{HOME\}|%USERPROFILE%|\$env:USERPROFILE|\$\{env:USERPROFILE\})[/\\]+\.dumen\b|DUMEN_HOME`)
 )
@@ -652,7 +657,8 @@ func (r *runCtx) preToolUse() *Output {
 		}
 	case "Bash", "PowerShell":
 		cmd := ti.Command
-		if humanCmd.MatchString(cmd) {
+		if humanCmd.MatchString(cmd) || decideApproved.MatchString(cmd) ||
+			(envMarker.MatchString(cmd) && strings.Contains(strings.ToLower(cmd), "dumen")) {
 			return deny("dumen: approving, rejecting, superseding, publishing, withdrawing, changing roles, confirming links and marking a session private are human actions, and `dumen mcp` and `dumen hook` are started by Claude Code only. Ask your human to run this in their own terminal.")
 		}
 		if storeRef.MatchString(cmd) || (base != "" && mentionsPath(cmd, base)) {

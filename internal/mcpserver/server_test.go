@@ -447,3 +447,16 @@ func TestConfirmationSaysWhatIsDecided(t *testing.T) {
 		}
 	}
 }
+
+// Gauntlet M1: the approve prompt shows what a decision asks of other services, since
+// that text reaches their agents.
+func TestConfirmationShowsNeeds(t *testing.T) {
+	w := setup(t)
+	text := w.ok("draft_decision", map[string]any{"title": "Seats on slots", "rule": "Slot buttons show how many tables are left",
+		"kind": "ui", "body": "b", "needs": map[string]any{"booking-svc": "Return remaining tables per slot"}})
+	id := text[strings.Index(text, "D-") : strings.Index(text, "D-")+6]
+	out := w.hook(hook.PreToolUse, map[string]any{"tool_name": "mcp__dumen__approve", "permission_mode": "default", "tool_input": map[string]any{"id": id}})
+	if !strings.Contains(out, `asks booking-svc to: \"Return remaining tables per slot\"`) {
+		t.Fatalf("the prompt does not show the needs: %s", out)
+	}
+}

@@ -160,9 +160,10 @@ func (r *runCtx) postToolUse() *Output {
 // one place a person reads before saying yes.
 func (r *runCtx) whatIsDecided(tool string) string {
 	var in struct {
-		ID   string `json:"id"`
-		Rule string `json:"rule"`
-		Kind string `json:"kind"`
+		ID    string            `json:"id"`
+		Rule  string            `json:"rule"`
+		Kind  string            `json:"kind"`
+		Needs map[string]string `json:"needs"`
 	}
 	json.Unmarshal(r.in.ToolInput, &in)
 	root := r.proj.Store.Root()
@@ -181,6 +182,9 @@ func (r *runCtx) whatIsDecided(tool string) string {
 		}
 		var b strings.Builder
 		b.WriteString(" It puts in force " + describe(d.ID) + ".")
+		for _, svc := range model.SortedKeys(d.Needs) {
+			fmt.Fprintf(&b, " It asks %s to: %q.", render.Label(svc, 40), render.Label(d.Needs[svc], model.MaxNeed))
+		}
 		for _, old := range d.Supersedes {
 			b.WriteString(" It retires " + describe(old) + ".")
 		}
@@ -190,7 +194,11 @@ func (r *runCtx) whatIsDecided(tool string) string {
 		if kind == "" {
 			kind = "same kind"
 		}
-		return fmt.Sprintf(" It retires %s and puts in force [%s] %q.", describe(in.ID), render.Label(kind, 20), render.Label(in.Rule, 200))
+		out := fmt.Sprintf(" It retires %s and puts in force [%s] %q.", describe(in.ID), render.Label(kind, 20), render.Label(in.Rule, 200))
+		for _, svc := range model.SortedKeys(in.Needs) {
+			out += fmt.Sprintf(" It asks %s to: %q.", render.Label(svc, 40), render.Label(in.Needs[svc], model.MaxNeed))
+		}
+		return out
 	}
 	return ""
 }

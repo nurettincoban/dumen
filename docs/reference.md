@@ -153,10 +153,15 @@ services:                 # repository names, as in each .dumen file
 topics:                   # topic -> keywords that bring its decisions to an agent's attention
   payments: [payment, charge, refund, card, stripe]
   booking-flow: [booking page, checkout, time picker, slot]
-kinds:                    # optional: the five default kinds need no entry
+kinds:                    # optional: the five default kinds need no entry; `dumen product --kind NAME=` removes one
   architecture: { owner_role: lead }   # only leads (and publishers) approve architecture
   pricing: {}                          # a kind of the team's own, any member approves
 ```
+
+A store set up before decisions became binding but changeable may list `owner_role: pm`,
+`designer` or `lead` for the default kinds. Remove them with
+`dumen product --kind product= --kind ux= --kind ui= --kind architecture= --kind technical=`
+if any team member should approve.
 
 When `services` is set, a decision may only name those services. A topic need not be
 declared; an undeclared topic is matched by its own name. Store version 2 renamed the

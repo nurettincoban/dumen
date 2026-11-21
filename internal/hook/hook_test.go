@@ -286,6 +286,11 @@ func TestHumanOnlyActions(t *testing.T) {
 		"rm -rf $HOME/.dumen",
 		"DUMEN_HOME=/tmp/x dumen status",
 		"git -C " + base + "/proj/store commit -am forged",
+		// Gauntlet S3: putting a decision in force from the shell, or posing as a person.
+		"env -u CLAUDECODE dumen decide --title x --rule r --kind product -m b --approve",
+		"dumen decide --title x --rule r --kind product -m b -approve",
+		"CLAUDECODE= dumen decisions",
+		"unset CLAUDECODE; dumen status",
 	}
 	for _, cmd := range denied {
 		for _, tool := range []string{"Bash", "PowerShell"} {
@@ -294,7 +299,8 @@ func TestHumanOnlyActions(t *testing.T) {
 			}
 		}
 	}
-	for _, cmd := range []string{"dumen status", "dumen directives", "go test ./...", "cat .dumen", "grep -r dumen approve.md", "echo 'documented: run dumen-approve later'"} {
+	for _, cmd := range []string{"dumen status", "dumen directives", "go test ./...", "cat .dumen", "grep -r dumen approve.md", "echo 'documented: run dumen-approve later'",
+		"dumen decide --title x --rule r --kind product -m b"} {
 		if o := f.run(PreToolUse, map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": cmd}}); o != nil {
 			t.Errorf("Bash %q must pass, got %+v", cmd, o)
 		}
