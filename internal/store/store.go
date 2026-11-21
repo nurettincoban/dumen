@@ -13,6 +13,8 @@ import (
 
 	"github.com/nurettincoban/dumen/internal/gitx"
 	"github.com/nurettincoban/dumen/internal/model"
+
+	"gopkg.in/yaml.v3"
 )
 
 // DefaultBranch is the branch dumen records live on.
@@ -53,6 +55,36 @@ func ProjectName(remote string) string {
 	return s
 }
 
+// RemoteProject reads the project name from dumen.yml on the store branch without
+// setting anything up locally. It returns "" when the name cannot be read.
+func RemoteProject(ctx context.Context, remote, branch string) string {
+	if gitx.CheckStore(remote, branch) != nil {
+		return ""
+	}
+	tmp, err := os.MkdirTemp("", "dumen-peek-")
+	if err != nil {
+		return ""
+	}
+	defer os.RemoveAll(tmp)
+	g := gitx.Git{Dir: tmp}
+	for _, st := range [][]string{{"init", "-q"}, {"fetch", "-q", "--depth", "1", "--end-of-options", remote, "refs/heads/" + branch}} {
+		if _, err := g.Run(ctx, st...); err != nil {
+			return ""
+		}
+	}
+	out, err := g.Run(ctx, "show", "FETCH_HEAD:"+ConfigFile)
+	if err != nil {
+		return ""
+	}
+	var cfg struct {
+		Project string `yaml:"project"`
+	}
+	if yaml.Unmarshal([]byte(out), &cfg) != nil {
+		return ""
+	}
+	return model.Slug(cfg.Project)
+}
+
 // Local is the per-machine description of a store (~/.dumen/<project>/local.json).
 type Local struct {
 	Project string `json:"project"`
@@ -90,6 +122,9 @@ func Open(project string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := model.CheckName("project", project); err != nil {
+		return nil, err
+	}
 	home := filepath.Join(base, project)
 	data, err := os.ReadFile(filepath.Join(home, "local.json"))
 	if err != nil {
@@ -98,6 +133,9 @@ func Open(project string) (*Store, error) {
 	s := &Store{Home: home}
 	if err := json.Unmarshal(data, &s.Local); err != nil {
 		return nil, fmt.Errorf("%s: %v", filepath.Join(home, "local.json"), err)
+	}
+	if err := gitx.CheckStore(s.Remote, s.Branch); err != nil {
+		return nil, err
 	}
 	return s, nil
 }
@@ -116,8 +154,14 @@ func Setup(ctx context.Context, remote, branch, project string, create bool, fou
 	if err != nil {
 		return nil, res, err
 	}
+	if err := gitx.CheckStore(remote, branch); err != nil {
+		return nil, res, err
+	}
 	if project == "" {
 		project = ProjectName(remote)
+	}
+	if err := model.CheckName("project", project); err != nil {
+		return nil, res, err
 	}
 	s := &Store{Home: filepath.Join(base, project), Local: Local{Project: project, Remote: remote, Branch: branch, Email: strings.ToLower(founder.Email)}}
 	if prev, err := Open(project); err == nil {
@@ -149,7 +193,7 @@ func Setup(ctx context.Context, remote, branch, project string, create bool, fou
 	steps := [][]string{
 		{"init", "-q"},
 		{"symbolic-ref", "HEAD", "refs/heads/" + branch},
-		{"remote", "add", "origin", remote},
+		{"remote", "add", "--", "origin", remote},
 		{"config", "core.autocrlf", "false"},
 		{"config", "commit.gpgsign", "false"},
 		{"config", "gc.auto", "0"},

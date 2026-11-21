@@ -96,7 +96,8 @@ expires (seven days unless you say otherwise). Anyone, including an agent, can *
 directive with `--propose`; a publisher puts it in force with `dumen direct --publish <id>`.
 
 Each agent acknowledges a directive once per session. An agent that has not done so is reminded
-once, on its next tool call. `dumen activity` lists who has not acknowledged yet.
+once, on its next tool call. `dumen activity` lists who has not acknowledged yet. For a directive
+limited to some repositories, only people whose agents worked there are listed.
 
 ## Decisions
 

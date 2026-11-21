@@ -453,6 +453,9 @@ func (s *Server) GetDecision(ctx context.Context, in idIn) (string, error) {
 	}
 	s.snapshot(ctx, p)
 	id := strings.ToUpper(strings.TrimSpace(in.ID))
+	if model.ValidID(id, model.PrefixRef) {
+		return s.getRef(ctx, p, id)
+	}
 	var d model.Decision
 	var by []string
 	var refs []model.Ref
@@ -500,6 +503,26 @@ func (s *Server) GetDecision(ctx context.Context, in idIn) (string, error) {
 		s.flushSoon(p)
 	}
 	return b.String(), nil
+}
+
+// getRef returns one link by id. A link no person has confirmed yet is not shown: text
+// written by one agent does not reach another without a person in between.
+func (s *Server) getRef(ctx context.Context, p *project.Project, id string) (string, error) {
+	var r model.Ref
+	err := s.locked(ctx, p, func(root string) error {
+		var err error
+		r, err = store.ReadRef(root, id)
+		return err
+	})
+	if err != nil {
+		return "", err
+	}
+	if r.Status == model.RefUnverified {
+		return "", fmt.Errorf("%s is a link no person has confirmed yet; ask your human to run `dumen ref check %s`", id, id)
+	}
+	return fmt.Sprintf("%s\n%s [%s] %s\nurl: %s\ngoverns: %s\narea: %s\npaths: %s\n(the link is the source of truth; it is not fetched automatically)",
+		notice, r.ID, r.Kind, render.Label(r.Title, render.MaxLabel), render.Label(r.URL, 300),
+		dash(render.Label(r.Governs, render.MaxLabel)), dash(r.Area), dash(strings.Join(r.Paths, ", "))), nil
 }
 
 func dash(s string) string {
@@ -779,7 +802,7 @@ func New(s *Server) *mcp.Server {
 	add(srv, s, "propose_directive", "Propose a directive for a PM or lead to publish. A proposal is not in force.", false, s.ProposeDirective)
 	add(srv, s, "publish_directive", "Publish a directive to the team's agents. Human action: the person is asked to confirm. Only PM and lead roles.", true, s.PublishDirective)
 	add(srv, s, "search_decisions", "Search team decisions by words in the title, area or paths. Returns ids and titles.", false, s.SearchDecisions)
-	add(srv, s, "get_decision", "Get one decision in full: status, body, linked sources.", false, s.GetDecision)
+	add(srv, s, "get_decision", "Get one decision in full: status, body, linked sources. Also returns a source-of-truth link when given its R- id.", false, s.GetDecision)
 	add(srv, s, "decisions_for_path", "List approved decisions, blocking directives and source-of-truth links for a file path.", false, s.DecisionsForPath)
 	add(srv, s, "draft_decision", "Record a draft decision for a lasting choice (library, API shape, data model, UI rule). A human approves it later.", false, s.DraftDecision)
 	add(srv, s, "approve", "Approve a draft decision. Human action: the person is asked to confirm.", true, s.Approve)

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nurettincoban/dumen/internal/model"
+	"github.com/nurettincoban/dumen/internal/policy"
 	"github.com/nurettincoban/dumen/internal/store"
 )
 
@@ -193,9 +194,21 @@ func Unacked(cfg model.Config, d model.Directive, sum Summary) []string {
 	for _, p := range sum.Acks[d.ID] {
 		acked[strings.ToLower(p)] = true
 	}
+	// A directive limited to some repositories is only delivered to sessions working
+	// there, so only the people seen there are expected to acknowledge it.
+	repos := scopeRepos(cfg, d.Scope)
+	seen := map[string]bool{}
+	for _, s := range sum.Sessions {
+		if repos[strings.ToLower(s.Repo)] {
+			seen[strings.ToLower(s.Person)] = true
+		}
+	}
 	var out []string
 	for _, email := range model.SortedKeys(cfg.Roles) {
 		if d.Scope.Role != "" && cfg.Roles[email] != d.Scope.Role {
+			continue
+		}
+		if repos != nil && !seen[email] {
 			continue
 		}
 		if email == strings.ToLower(d.PublishedBy) {
@@ -206,6 +219,27 @@ func Unacked(cfg model.Config, d model.Directive, sum Summary) []string {
 		}
 	}
 	return out
+}
+
+// scopeRepos returns the repositories a path or area scope is limited to, or nil when
+// the scope can touch every repository.
+func scopeRepos(cfg model.Config, sc model.Scope) map[string]bool {
+	patterns := sc.Paths
+	if sc.Area != "" {
+		patterns = cfg.Areas[sc.Area].Paths
+	}
+	if len(patterns) == 0 {
+		return nil
+	}
+	repos := map[string]bool{}
+	for _, p := range patterns {
+		r := policy.PatternRepo(p)
+		if r == "" {
+			return nil
+		}
+		repos[r] = true
+	}
+	return repos
 }
 
 // ParseSince understands "today", "yesterday", a span such as "2h" or "7d", a date

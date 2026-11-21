@@ -190,10 +190,22 @@ func resolveSpec(repoRoot, spec string) (remote, branch string, err error) {
 			return "", "", fmt.Errorf("this repository has no `origin` remote; pass --store <remote-url>#<branch>")
 		}
 	}
+	// A relative local path ("../remote.git") is relative to this repository, and the
+	// store's own clone lives elsewhere.
+	if !filepath.IsAbs(remote) && !strings.Contains(remote, ":") {
+		if abs := filepath.Join(repoRoot, remote); isDir(abs) {
+			remote = abs
+		}
+	}
 	if branch == "" {
 		branch = store.DefaultBranch
 	}
 	return remote, branch, nil
+}
+
+func isDir(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && st.IsDir()
 }
 
 func cmdInit(a *app, args []string) error {
@@ -222,6 +234,11 @@ func cmdInit(a *app, args []string) error {
 	}
 	if *name == "" {
 		*name = store.ProjectName(remote)
+	}
+	if *repoName != "" {
+		if err := model.CheckName("repo", *repoName); err != nil {
+			return err
+		}
 	}
 	ctx, cancel := longCtx()
 	defer cancel()
@@ -308,7 +325,17 @@ func cmdJoin(a *app, args []string) error {
 // or designer): the project file and the Claude Code configuration, and nothing else.
 func joinWorkspace(a *app, spec string) error {
 	remote, branch := store.ParseSpec(spec)
-	name := store.ProjectName(remote)
+	if err := gitx.CheckStore(remote, branch); err != nil {
+		return err // before anything is created on disk
+	}
+	ctx, cancel := longCtx()
+	defer cancel()
+	// The project is called what its store says, so that a workspace and the code
+	// repositories of the same project share one local state.
+	name := store.RemoteProject(ctx, remote, branch)
+	if name == "" {
+		name = store.ProjectName(remote)
+	}
 	base := os.Getenv("DUMEN_WORKSPACES")
 	if base == "" {
 		home, err := os.UserHomeDir()
@@ -325,8 +352,6 @@ func joinWorkspace(a *app, spec string) error {
 	if me.Email == "" {
 		return fmt.Errorf("git user.email is not set; run `git config --global user.email you@example.com` first")
 	}
-	ctx, cancel := longCtx()
-	defer cancel()
 	s, res, err := store.Setup(ctx, remote, branch, name, false, me)
 	if err != nil {
 		return err

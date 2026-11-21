@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 )
 
@@ -140,9 +141,48 @@ func (g Git) Push(ctx context.Context, branch string) (PushResult, error) {
 	return PushFailed, err
 }
 
+var remoteHelper = regexp.MustCompile(`^\s*[A-Za-z0-9+.-]+::`)
+
+// CheckRemote refuses a remote that git would read as an option or as a remote-helper
+// command. A remote can come from a `.dumen` file in a repository somebody else wrote.
+func CheckRemote(remote string) error {
+	switch {
+	case strings.TrimSpace(remote) == "":
+		return errors.New("the store remote is empty")
+	case strings.HasPrefix(strings.TrimSpace(remote), "-"):
+		return fmt.Errorf("refusing store remote %q: a remote cannot start with \"-\"", remote)
+	case remoteHelper.MatchString(remote):
+		return fmt.Errorf("refusing store remote %q: remote helpers (\"<name>::\") are not allowed", remote)
+	case strings.ContainsAny(remote, "\n\r\x00"):
+		return errors.New("refusing a store remote with control characters")
+	}
+	return nil
+}
+
+var branchName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$`)
+
+// CheckBranch refuses a branch name that is not a plain ref name.
+func CheckBranch(branch string) error {
+	if !branchName.MatchString(branch) || strings.Contains(branch, "..") || strings.HasSuffix(branch, "/") || strings.HasSuffix(branch, ".lock") {
+		return fmt.Errorf("refusing store branch %q: use letters, digits, \".\", \"_\", \"-\" and \"/\"", branch)
+	}
+	return nil
+}
+
+// CheckStore checks both parts of a store location.
+func CheckStore(remote, branch string) error {
+	if err := CheckRemote(remote); err != nil {
+		return err
+	}
+	return CheckBranch(branch)
+}
+
 // LsRemote returns the sha of refs/heads/<branch> on the remote, or "" if the branch does not exist.
 func LsRemote(ctx context.Context, remote, branch string) (string, error) {
-	out, err := Git{}.Run(ctx, "ls-remote", "--heads", remote, "refs/heads/"+branch)
+	if err := CheckStore(remote, branch); err != nil {
+		return "", err
+	}
+	out, err := Git{}.Run(ctx, "ls-remote", "--heads", "--end-of-options", remote, "refs/heads/"+branch)
 	if err != nil {
 		return "", err
 	}

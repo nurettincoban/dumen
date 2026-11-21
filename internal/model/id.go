@@ -56,6 +56,18 @@ func NewOpID() string {
 var slugStrip = regexp.MustCompile(`[^a-z0-9]+`)
 
 // Slug converts free text into a short lowercase file-name fragment.
+var plainName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+
+// CheckName refuses a project or repository name that is not a single plain path
+// element. The name becomes a directory under the dumen home, and it can come from a
+// `.dumen` file somebody else wrote.
+func CheckName(what, name string) error {
+	if !plainName.MatchString(name) || strings.Contains(name, "..") {
+		return fmt.Errorf("invalid %s name %q: use letters, digits, \".\", \"_\" and \"-\", starting with a letter or digit", what, name)
+	}
+	return nil
+}
+
 func Slug(s string) string {
 	s = slugStrip.ReplaceAllString(strings.ToLower(s), "-")
 	s = strings.Trim(s, "-")

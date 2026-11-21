@@ -486,3 +486,162 @@ func TestHostRefusalIsShownAsIs(t *testing.T) {
 		t.Fatalf("the refused directive was published later: %q", list)
 	}
 }
+
+// `dumen init` works when origin is a relative local path: the store's clone lives
+// elsewhere, so the path is resolved against the repository first.
+func TestInitResolvesARelativeOrigin(t *testing.T) {
+	testutil.Home(t)
+	t.Setenv("CLAUDECODE", "")
+	remote := testutil.BareRemote(t)
+	dir := filepath.Join(filepath.Dir(remote), "code")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"init", "-q"}, {"config", "user.email", testutil.Lead.Email}, {"config", "user.name", "Lead"},
+		{"remote", "add", "origin", "../" + filepath.Base(remote)},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	t.Chdir(dir)
+	run(t, "init")
+	if out := run(t, "status"); !strings.Contains(out, "up to date") {
+		t.Fatalf("status after init with a relative origin:\n%s", out)
+	}
+}
+
+// `dumen join <url>` names the project after the store's own dumen.yml, not after the
+// URL, so a workspace shares local state with the code repositories of the project.
+func TestJoinWorkspaceUsesTheStoreProjectName(t *testing.T) {
+	_, p := repo(t)
+	run(t, "role", "set", testutil.PM.Email, "pm")
+	remote := p.Store.Remote
+	want := p.Name
+
+	// The PM's machine: its own dumen home, a global git identity, no code.
+	testutil.Home(t)
+	global := filepath.Join(t.TempDir(), "gitconfig")
+	if err := os.WriteFile(global, []byte("[user]\n\temail = "+testutil.PM.Email+"\n\tname = PM\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", global)
+	spaces := t.TempDir()
+	t.Setenv("DUMEN_WORKSPACES", spaces)
+	// A URL whose last element differs from the project name.
+	alias := filepath.Join(t.TempDir(), "team-store.git")
+	if err := os.Symlink(remote, alias); err != nil {
+		t.Skip("symlinks are not available")
+	}
+	t.Chdir(t.TempDir())
+	out := run(t, "join", alias)
+	if !strings.Contains(out, "Joined project \""+want+"\"") {
+		t.Fatalf("join should use the project name from the store (%q):\n%s", want, out)
+	}
+	if _, err := os.Stat(filepath.Join(spaces, want, project.File)); err != nil {
+		t.Fatalf("workspace %s was not created: %v", want, err)
+	}
+}
+
+// Gauntlet S1: a store remote from a `.dumen` file somebody else wrote must never reach
+// git as an option or as a remote-helper command.
+func TestJoinRefusesARemoteThatGitWouldReadAsAnOption(t *testing.T) {
+	testutil.Home(t)
+	t.Setenv("CLAUDECODE", "")
+	spaces := t.TempDir()
+	t.Setenv("DUMEN_WORKSPACES", spaces)
+	defer func() {
+		if left, _ := os.ReadDir(spaces); len(left) > 0 {
+			t.Errorf("a refused join left a workspace behind: %v", left)
+		}
+	}()
+	marker := filepath.Join(t.TempDir(), "PWNED")
+	evil := "--upload-pack=touch " + marker + ";"
+	dir := t.TempDir()
+	for _, args := range [][]string{{"init", "-q"}, {"config", "user.email", testutil.Lead.Email}, {"config", "user.name", "Lead"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	t.Chdir(dir)
+	for _, remote := range []string{evil, "ext::sh -c touch% " + marker} {
+		if err := os.WriteFile(filepath.Join(dir, project.File), []byte("project = demo\nstore = "+remote+"#dumen\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		for _, args := range [][]string{{"join"}, {"status"}, {"sync"}, {"join", "--", remote}} {
+			if out, code := runErr(args...); code == 0 {
+				t.Errorf("dumen %v with remote %q should fail:\n%s", args, remote, out)
+			}
+			if _, err := os.Stat(marker); err == nil {
+				t.Fatalf("dumen %v ran a command taken from the remote %q", args, remote)
+			}
+		}
+	}
+	os.Remove(filepath.Join(dir, project.File))
+	for _, remote := range []string{evil, "ext::sh -c touch% " + marker} {
+		if out, code := runErr("init", "--store", remote+"#dumen"); code == 0 || !strings.Contains(out, "refusing store remote") {
+			t.Errorf("init with remote %q should be refused:\n%s", remote, out)
+		}
+	}
+	if out, code := runErr("init", "--store", testutil.BareRemote(t)+"#-x"); code == 0 || !strings.Contains(out, "refusing store branch") {
+		t.Errorf("a branch that starts with \"-\" should be refused:\n%s", out)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("dumen init ran a command taken from the remote")
+	}
+}
+
+// Gauntlet S2: a project or repo name from a `.dumen` file is one plain path element, so
+// local state can never be created, or removed, outside the dumen home.
+func TestProjectNameCannotLeaveTheDumenHome(t *testing.T) {
+	_, p := repo(t)
+	remote := p.Store.Remote
+	home := testutil.Home(t) // another machine
+	victim := filepath.Join(filepath.Dir(home), "victim", "store")
+	if err := os.MkdirAll(victim, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	keep := filepath.Join(victim, "keep.txt")
+	if err := os.WriteFile(keep, []byte("mine"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	for _, args := range [][]string{{"init", "-q"}, {"config", "user.email", testutil.Lead.Email}, {"config", "user.name", "Lead"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	t.Chdir(dir)
+	for _, body := range []string{
+		"project = ../victim\nstore = " + remote + "#dumen\n",
+		"project = a/b\nstore = " + remote + "#dumen\n",
+		"project = ..\nstore = " + remote + "#dumen\n",
+		"project = ok\nrepo = ../x\nstore = " + remote + "#dumen\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, project.File), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if out, code := runErr("join"); code == 0 || !strings.Contains(out, "invalid") {
+			t.Errorf("join should refuse %q:\n%s", body, out)
+		}
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatal("dumen join removed a directory outside the dumen home")
+	}
+	os.Remove(filepath.Join(dir, project.File))
+	for _, args := range [][]string{{"init", "--project", "../victim"}, {"init", "--repo", "../x"}, {"sync", "--project", "../victim"}} {
+		if out, code := runErr(args...); code == 0 {
+			t.Errorf("dumen %v should fail:\n%s", args, out)
+		}
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatal("dumen removed a directory outside the dumen home")
+	}
+}

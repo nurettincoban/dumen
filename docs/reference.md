@@ -90,7 +90,7 @@ Claude Code starts `dumen mcp` for each session. Through the plugin the tools ar
 | `propose_directive` | Propose a directive for a PM or lead to publish. | nobody |
 | `publish_directive` | Publish a directive to the team's agents. PM and lead only. | **the person** |
 | `search_decisions` | Search decisions by words in the title, area or paths. | nobody |
-| `get_decision` | Get one decision in full. | nobody |
+| `get_decision` | Get one decision in full. Given a link id (`R-...`), it returns that link, once a person has confirmed it. | nobody |
 | `decisions_for_path` | Approved decisions, blocking directives and links for a file path. | nobody |
 | `draft_decision` | Record a draft decision for a lasting choice. | nobody |
 | `approve` | Approve a draft decision. | **the person** |
