@@ -95,7 +95,7 @@ Claude Code starts `dumen mcp` for each session. Through the plugin the tools ar
 | `search_decisions` | Search decisions by words in the title, area or paths. | nobody |
 | `get_decision` | Get one decision in full. Given a link id (`R-...`), it returns that link, once a person has confirmed it. | nobody |
 | `decisions_for_path` | Approved decisions, blocking directives and links for a file path. | nobody |
-| `record_answer` | Save the human's answer to a question the agent asked as a proposed team decision, with the question, the options and the pick. Lists similar decisions instead of saving unless `new` is set. Never approves. | nobody |
+| `record_answer` | Save the human's answer to a question the agent asked as a proposed team decision, with the question, the options and the pick. Lists similar decisions instead of saving unless `new` is set (proposed ones by id, kind and topics only). Never approves. | nobody |
 | `draft_decision` | Record a proposed decision for a lasting choice of any kind, with its rule, kind, services and topics. | nobody |
 | `approve` | Approve a proposed decision. | **the person** |
 | `supersede` | Replace an approved decision with a new approved one. | **the person** |

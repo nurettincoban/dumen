@@ -40,7 +40,10 @@ type Answer struct {
 	At        string     `json:"at"`
 	ToolUseID string     `json:"tool_use_id,omitempty"`
 	Questions []Question `json:"questions"`
-	Raw       string     `json:"raw"`
+	// Picked holds the labels Claude Code reported per question, when it reported them
+	// in a structured "answers" field.
+	Picked map[string][]string `json:"picked,omitempty"`
+	Raw    string              `json:"raw"`
 }
 
 // Question is one question of a question-tool call.

@@ -182,6 +182,13 @@ func TestServiceNamesFollowRepositoryNames(t *testing.T) {
 	if _, err := a.Submit(ctx, agent, decision("x", "r", model.KindProduct, "billing.svc")); err != nil {
 		t.Fatalf("dotted service: %v", err)
 	}
+	// Gauntlet B2: dumen product takes the same names.
+	if _, err := a.Submit(ctx, testutil.Lead, &SetProduct{Services: map[string]string{"billing.svc": "Payments"}}); err != nil {
+		t.Fatalf("dotted service in dumen product: %v", err)
+	}
+	if _, err := a.Submit(ctx, testutil.Lead, &SetProduct{Services: map[string]string{"Billing.Svc": "Payments"}}); err == nil {
+		t.Fatal("dumen product accepted an upper-case service name")
+	}
 	if _, err := a.Submit(ctx, agent, decision("x", "r", model.KindProduct, "Billing.Svc")); err == nil {
 		t.Fatal("an upper-case service name was accepted; .dumen stores repository names in lower case")
 	}

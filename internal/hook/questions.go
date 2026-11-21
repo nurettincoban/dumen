@@ -138,7 +138,16 @@ func (r *runCtx) postToolUse() *Output {
 	if len(raw) > maxRaw {
 		raw = raw[:maxRaw]
 	}
-	r.sess.AddAnswer(session.Answer{At: model.FormatTime(r.now), ToolUseID: r.in.ToolUseID, Questions: qs, Raw: raw})
+	picked := pickedAnswers(r.in.ToolResponse)
+	for q, v := range pickedAnswers(r.in.ToolInput) {
+		if _, ok := picked[q]; !ok {
+			picked[q] = v
+		}
+	}
+	if len(picked) == 0 {
+		picked = nil
+	}
+	r.sess.AddAnswer(session.Answer{At: model.FormatTime(r.now), ToolUseID: r.in.ToolUseID, Questions: qs, Picked: picked, Raw: raw})
 	r.sess.Save()
 	return &Output{HookSpecificOutput: &Specific{HookEventName: "PostToolUse", AdditionalContext: "[dumen] Your human answered. " +
 		"If this was a lasting choice that teammates or other agents will meet again (product, UX, UI, architecture or technical), " +
@@ -183,4 +192,31 @@ func (r *runCtx) whatIsDecided(tool string) string {
 		return fmt.Sprintf(" It retires %s and puts in force [%s] %q.", describe(in.ID), render.Label(kind, 20), render.Label(in.Rule, 200))
 	}
 	return ""
+}
+
+// pickedAnswers reads a structured "answers" field, question text to the picked label
+// or labels, from a tool input or response. Anything else yields an empty map.
+func pickedAnswers(raw json.RawMessage) map[string][]string {
+	out := map[string][]string{}
+	var v struct {
+		Answers map[string]json.RawMessage `json:"answers"`
+	}
+	if json.Unmarshal(raw, &v) != nil {
+		return out
+	}
+	for q, a := range v.Answers {
+		var one string
+		var many []string
+		switch {
+		case json.Unmarshal(a, &one) == nil:
+			many = []string{one}
+		case json.Unmarshal(a, &many) == nil:
+		default:
+			continue
+		}
+		if len(out) < 16 {
+			out[render.Label(q, 500)] = many
+		}
+	}
+	return out
 }

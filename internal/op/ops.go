@@ -707,7 +707,12 @@ type SetProduct struct {
 func (o *SetProduct) Kind() string { return "config.product" }
 
 func (o *SetProduct) Check() error {
-	for _, names := range [][]string{model.SortedKeys(o.Services), model.SortedKeys(o.Topics), model.SortedKeys(o.Kinds)} {
+	for _, n := range model.SortedKeys(o.Services) {
+		if !model.ValidService(n) {
+			return fmt.Errorf("service %q: use the repository name, in lower case", n)
+		}
+	}
+	for _, names := range [][]string{model.SortedKeys(o.Topics), model.SortedKeys(o.Kinds)} {
 		for _, n := range names {
 			if !model.ValidName(n) {
 				return fmt.Errorf("%q: names are lowercase letters, digits, - and _ (at most 40)", n)

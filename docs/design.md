@@ -395,8 +395,11 @@ These were decided during the build, each at the owner's request or forced by a 
     keeps the question, its options and what came back; the agent saves a lasting choice
     with `record_answer`, which writes a proposed decision with an `origin` (question,
     options, answer, who answered, and whether dumen saw the pick in the tool's response).
-    The response's shape is not documented, so dumen stores it raw and searches it for the
-    picked label; a response that echoes every option verifies nothing. `record_answer`
+    The response's shape is not documented. When it carries a structured `answers` field
+    (question to picked label), that decides; otherwise dumen searches the raw text for the
+    picked label, and a response that echoes every option verifies nothing. When
+    `record_answer` finds similar decisions it lists approved ones as in force, and
+    proposed ones by id, kind and topics only, since their text is unapproved. `record_answer`
     never approves, because the rule is the agent's wording; the person who owns the kind
     approves it (`dumen questions` lists what waits for them), and only then does it reach
     other agents. A `PreToolUse` hook holds an `AskUserQuestion` back once when an approved
