@@ -10,7 +10,7 @@ import (
 
 // model returns the parts of the full decision that its scope methods need.
 func (d Decision) model() model.Decision {
-	return model.Decision{AppliesTo: d.AppliesTo, Area: d.Area}
+	return model.Decision{AppliesTo: d.AppliesTo, Area: d.Area, Needs: d.Needs}
 }
 
 // ForService reports whether the decision applies to the service (see model.Decision).

@@ -35,7 +35,18 @@ func (r *runCtx) newsLine(d cache.Decision) string {
 	if len(extra) > 0 {
 		line += " (" + strings.Join(extra, "; ") + ")"
 	}
-	return line
+	return line + r.needsLine(d)
+}
+
+// needsLine says what a decision asks of this repository, or which services it asks.
+func (r *runCtx) needsLine(d cache.Decision) string {
+	if len(d.Needs) == 0 {
+		return ""
+	}
+	if ask, ok := d.Needs[r.proj.Repo]; ok && r.proj.Repo != "" {
+		return "\n  NEEDS FROM " + r.proj.Repo + ": " + render.Label(ask, model.MaxNeed)
+	}
+	return "\n  needs work from: " + strings.Join(model.SortedKeys(d.Needs), ", ")
 }
 
 // news returns the approved decisions that concern this repository and that the session
@@ -83,7 +94,7 @@ func (r *runCtx) newsBlock() string {
 	if len(ds) > maxNews {
 		fmt.Fprintf(&b, "... and %d more; decisions_for_topic and get_decision have them.\n", len(ds)-maxNews)
 	}
-	b.WriteString("Follow them from now on. If one changes what you are doing, tell your human in one line; " +
+	b.WriteString("Follow them from now on. If one changes what you are doing, or NEEDS work from this service, tell your human in one line; " +
 		"a decision replaced by another is no longer in force. Anyone on the team can change a decision with supersede.")
 	r.log(model.EventDecisionRead, "decision news delivered", ids...)
 	return b.String()

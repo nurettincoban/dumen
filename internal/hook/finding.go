@@ -35,6 +35,9 @@ func (r *runCtx) startDecisions() []cache.Decision {
 // forThisRepo reports whether a decision was made for this service in particular: it
 // names the service, or is linked to paths (which DecisionsForRepo found to be here).
 func (r *runCtx) forThisRepo(d cache.Decision) bool {
+	if _, asked := d.Needs[r.proj.Repo]; asked && r.proj.Repo != "" {
+		return true
+	}
 	return r.proj.Repo != "" && (!d.ProductWide() || len(d.Paths) > 0)
 }
 
@@ -55,7 +58,7 @@ func (r *runCtx) decisionsBlock(ds []cache.Decision, n int) string {
 			group = g
 			b.WriteString(g + "\n")
 		}
-		b.WriteString(decisionLine(d) + "\n")
+		b.WriteString(decisionLine(d) + r.needsLine(d) + "\n")
 	}
 	if topics := r.topicNames(); len(topics) > 0 {
 		fmt.Fprintf(&b, "Decision topics: %s (decisions_for_topic lists a topic's decisions)\n", render.Label(strings.Join(topics, ", "), 400))

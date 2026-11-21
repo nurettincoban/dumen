@@ -71,7 +71,7 @@
 </section>
 
 <section class="wrap" id="flow">
-  <h2>One product, two teams, one question</h2>
+  <h2>Two backends, one question</h2>
   <p class="sub">A table-reservation product. Ayşe works on <code>booking-svc</code>, Mehmet on <code>billing-svc</code>, Sofia on <code>web-app</code>, each with Claude Code, all with one dumen store. The output follows dumen's messages and is shortened; it is an illustration, not a recording of one session.</p>
   <div class="legend"><span class="chip human">Human</span> a person types or approves <span class="chip agent">Agent</span> Claude Code acts on its own <span class="chip auto">dumen</span> happens automatically</div>
 
@@ -94,7 +94,7 @@
     </li>
     <li>
       <div class="who"><span class="chip auto">dumen</span></div>
-      <div class="what"><h4>The decision travels through git</h4><p>It is a small commit on the <code>dumen</code> branch. Every running session checks for changes every 30 seconds.</p></div>
+      <div class="what"><h4>The decision travels through git</h4><p>It is a small commit on the <code>dumen</code> branch. Every running session checks for changes about every 10 seconds, and nobody restarts anything.</p></div>
 <pre class="term"><span class="dim">git push → branch dumen → each session's dumen mcp fetches it</span></pre>
     </li>
     <li>
@@ -129,6 +129,32 @@ decision you followed; do not ask.</span></pre>
   <p class="more">Three people answered one question once. Every agent on the product follows the same answer, and when it changed, every agent heard about it.</p>
 </section>
 
+<section class="wrap" id="frontend">
+  <h2>Frontend and backend, in the same minute</h2>
+  <p class="sub">Sofia is reworking the time picker in <code>web-app</code>. The new design needs something the backend does not return yet. Her decision says so, and Ayşe's agent in <code>booking-svc</code> hears it in the session it is already running.</p>
+  <ol class="flow">
+    <li>
+      <div class="who"><span class="chip human">Sofia</span><span class="chip agent">Sofia's agent</span></div>
+      <div class="what"><h4>A UI decision that needs backend work</h4><p>Sofia answers her agent's question and approves. The decision names what it needs from booking-svc.</p></div>
+<pre class="term"><span class="tool">⏺ dumen · record_answer</span>(kind ui, services web-app,
+    rule "Slot buttons show how many tables are left",
+    needs {"booking-svc": "Return remaining tables per slot in GET /slots"})
+<span class="tool">⏺ dumen · approve</span>(D-3MWE)  <span class="hk">▸ Yes</span></pre>
+    </li>
+    <li>
+      <div class="who"><span class="chip agent">Ayşe's agent</span></div>
+      <div class="what"><h4>The backend agent hears it within seconds</h4><p>No meeting, no new session. On its next step:</p></div>
+<pre class="term"><span class="hk">[dumen] DECISION NEWS (1): approved by a teammate since this session
+started; binding from now on
+- D-3MWE [ui] Slot buttons show how many tables are left
+  (approved by sofia@example.com; in web-app)
+  NEEDS FROM booking-svc: Return remaining tables per slot in GET /slots</span>
+⏺ Sofia's slot decision needs a seat count from us. Shall I add it to
+  GET /slots now?</pre>
+    </li>
+  </ol>
+</section>
+
 <section class="wrap" id="kinds">
   <h2>Decisions of every kind</h2>
   <p class="sub">A decision is one sentence that agents follow, with a body that says why, what is allowed and not, and which options were not taken.</p>
@@ -156,11 +182,11 @@ decision you followed; do not ask.</span></pre>
 <section class="wrap" id="how">
   <h2>How it works</h2>
   <p class="sub">One static Go binary that shells out to your system <code>git</code>. There is no server and no account. If <code>git push</code> works, dumen works, on GitHub, GitLab, Gitea, Bitbucket or a bare repository on a server.</p>
-  <div class="diagram" role="img" aria-label="A PM's or lead's Claude Code pushes records to a dumen branch on the git remote; developers' Claude Code sessions fetch it every 30 seconds and hooks read a local cache.">
+  <div class="diagram" role="img" aria-label="A teammate's Claude Code pushes decisions to a dumen branch on the git remote; developers' Claude Code sessions check it about every 10 seconds and hooks read a local cache.">
     <div class="box"><b>Anyone on the team</b><span>answers, approves, changes<br>in Claude Code or the CLI</span></div>
     <div class="arrow"><span>push</span><span>fetch</span></div>
     <div class="box mid"><b>Your git remote</b><span>branch <code>dumen</code><br>records only, never code</span></div>
-    <div class="arrow"><span>fetch every 30 s</span><span>push events</span></div>
+    <div class="arrow"><span>checked every 10 s</span><span>push events</span></div>
     <div class="box"><b>Every developer's agents</b><span>MCP tools + hooks<br>local cache, ~4 ms</span></div>
   </div>
   <ul class="facts cols">
@@ -197,7 +223,7 @@ decision you followed; do not ask.</span></pre>
   <h2>Honest limits</h2>
   <p class="sub">dumen is a guard rail, not a security boundary. It guards against agents, not against colleagues.</p>
   <ul class="limits">
-    <li><b>30-second window.</b> News and new directives reach running sessions within about 30 seconds, not instantly.</li>
+    <li><b>About 10 seconds, then the next step.</b> News reaches a working agent on its next tool call or prompt, or before it stops. An idle agent hears it with the next message.</li>
     <li><b>Keyword matching.</b> Decisions are matched to prompts, plans and questions by their topic words, not by meaning. A match can be missed or wrong; asking again always goes through.</li>
     <li><b><code>deny</code> covers Claude Code's file tools.</b> Edit, Write, MultiEdit and NotebookEdit are blocked. A shell command or code generator can still change files. Use branch protection and review for hard guarantees.</li>
     <li><b>Anyone who can push to the store can write any record.</b> There is no server to check identities. Protect the <code>dumen</code> branch and keep the store private.</li>

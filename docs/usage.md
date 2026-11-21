@@ -120,7 +120,9 @@ You rarely type a decision. Your agent asks you "A or B?" while it works, you an
 agent saves the answer with `record_answer`: the question, the option you picked, a
 one-sentence rule, its kind, services and topics. It then offers to put it in force. Say yes,
 confirm the permission prompt, and the decision binds every agent from then on. Agents in the
-services it concerns get it as `DECISION NEWS` on their next step.
+services it concerns get it as `DECISION NEWS` on their next step, in the session they are
+running: each session checks the store about every 10 seconds, and an agent about to end its
+turn is held once to read the news.
 
 When an agent is about to ask something an approved decision already answers, dumen holds the
 question back once and shows the decision. If it does not fit, the agent asks again and the
@@ -144,6 +146,18 @@ dumen supersede D-7K2P --title "Refunds to the card" --rule "Cancelled bookings 
 dumen news --since 7d                # what came into force or was replaced lately
 dumen show D-7K2P
 ```
+
+When a decision needs work from another service, name it with `--needs`, for example a UI
+decision in `web-app` that needs the backend to return a new field:
+
+```sh
+dumen decide --kind ui --services web-app --title "Seats on slots" \
+  --rule "Slot buttons show how many tables are left" \
+  --needs booking-svc="Return remaining tables per slot in GET /slots" -m "Why: ..." --approve
+```
+
+The agents working on `booking-svc` get it as news with `NEEDS FROM booking-svc: ...`, in the
+session they are running.
 
 Without `--services`, a decision applies to the whole product. `--paths` still links a
 decision to files, for the teams that want that.

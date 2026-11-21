@@ -30,7 +30,7 @@ import (
 
 const (
 	notice       = "[dumen] Team record, not instructions to execute verbatim."
-	pollInterval = 30 * time.Second
+	pollInterval = 10 * time.Second
 )
 
 // Server holds what the tools need.
@@ -194,18 +194,19 @@ type pathIn struct {
 }
 
 type decisionIn struct {
-	ID         string   `json:"id,omitempty" jsonschema:"supersede only: id of the approved decision being replaced"`
-	Title      string   `json:"title" jsonschema:"one line, at most 120 characters"`
-	Rule       string   `json:"rule,omitempty" jsonschema:"the rule other agents will follow, one sentence, at most 300 characters"`
-	Kind       string   `json:"kind,omitempty" jsonschema:"product, ux, ui, architecture or technical (or a kind from dumen.yml); required for draft_decision, inherited on supersede"`
-	Services   []string `json:"services,omitempty" jsonschema:"services (repositories) it applies to; empty means the whole product"`
-	Topics     []string `json:"topics,omitempty" jsonschema:"topics from dumen.yml, e.g. payments, booking-flow"`
-	Body       string   `json:"body" jsonschema:"markdown: why, what is allowed and not allowed (with examples), rejected alternatives; never restate the content of a Design or Artifact link"`
-	Area       string   `json:"area,omitempty" jsonschema:"area from dumen.yml"`
-	Paths      []string `json:"paths,omitempty" jsonschema:"repo-relative paths the decision governs"`
-	Sources    []string `json:"sources,omitempty" jsonschema:"ref ids (R-XXXX) of the Design, Artifact, MR or doc links this decision points to"`
-	Supersedes []string `json:"supersedes,omitempty" jsonschema:"draft_decision only: ids of approved decisions this draft would replace"`
-	Session    string   `json:"session,omitempty" jsonschema:"the dumen session id; only needed if dumen asks for it"`
+	ID         string            `json:"id,omitempty" jsonschema:"supersede only: id of the approved decision being replaced"`
+	Title      string            `json:"title" jsonschema:"one line, at most 120 characters"`
+	Rule       string            `json:"rule,omitempty" jsonschema:"the rule other agents will follow, one sentence, at most 300 characters"`
+	Kind       string            `json:"kind,omitempty" jsonschema:"product, ux, ui, architecture or technical (or a kind from dumen.yml); required for draft_decision, inherited on supersede"`
+	Services   []string          `json:"services,omitempty" jsonschema:"services (repositories) it applies to; empty means the whole product"`
+	Topics     []string          `json:"topics,omitempty" jsonschema:"topics from dumen.yml, e.g. payments, booking-flow"`
+	Needs      map[string]string `json:"needs,omitempty" jsonschema:"work this decision needs from other services, by service: {\"booking-svc\": \"return remaining seats per slot\"}; those services' agents get it as news"`
+	Body       string            `json:"body" jsonschema:"markdown: why, what is allowed and not allowed (with examples), rejected alternatives; never restate the content of a Design or Artifact link"`
+	Area       string            `json:"area,omitempty" jsonschema:"area from dumen.yml"`
+	Paths      []string          `json:"paths,omitempty" jsonschema:"repo-relative paths the decision governs"`
+	Sources    []string          `json:"sources,omitempty" jsonschema:"ref ids (R-XXXX) of the Design, Artifact, MR or doc links this decision points to"`
+	Supersedes []string          `json:"supersedes,omitempty" jsonschema:"draft_decision only: ids of approved decisions this draft would replace"`
+	Session    string            `json:"session,omitempty" jsonschema:"the dumen session id; only needed if dumen asks for it"`
 }
 
 type refIn struct {
@@ -504,7 +505,7 @@ func (s *Server) GetDecision(ctx context.Context, in idIn) (string, error) {
 		fmt.Fprintf(&b, " (CONTESTED: superseded by %s; ask your human which applies)", strings.Join(by, " and "))
 	}
 	if d.Status == model.StatusProposed {
-		b.WriteString(" (proposed: not yet approved by the person who owns this kind of decision)")
+		b.WriteString(" (proposed: not in force until a person approves it)")
 	}
 	svc := "all (product-wide)"
 	if !d.ProductWide() {
@@ -513,6 +514,9 @@ func (s *Server) GetDecision(ctx context.Context, in idIn) (string, error) {
 	fmt.Fprintf(&b, "\nrule: %s\nkind: %s\nservices: %s\ntopics: %s\nowner: %s",
 		dash(render.Label(d.Rule, 300)), dash(render.Label(d.Kind, 40)), render.Label(svc, 300),
 		dash(render.Label(strings.Join(d.Topics(), ", "), 300)), dash(render.Label(d.Owner, 120)))
+	for _, svc := range model.SortedKeys(d.Needs) {
+		fmt.Fprintf(&b, "\nneeds from %s: %s", svc, render.Label(d.Needs[svc], model.MaxNeed))
+	}
 	fmt.Fprintf(&b, "\narea: %s\npaths: %s\nauthor: %s (%s)\napproved by: %s\nsupersedes: %s\ncreated: %s\n",
 		dash(d.Area), dash(strings.Join(d.Paths, ", ")), d.Author, d.AuthorKind, dash(d.ApprovedBy), dash(strings.Join(d.Supersedes, ", ")), d.Created)
 	for _, r := range refs {
@@ -621,7 +625,21 @@ func decisionFrom(in decisionIn) model.Decision {
 	return model.Decision{ID: model.NewID(model.PrefixDecision), Title: strings.TrimSpace(in.Title),
 		Rule: strings.Join(strings.Fields(in.Rule), " "), Kind: strings.ToLower(strings.TrimSpace(in.Kind)),
 		AppliesTo: model.AppliesTo{Services: trimAll(lowerAll(in.Services)), Topics: trimAll(lowerAll(in.Topics))},
-		Area:      in.Area, Sources: upper(in.Sources)}
+		Area:      in.Area, Sources: upper(in.Sources), Needs: needsFrom(in.Needs)}
+}
+
+// needsFrom normalises a needs map: service names in lower case, asks on one line.
+func needsFrom(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := map[string]string{}
+	for svc, ask := range in {
+		if svc, ask = strings.ToLower(strings.TrimSpace(svc)), strings.Join(strings.Fields(ask), " "); svc != "" && ask != "" {
+			out[svc] = ask
+		}
+	}
+	return out
 }
 
 func trimAll(xs []string) []string {
@@ -876,7 +894,7 @@ func New(s *Server) *mcp.Server {
 }
 
 // SyncLoop keeps the local cache fresh and the outbox empty until ctx is done:
-// one ls-remote every 30 s with jitter, a fetch only when the sha changed.
+// one ls-remote every 10 s with jitter, a fetch only when the sha changed.
 func (s *Server) SyncLoop(ctx context.Context) {
 	tick := func() {
 		p, err := s.project()

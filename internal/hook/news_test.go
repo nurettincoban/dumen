@@ -61,3 +61,19 @@ func TestProposedDecisionIsNotNews(t *testing.T) {
 		t.Fatalf("a proposed decision came as news: %s", got)
 	}
 }
+
+// News that arrives while the agent ends its turn stops it once, so it does not report
+// "done" on work a teammate's decision just changed.
+func TestStopHandsOverNewsOnce(t *testing.T) {
+	f := newFixture(t)
+	f.now = f.now.Add(-time.Hour)
+	f.run(SessionStart, map[string]any{"source": "startup"})
+	id := f.approved("Holds", "A booking is held for 10 minutes while the guest pays")
+	out := f.run(Stop, map[string]any{"last_assistant_message": "Done."})
+	if out == nil || out.Decision != "block" || !strings.Contains(out.Reason, id) {
+		t.Fatalf("stop did not hand over the news: %+v", out)
+	}
+	if again := f.run(Stop, map[string]any{"last_assistant_message": "Done.", "stop_hook_active": true}); again != nil && again.Decision == "block" {
+		t.Fatalf("the agent was stopped twice for the same news: %+v", again)
+	}
+}

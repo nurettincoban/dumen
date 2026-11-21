@@ -16,16 +16,17 @@ import (
 )
 
 type answerIn struct {
-	Question string   `json:"question" jsonschema:"the question you asked your human, as you asked it"`
-	Answer   string   `json:"answer" jsonschema:"the option your human picked (its label), or their own words"`
-	Rule     string   `json:"rule" jsonschema:"the rule this answer sets for the team, one sentence, at most 300 characters"`
-	Kind     string   `json:"kind" jsonschema:"product, ux, ui, architecture or technical (or a kind from dumen.yml)"`
-	Title    string   `json:"title,omitempty" jsonschema:"short label; defaults to the question"`
-	Services []string `json:"services,omitempty" jsonschema:"services (repositories) it applies to; empty means the whole product"`
-	Topics   []string `json:"topics,omitempty" jsonschema:"topics, e.g. booking-flow, payments; these are how other agents find it"`
-	Why      string   `json:"why,omitempty" jsonschema:"optional: why this was picked, what is allowed and not allowed"`
-	New      bool     `json:"new,omitempty" jsonschema:"set after dumen listed similar decisions and none of them covers this answer"`
-	Session  string   `json:"session,omitempty" jsonschema:"the dumen session id; only needed if dumen asks for it"`
+	Question string            `json:"question" jsonschema:"the question you asked your human, as you asked it"`
+	Answer   string            `json:"answer" jsonschema:"the option your human picked (its label), or their own words"`
+	Rule     string            `json:"rule" jsonschema:"the rule this answer sets for the team, one sentence, at most 300 characters"`
+	Kind     string            `json:"kind" jsonschema:"product, ux, ui, architecture or technical (or a kind from dumen.yml)"`
+	Title    string            `json:"title,omitempty" jsonschema:"short label; defaults to the question"`
+	Services []string          `json:"services,omitempty" jsonschema:"services (repositories) it applies to; empty means the whole product"`
+	Topics   []string          `json:"topics,omitempty" jsonschema:"topics, e.g. booking-flow, payments; these are how other agents find it"`
+	Needs    map[string]string `json:"needs,omitempty" jsonschema:"work the answer needs from other services, by service: {\"booking-svc\": \"return remaining seats per slot\"}"`
+	Why      string            `json:"why,omitempty" jsonschema:"optional: why this was picked, what is allowed and not allowed"`
+	New      bool              `json:"new,omitempty" jsonschema:"set after dumen listed similar decisions and none of them covers this answer"`
+	Session  string            `json:"session,omitempty" jsonschema:"the dumen session id; only needed if dumen asks for it"`
 }
 
 // RecordAnswer saves a person's answer to an agent's question as a proposed decision.
@@ -40,7 +41,7 @@ func (s *Server) RecordAnswer(ctx context.Context, in answerIn) (string, error) 
 	if in.Question == "" || in.Answer == "" {
 		return "", fmt.Errorf("question and answer are required")
 	}
-	d := decisionFrom(decisionIn{Title: in.Title, Rule: in.Rule, Kind: in.Kind, Services: in.Services, Topics: in.Topics})
+	d := decisionFrom(decisionIn{Title: in.Title, Rule: in.Rule, Kind: in.Kind, Services: in.Services, Topics: in.Topics, Needs: in.Needs})
 	if d.Rule == "" {
 		return "", fmt.Errorf("rule is required: the one sentence other agents will follow")
 	}

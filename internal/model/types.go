@@ -242,6 +242,10 @@ type Decision struct {
 	Supersedes []string `yaml:"supersedes,omitempty"`
 	AnchoredAt string   `yaml:"anchored_at,omitempty"` // main sha
 	Created    string   `yaml:"created"`
+	// Needs asks other services for work the decision depends on, by service name:
+	// a UI decision in web-app can need booking-svc to return seat counts. A service
+	// named here is in the decision's scope and hears about it as news.
+	Needs map[string]string `yaml:"needs,omitempty"`
 	// Origin is set when the decision records a person's answer to a question an
 	// agent asked during its work.
 	Origin *Origin `yaml:"origin,omitempty"`
@@ -259,6 +263,12 @@ type Origin struct {
 	// session's own question tool, not only in what the agent reported.
 	Verified bool `yaml:"verified"`
 }
+
+// MaxNeeds bounds how many services a decision asks for work, and MaxNeed one ask.
+const (
+	MaxNeeds = 5
+	MaxNeed  = 200
+)
 
 // MaxOriginText bounds the question, each option and the answer of an Origin.
 const MaxOriginText = 500
@@ -290,6 +300,9 @@ func (d Decision) ProductWide() bool {
 // name from .dumen). An empty name, as in a single-repository project, matches all.
 func (d Decision) ForService(service string) bool {
 	if service == "" || d.ProductWide() {
+		return true
+	}
+	if _, ok := d.Needs[service]; ok {
 		return true
 	}
 	for _, s := range d.AppliesTo.Services {
@@ -373,6 +386,17 @@ func (d Decision) Validate() error {
 	for _, t := range d.AppliesTo.Topics {
 		if !ValidName(t) {
 			return fmt.Errorf("decision %s: invalid topic %q", d.ID, t)
+		}
+	}
+	if len(d.Needs) > MaxNeeds {
+		return fmt.Errorf("decision %s: at most %d services in needs", d.ID, MaxNeeds)
+	}
+	for svc, ask := range d.Needs {
+		if !ValidService(svc) {
+			return fmt.Errorf("decision %s: invalid service %q in needs", d.ID, svc)
+		}
+		if strings.TrimSpace(ask) == "" || utf8.RuneCountInString(ask) > MaxNeed || strings.ContainsAny(ask, "\r\n") {
+			return fmt.Errorf("decision %s: what it needs from %s is one line of at most %d characters", d.ID, svc, MaxNeed)
 		}
 	}
 	if o := d.Origin; o != nil {

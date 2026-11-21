@@ -121,6 +121,17 @@ func TestSeveralRepositoriesShareOneStore(t *testing.T) {
 	if strings.Contains(startB, "opaque cursors") || !strings.Contains(startO, "For orders-svc:") || !strings.Contains(startO, "[technical] List endpoints page with opaque cursors") {
 		t.Errorf("decisions shown at session start must be the ones relevant to the repository:\n%s\n---\n%s", startB, startO)
 	}
+	// Frontend to backend: a decision in orders-svc that needs work from billing-svc
+	// reaches a billing-svc session that is already running, with the ask.
+	fire(billing, "sess-b-news", hook.SessionStart, map[string]any{"source": "startup"})
+	t.Chdir(orders)
+	run(t, "decide", "--title", "Show refund status", "--rule", "The order page shows the refund status", "--kind", "ui",
+		"--services", "orders-svc", "--needs", "billing-svc=Expose refund status per order in GET /refunds", "-m", "Why.", "--approve")
+	t.Chdir(billing)
+	if got := fire(billing, "sess-b-news", hook.UserPromptSubmit, map[string]any{"prompt": "carry on"}); !strings.Contains(got, "DECISION NEWS") ||
+		!strings.Contains(got, "NEEDS FROM billing-svc: Expose refund status per order") || !strings.Contains(got, "in orders-svc") {
+		t.Errorf("billing-svc did not hear what orders-svc needs from it: %s", got)
+	}
 	prompt := map[string]any{"prompt": "Add partial refunds to the payments page"}
 	if got := fire(orders, "sess-orders-2", hook.UserPromptSubmit, prompt); strings.Contains(got, "refund worker") {
 		t.Errorf("a decision limited to billing-svc paths reached orders-svc: %s", got)
@@ -144,7 +155,7 @@ func TestSeveralRepositoriesShareOneStore(t *testing.T) {
 		t.Fatalf("flush: %+v %v", rep, err)
 	}
 	all := run(t, "activity", "--since", "today")
-	if !strings.Contains(all, "started 2  finished 1  blocked 1") || !strings.Contains(all, "billing-svc 1") || !strings.Contains(all, "orders-svc 1") {
+	if !strings.Contains(all, "started 3  finished 1  blocked 1") || !strings.Contains(all, "billing-svc 2") || !strings.Contains(all, "orders-svc 1") {
 		t.Errorf("activity across services:\n%s", all)
 	}
 	if only := run(t, "activity", "--since", "today", "--repo", "orders-svc"); !strings.Contains(only, "started 1  finished 1  blocked 0") {
