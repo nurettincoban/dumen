@@ -6,7 +6,7 @@
     {
       "name": "dumen",
       "source": "./plugin",
-      "description": "Directives, shared decisions and an activity log for every Claude Code agent on the team. Downloads the dumen binary from the latest release, or uses one on PATH."
+      "description": "Directives, shared decisions and an activity log for every Claude Code agent on the team. Runs the native dumen binary, installed once from the latest release by bin/dumen-install.cjs."
     }
   ]
 }

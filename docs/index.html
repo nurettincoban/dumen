@@ -215,10 +215,11 @@ decision you followed; do not ask.</span></pre>
 <pre class="term">/plugin marketplace add nurettincoban/dumen
 /plugin install dumen@dumen</pre>
       <p class="note">Hooks, MCP tools and the skill, in one install.</p></div>
-    <div><span class="n">2</span><h4>The binary comes with it</h4>
-<pre class="term"><span class="dim"># downloaded from the latest release on first start,
-# checked against its checksums; restart Claude Code once</span></pre>
-      <p class="note">A <code>dumen</code> on PATH is used instead. Until the first release: <code>go install github.com/nurettincoban/dumen/cmd/dumen@latest</code>.</p></div>
+    <div><span class="n">2</span><h4>Install the binary, once</h4>
+<pre class="term">node ~/.claude/plugins/cache/dumen/dumen/&lt;version&gt;/bin/dumen-install.cjs
+<span class="dim"># downloads the release binary, checks it against
+# checksums.txt; then restart Claude Code</span></pre>
+      <p class="note">Needs Node.js 18+. Hooks and the MCP server then run the native binary directly.</p></div>
     <div><span class="n">3</span><h4>Ask your agent</h4>
 <pre class="term"><span class="usr">&gt; Set up dumen for our team. The store is
   git@git.example.com:team/dumen-store.git#dumen.</span>

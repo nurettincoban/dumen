@@ -35,13 +35,29 @@ already has.
 /plugin install dumen@dumen
 ```
 
-The plugin brings the hooks, the MCP tools and the skill. The first time Claude Code
-starts its MCP server, the plugin downloads the `dumen` binary for your system from the
-latest GitHub release and checks it against the release's checksums. A `dumen` already on
-your PATH is used instead. Until the first release is published, install it yourself with
-`go install github.com/nurettincoban/dumen/cmd/dumen@latest`.
+The plugin brings the hooks, the MCP tools and the skill. Its hooks and MCP server run the
+native `dumen` binary from the plugin's data directory (`~/.claude/plugins/data/dumen-dumen`)
+directly, with no wrapper in between: dumen ties sessions and approvals to the Claude Code
+process that starts it.
 
-**2. Restart Claude Code once**, so the hooks find the downloaded binary.
+**2. Install the binary, once.** The plugin ships a small installer that needs Node.js 18
+or later. It downloads the binary for your system from the latest GitHub release, checks it
+against the release's `checksums.txt` and puts it in the data directory. The path contains
+the plugin version you installed (`0.1.1` below):
+
+```bash
+node ~/.claude/plugins/cache/dumen/dumen/0.1.1/bin/dumen-install.cjs
+```
+
+```powershell
+node "$HOME\.claude\plugins\cache\dumen\dumen\0.1.1\bin\dumen-install.cjs"
+```
+
+Run it again with `--force` to replace the binary with a newer release, after quitting
+Claude Code. Until the binary is installed, Claude Code reports the dumen hooks and MCP
+server as failing; they never block your work.
+
+**Restart Claude Code**, so the hooks and the MCP server start the binary.
 
 **3. Ask your agent to set it up.** From here on you only talk to Claude. This is a real
 session, shortened, with the store's address replaced; the permission prompt line is the text
@@ -277,10 +293,10 @@ the real `claude` CLI; it compiles for macOS and Windows and has not been run th
   prompt, plan or question. It does not understand meaning, so it can miss a decision or
   show an unrelated one; asking again always goes through.
 - **Claude Code only, small teams.** Built for about 2 to 20 people.
-- **No release is published yet.** Until the first version tag, the plugin cannot download
-  the binary, and each machine needs `go install`. The download covers Linux and macOS on
-  amd64 and arm64; on Windows, install the binary with `go install` (the release has
-  Windows builds to put on PATH).
+- **The binary is installed by hand.** The plugin cannot download it by itself: run
+  `bin/dumen-install.cjs` once per machine (Node.js 18+). Release builds cover Linux, macOS
+  and Windows on amd64 and arm64; elsewhere, `go install` the binary and copy it into the
+  plugin's data directory.
 - **Everyone needs git access to the store**, including product managers.
 
 The full list is in [Limits](docs/limits.md), and the reasoning in [Security model](docs/security.md).

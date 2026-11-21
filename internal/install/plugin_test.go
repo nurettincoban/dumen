@@ -13,13 +13,13 @@ import (
 // `DUMEN_UPDATE_PLUGIN=1 go test ./internal/install` after changing either.
 func TestPluginFilesMatchInstall(t *testing.T) {
 	root := filepath.Join("..", "..", "plugin")
-	hooks, err := json.MarshalIndent(map[string]any{"hooks": Hooks(PluginCommand, PluginLauncher)}, "", "  ")
+	hooks, err := json.MarshalIndent(map[string]any{"hooks": Hooks(PluginCommand)}, "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}
 	hooks = append(hooks, '\n')
 	mcp, err := json.MarshalIndent(map[string]any{"mcpServers": map[string]any{
-		"dumen": map[string]any{"command": PluginCommand, "args": []string{PluginLauncher, "mcp"}},
+		"dumen": map[string]any{"command": PluginCommand, "args": []string{"mcp"}},
 	}}, "", "  ")
 	if err != nil {
 		t.Fatal(err)

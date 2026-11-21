@@ -48,11 +48,22 @@ a public repository.**
 /plugin install dumen@dumen
 ```
 
-The plugin brings the hooks, the MCP server and the skill. Its cross-platform launcher
-requires Node.js 18 or later on `PATH`. When Claude Code first starts
-the MCP server, the plugin downloads the `dumen` binary for your system from the latest
-GitHub release, checks its checksum and keeps it in the plugin's data directory; restart
-Claude Code once so the hooks use it. A `dumen` on `PATH` takes precedence. It stays silent in directories that have nothing to do with a dumen project. The
+The plugin brings the hooks, the MCP server and the skill. Both the hooks and the MCP
+server start the native binary `${CLAUDE_PLUGIN_DATA}/dumen` (`dumen.exe` on Windows) in
+`~/.claude/plugins/data/dumen-dumen` directly, so its parent process is Claude Code: dumen
+binds sessions and approval tickets to that process. Install the binary once with the
+plugin's installer (Node.js 18 or later), which downloads it from the latest GitHub
+release and checks it against `checksums.txt`:
+
+```bash
+node ~/.claude/plugins/cache/dumen/dumen/<version>/bin/dumen-install.cjs
+```
+
+`<version>` is the plugin version you installed. Pass `--dir <path>` to install into
+another data directory, and `--force` to replace an existing binary (quit Claude Code
+first on Windows, where a running binary cannot be replaced). Then restart Claude Code.
+Until the binary exists the hooks and the MCP server fail without blocking anything. A
+`dumen` on `PATH` is not used by the plugin. The plugin stays silent in directories that have nothing to do with a dumen project. The
 first time an agent uses a dumen tool, Claude Code asks for permission: choose "always
 allow" for the reading, acknowledging and drafting tools. Never pre-approve the human
 actions (`approve`, `reject`, `supersede`, `publish_directive`, `withdraw_directive`,

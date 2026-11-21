@@ -23,10 +23,9 @@ type group struct {
 
 // Hooks returns the hooks section dumen needs. Handlers use exec form (command plus
 // args), so no shell is started and the same configuration works on Windows.
-func Hooks(binary string, prefix ...string) map[string][]group {
+func Hooks(binary string) map[string][]group {
 	h := func(event string, timeout int) []handler {
-		args := append(append([]string(nil), prefix...), "hook", event)
-		return []handler{{Type: "command", Command: binary, Args: args, Timeout: timeout}}
+		return []handler{{Type: "command", Command: binary, Args: []string{"hook", event}, Timeout: timeout}}
 	}
 	return map[string][]group{
 		"SessionStart":     {{Hooks: h("session-start", 10)}},
@@ -184,8 +183,9 @@ func All(dir, binary string) ([]string, error) {
 	return written, nil
 }
 
-// The plugin uses a native Node executable for exec-form hooks on all platforms.
-const (
-	PluginCommand  = "node"
-	PluginLauncher = "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch.cjs"
-)
+// PluginCommand is how the Claude Code plugin starts dumen: the native binary that
+// bin/dumen-install.cjs put in the plugin's data directory. Hooks and the MCP server run it
+// directly, never through a wrapper, so dumen's parent process is Claude Code itself: dumen
+// binds sessions and approval tickets to that parent. On Windows the file is dumen.exe,
+// which an extensionless absolute path resolves to.
+const PluginCommand = "${CLAUDE_PLUGIN_DATA}/dumen"
