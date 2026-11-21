@@ -28,19 +28,20 @@ as news. It runs on the git remote you already have, with no server.
 You need `git` and Claude Code. dumen uses the SSH keys or credential helper your `git`
 already has.
 
-**1. Put the `dumen` binary on your PATH** (once per machine; the plugin's hooks and tools
-call it):
-
-```sh
-go install github.com/nurettincoban/dumen/cmd/dumen@latest
-```
-
-**2. Add the plugin** (inside Claude Code):
+**1. Add the plugin** (inside Claude Code):
 
 ```text
 /plugin marketplace add nurettincoban/dumen
 /plugin install dumen@dumen
 ```
+
+The plugin brings the hooks, the MCP tools and the skill. The first time Claude Code
+starts its MCP server, the plugin downloads the `dumen` binary for your system from the
+latest GitHub release and checks it against the release's checksums. A `dumen` already on
+your PATH is used instead. Until the first release is published, install it yourself with
+`go install github.com/nurettincoban/dumen/cmd/dumen@latest`.
+
+**2. Restart Claude Code once**, so the hooks find the downloaded binary.
 
 **3. Ask your agent to set it up.** From here on you only talk to Claude. This is a real
 session, shortened, with the store's address replaced; the permission prompt line is the text
@@ -249,7 +250,6 @@ never stores file contents, prompts or tool output.
   agent; `decisions_for_topic` answers "did we decide this?".
 - **Directives.** Short-lived instructions for every agent, one role, one area or some
   paths. `deny` directives also block edits: "Auth is frozen until the audit ends".
-  ![A directive blocks an edit](docs/assets/dumen-demo.gif)
 - **Sources of truth.** Point at a Claude Design file, an Artifact, a pull request or a doc.
   dumen keeps the link and a one-line label, and never fetches a URL.
 - **An activity log.** Ask your agent who started, who finished, who is blocked, who waits
@@ -277,8 +277,10 @@ the real `claude` CLI; it compiles for macOS and Windows and has not been run th
   prompt, plan or question. It does not understand meaning, so it can miss a decision or
   show an unrelated one; asking again always goes through.
 - **Claude Code only, small teams.** Built for about 2 to 20 people.
-- **The plugin needs the `dumen` binary** on each machine's PATH; there is no packaged
-  release yet.
+- **No release is published yet.** Until the first version tag, the plugin cannot download
+  the binary, and each machine needs `go install`. The download covers Linux and macOS on
+  amd64 and arm64; on Windows, install the binary with `go install` (the release has
+  Windows builds to put on PATH).
 - **Everyone needs git access to the store**, including product managers.
 
 The full list is in [Limits](docs/limits.md), and the reasoning in [Security model](docs/security.md).

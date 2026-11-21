@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "dumen",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch",
             "args": [
               "hook",
               "post-tool-use"
@@ -22,7 +22,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "dumen",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch",
             "args": [
               "hook",
               "pre-tool-use"
@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "dumen",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch",
             "args": [
               "hook",
               "session-end"
@@ -52,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "dumen",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch",
             "args": [
               "hook",
               "session-start"
@@ -67,7 +67,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "dumen",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch",
             "args": [
               "hook",
               "stop"
@@ -82,7 +82,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "dumen",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/dumen-launch",
             "args": [
               "hook",
               "user-prompt-submit"
